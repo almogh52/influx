@@ -11,17 +11,17 @@ SECTIONS
 	. = 1M;
  
 	/* First put the multiboot header, as it is required to be put very early
-	   early in the image or the bootloader won't recognize the file format.
-	   Next we'll put the .text section. */
-	.boot ALIGN(8) :
+	   early in the image or the bootloader won't recognize the file format. */
+	.boot :
 	{
 		*(.multiboot_header)
 	}
 
-    .text :
-    {
-        *(.text)
-    }
+	/* Code. */
+	.text :
+	{
+		*(.text)
+	}
  
 	/* Read-only data. */
 	.rodata :
