@@ -22,9 +22,6 @@ _start:
 ;   Disable interrupts
 	cli
 
-;   Set the pointer to the top of the stack
-    mov esp, stack_top
-
 ;   Load the GDT
     lgdt [gdt_ptr]
 
@@ -32,6 +29,22 @@ _start:
     jmp 0x8:new_gdt
 
 new_gdt:
+;   Reload segments with the new data segment
+    mov cx, 0x10
+    mov ss, cx
+    mov ds, cx
+    mov es, cx
+    mov fs, cx
+    mov gs, cx
+
+;   Set the pointer to the top of the stack
+    mov esp, stack_top
+    mov ebp, esp
+
+;   Save multiboot parameters
+    push ebx
+    push eax
+
 ;   Print OK to the screen
     mov dword [0xb8000], 0x2f4b2f4f
 
