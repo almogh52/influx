@@ -1,3 +1,4 @@
 #!/bin/bash
 
-rm -rf iso build
+make clean
+rm -rf iso bootstrap.iso
