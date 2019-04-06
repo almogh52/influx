@@ -24,4 +24,4 @@ echo 'Copying bootstrap executable.'
 cp build/EFI/boot/$OS_NAME-bootstrap.bin iso/boot/$OS_NAME-bootstrap.bin
 
 echo 'Making iso from the iso dir'
-grub-mkrescue -o bootstrap.iso iso
+$(PREFIX)grub-mkrescue -o bootstrap.iso iso

@@ -7,6 +7,7 @@ OS_NAME                 := myos
 # Toolchain Configuration
 CC                      := clang
 AS                      := nasm
+LINK                    := ld.lld
 C_STANDARD              := -std=gnu14
 PREFIX                  := /usr/local/opt/llvm/bin
 
@@ -60,7 +61,7 @@ clean:
 $(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-bootstrap.bin: $(BOOT_OBJ_FILES)
 	@echo 'Compiling bootstrap executable'
 	@mkdir -p $(@D)
-	$(PREFIX)/ld.lld -Tboot/linker.ld $(LDFLAGS) $< -o $@
+	$(PREFIX)/$(LINK) -Tboot/linker.ld $(LDFLAGS) $< -o $@
 
 $(OBJ_DIR)/%.o: %.s
 	@echo 'Compiling $<'
