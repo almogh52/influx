@@ -53,6 +53,7 @@ stop:
     hlt
 	jmp stop
 
+section .data
 align 32
 gdt_start:
 null_descriptor:
