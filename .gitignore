@@ -1,5 +1,10 @@
 # Ignore build folder
+build
 obj
+
+# Ignore the iso folder and the built iso
+iso
+bootstrap.iso
 
 # Ignore vscode ipch files
 ipch
