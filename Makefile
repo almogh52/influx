@@ -8,7 +8,7 @@ OS_NAME                 := myos
 CC                      := clang
 AS                      := nasm
 LINK                    := ld.lld
-C_STANDARD              := -std=gnu14
+C_STANDARD              := -std=gnu18
 PREFIX                  := /usr/local/opt/llvm/bin
 
 # Assembler -- Flags
@@ -61,7 +61,7 @@ clean:
 $(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-bootstrap.bin: $(BOOT_OBJ_FILES)
 	@echo 'Compiling bootstrap executable'
 	@mkdir -p $(@D)
-	$(PREFIX)/$(LINK) -Tboot/linker.ld $(LDFLAGS) $< -o $@
+	$(PREFIX)/$(LINK) -Tboot/linker.ld $(LDFLAGS) $(BOOT_OBJ_FILES) -o $@
 
 $(OBJ_DIR)/%.o: %.s
 	@echo 'Compiling $<'

@@ -11,6 +11,8 @@ multiboot_header_start:
     dd GRUB_MULTIBOOT_ARCHITECTURE_I386
     dd multiboot_header_end - multiboot_header_start
     dd MULTIBOOT_HEADER_LENGTH
+
+;   A closing tag
     dw 0
     dw 0
     dd 8
@@ -65,7 +67,7 @@ code:
     db 0x0000    ; 16-23 Bits of the base address
     db 10011010b ; Access byte for the code segment
     db 11001111b ; Flags and 16-19 Bits of the base address
-    db 0x000     ; 24-31 Bits of the base address
+    db 0x0000    ; 24-31 Bits of the base address
 
 data:
     dw 0xFFFF    ; 0-15 Bits of the segment limit
@@ -73,7 +75,7 @@ data:
     db 0x0000    ; 16-23 Bits of the base address
     db 10010010b ; Access byte for the data segment
     db 11001111b ; Flags and 16-19 Bits of the base address
-    db 0x000     ; 24-31 Bits of the base address
+    db 0x0000    ; 24-31 Bits of the base address
 gdt_end:
 
 align 32
