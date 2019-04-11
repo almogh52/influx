@@ -1,6 +1,6 @@
 bits 32
 
-extern boot_main
+extern boot_main, sse_enable
 
 global long_mode
 section .text
@@ -31,7 +31,6 @@ long_mode:
     mov eax, cr0
     or eax, 1 << 31
     mov cr0, eax
-    mov eax, cr0
 
 ;   Load the new 64-bit GDT
     lgdt [gdt64.ptr]
@@ -46,6 +45,11 @@ mode64:
     mov es, cx
     mov fs, cx
     mov gs, cx
+
+;   Enable SSE
+    call sse_enable
+
+    movaps xmm0, xmm1
 
 ;   Call the bootstrap main function
     call boot_main
