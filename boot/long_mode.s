@@ -1,7 +1,8 @@
 bits 32
 
-global long_mode
+extern boot_main
 
+global long_mode
 section .text
 long_mode:
 ;   Turn off paging since GRUB enables it, (it's the last bit of control register 0)
@@ -46,9 +47,8 @@ mode64:
     mov fs, cx
     mov gs, cx
 
-    mov rax, 0x2f4b2f4f2f4b2f4f
-    mov qword [0xb8000], rax
-    hlt
+;   Call the bootstrap main function
+    call boot_main
 
 section .data
 align 0x1000
