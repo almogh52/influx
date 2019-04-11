@@ -1,26 +1,21 @@
 bits 32
 
-PML4T_ADDR equ 0x1000
-PDPT_ADDR equ 0x2000
-PDT_ADDR equ 0x3000
-
 global long_mode
 
 section .text
 long_mode:
 ;   Turn off paging since GRUB enables it, (it's the last bit of control register 0)
     mov eax, cr0
-    and eax, 01111111111111111111111111111111b
+    and eax, 0x7FFFFFFF
     mov cr0, eax
 
-;   Copy the paging structures
-    mov ecx, 0x3000 / 4
-    mov esi, pml4t
-    mov edi, PML4T_ADDR
-    rep movsd
+;   Enable PAE using the fifth bit in the control register 4
+    mov eax, cr4
+    or eax, 1 << 5
+    mov cr4, eax
 
 ;   Set the physical address of the PML4 table in cr3
-    mov eax, PML4T_ADDR
+    mov eax, pml4t
     mov cr3, eax
 
 ;   Read the EFER MSR
@@ -35,32 +30,74 @@ long_mode:
     mov eax, cr0
     or eax, 1 << 31
     mov cr0, eax
+    mov eax, cr0
 
-    ret
+;   Load the new 64-bit GDT
+    lgdt [gdt64.ptr]
+    jmp 0x8:mode64
+
+bits 64
+mode64:
+;   Reload segments with the new data segment
+    mov cx, 0x10
+    mov ss, cx
+    mov ds, cx
+    mov es, cx
+    mov fs, cx
+    mov gs, cx
+
+    mov rax, 0x2f4b2f4f2f4b2f4f
+    mov qword [0xb8000], rax
+    hlt
 
 section .data
+align 0x1000
 pml4t:
 ;   Set the first entry to point at our first pdp that will identity map the first 4MB
 ;   The last 2 bits are for present flag and read/write flag
-    dq PDPT_ADDR << 12 + 11b
+    dq pdpt + 11b
 
 ;   Set null for the rest of the entries
     times 510 dq 0
 
 ;   Set the last entry to point at our first pdp that will create as a higher half for the kernel
-    dq PDPT_ADDR << 12 + 11b
+    dq pdpt + 11b
 
 pdpt:
 ;   Identity map for the first 1GB
-    dq PDT_ADDR << 12 + 11b
+    dq pdt + 11b
 
 ;    Set null for the rest of the entries
     times 511 dq 0
 
 pdt:
 ;   Identity map for the first 4MB
-    dq 0 << 21 + 1000011b
-    dq 0x200000 << 21 + 1000011b
+    dq 0 + 10000011b
+    dq 0x200000 + 10000011b
 
 ;   Set null for the rest of the entries
     times 510 dq 0
+
+gdt64:
+align 16
+.null_descriptor:
+    dq 0
+
+.seg_code:
+    dw 0x0000    ; Segment limit (bit 0 - 15)
+    dw 0x0000    ; Segment base  (bit 0 - 15)
+    db 0x0000    ; Segment base  (bit 16 - 23)
+    db 10011010b ; Fields
+    db 10101111b ; Fields + Segment limit (bit 16 - 19)
+    db 0x00      ; Segment base (bit 24 - 31)
+
+.seg_data:
+    dw 0x0000    ; Segment limit (bit 0 - 15)
+    dw 0x0000    ; Segment base  (bit 0 - 15)
+    db 0x0000    ; Segment base  (bit 16 - 23)
+    db 10010010b ; Fields
+    db 00000000b ; Fields + Segment limit (bit 16 - 19)
+    db 0x00      ; Segment base (bit 24 - 31)
+.ptr:
+    dw $ - gdt64 - 1
+    dq gdt64

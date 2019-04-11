@@ -52,14 +52,8 @@ new_gdt:
 ;   TODO: Make sure that the processer is a 64-bit compatible
 ;   Even though it's not required since the GRUB bootloader is 64-bit
 
-    call long_mode
-
-    mov dword [0xb8000], 0x2f4b2f4f
-
-stop:
-;   Stop the bootstrap
-    hlt
-	jmp stop
+;   Switch to long mode
+    jmp long_mode
 
 section .data
 align 32
