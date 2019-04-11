@@ -52,6 +52,13 @@ mode64:
 ;   Call the bootstrap main function
     call boot_main
 
+;   Disable interrupts
+    cli
+
+panic:
+    hlt
+    jmp $
+
 section .data
 align 0x1000
 pml4t:
