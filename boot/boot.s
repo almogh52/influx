@@ -18,6 +18,8 @@ multiboot_header_start:
     dd 8
 multiboot_header_end:
 
+extern long_mode
+
 section .text
 global _start
 _start:
@@ -43,11 +45,15 @@ new_gdt:
     mov esp, stack_top
     mov ebp, esp
 
-;   Save multiboot parameters
+;   Save multiboot parameters and prepare to send them to the kernel
     push ebx
     push eax
 
-;   Print OK to the screen
+;   TODO: Make sure that the processer is a 64-bit compatible
+;   Even though it's not required since the GRUB bootloader is 64-bit
+
+    call long_mode
+
     mov dword [0xb8000], 0x2f4b2f4f
 
 stop:
