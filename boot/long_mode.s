@@ -49,8 +49,6 @@ mode64:
 ;   Enable SSE
     call sse_enable
 
-    movaps xmm0, xmm1
-
 ;   Call the bootstrap main function
     call boot_main
 
