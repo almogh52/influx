@@ -35,9 +35,15 @@ CFLAGS                  += -Wdisabled-optimization
 CFLAGS                  += -Wno-unused-parameter
 CFLAGS                  += -Qunused-arguments
 
+# If debug mode set, generate symbols from source files
+ifdef DEBUG
+	ASFLAGS             += -F dwarf -g
+	CFLAGS              += -g
+	LDFLAGS             += -g
+endif
+
 # Linker flags
 LDFLAGS                 += -nostdlib
-LDFLAGS                 += -O2
 
 # Build Configuration
 BUILD_DIR               := build
@@ -51,7 +57,7 @@ BOOT_OBJ_FILES          := $(addprefix $(OBJ_DIR)/, $(BOOT_SRC_FILES))
 BOOT_OBJ_FILES          := $(BOOT_OBJ_FILES:.s=.o)
 BOOT_OBJ_FILES          := $(BOOT_OBJ_FILES:.c=.o)
 
-.PHONY: all clean
+.PHONY: all clean debug
 
 all: $(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-bootstrap.bin
 

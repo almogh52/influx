@@ -3,10 +3,14 @@
 OS_NAME=myos
 
 # Build the project if it's not built
-make
+if [[ "$1" -eq "DEBUG" ]]; then
+    make DEBUG=1
+else
+    make
+fi
 
 # If the build failed
-if [ $? -ne 0 ]; then
+if [[ $? -ne 0 ]]; then
     echo 'Build failed, Exiting..'
     exit
 fi
