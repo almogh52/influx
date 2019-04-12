@@ -34,6 +34,10 @@ long_mode:
     or eax, 1 << 31
     mov cr0, eax
 
+;   Get the multiboot parameters from the stack
+    pop edi
+    pop esi
+
 ;   Load the new 64-bit GDT
     lgdt [gdt64.ptr]
     jmp 0x8:mode64
@@ -53,8 +57,16 @@ higher_half:
     mov fs, cx
     mov gs, cx
 
+;   Save multiboot parameters
+    push rsi
+    push rdi
+
 ;   Enable SSE
     call sse_enable
+
+;   Get multiboot parameters
+    pop rdi
+    pop rsi
 
 ;   Call the bootstrap main function
     call boot_main
