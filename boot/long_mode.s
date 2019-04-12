@@ -1,5 +1,7 @@
 bits 32
 
+HIGHER_HALF_OFFSET equ 0xFFFFFFFFFF80000000
+
 extern boot_main, sse_enable
 
 global long_mode
@@ -38,6 +40,11 @@ long_mode:
 
 bits 64
 mode64:
+;   Jump to higher half
+    mov rax, higher_half + HIGHER_HALF_OFFSET
+    jmp rax
+
+higher_half:
 ;   Reload segments with the new data segment
     mov cx, 0x10
     mov ss, cx
@@ -77,7 +84,13 @@ pdpt:
     dq pdt + 11b
 
 ;    Set null for the rest of the entries
-    times 511 dq 0
+    times 509 dq 0
+
+;   Map for the higher half 1GB
+    dq pdt + 11b
+
+;   Last entry
+    dq 0
 
 pdt:
 ;   Identity map for the first 4MB
