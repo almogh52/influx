@@ -68,15 +68,25 @@ void itoa(char *buf, int base, int d)
     }
 }
 
+void scroll()
+{
+    // Move all lines from line 2, 1 up
+    for (int i = COLUMNS * 2; i < COLUMNS * (LINES) * 2; i++)
+    {
+        *(video + i - COLUMNS * 2) = *(video + i);
+    }
+}
+
 void putchar(int c)
 {
     if (c == '\n' || c == '\r')
     {
     newline:
         xpos = 0;
-        ypos++;
-        if (ypos >= LINES)
-            ypos = 0;
+        if (ypos + 1 >= LINES)
+            scroll();
+        else
+            ypos++;
         return;
     }
 
