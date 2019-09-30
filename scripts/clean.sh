@@ -1,4 +1,4 @@
 #!/bin/bash
 
 make clean
-rm -rf iso bootstrap.iso
+rm -rf iso myos.iso

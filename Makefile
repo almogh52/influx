@@ -53,28 +53,50 @@ EFI_DIR                 := $(BUILD_DIR)/EFI
 
 BOOT_DIR                := boot
 BOOT_SRC_FILES          := $(wildcard ${BOOT_DIR}/*.s) $(wildcard ${BOOT_DIR}/*.c)
+BOOT_INC_DIR            := ${BOOT_DIR}/include
 BOOT_OBJ_FILES          := $(addprefix $(OBJ_DIR)/, $(BOOT_SRC_FILES))
 BOOT_OBJ_FILES          := $(BOOT_OBJ_FILES:.s=.o)
 BOOT_OBJ_FILES          := $(BOOT_OBJ_FILES:.c=.o)
 
+KERNEL_DIR              := kernel
+KERNEL_SRC_FILES        := $(wildcard ${KERNEL_DIR}/*.s) $(wildcard ${KERNEL_DIR}/*.c)
+KERNEL_OBJ_FILES        := $(addprefix $(OBJ_DIR)/, $(KERNEL_SRC_FILES))
+KERNEL_OBJ_FILES        := $(KERNEL_OBJ_FILES:.s=.o)
+KERNEL_OBJ_FILES        := $(KERNEL_OBJ_FILES:.c=.o)
+
 .PHONY: all clean debug
 
-all: $(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-bootstrap.bin
+all: $(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-bootstrap.bin $(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-kernel.bin
 
 clean:
 	rm -rf $(BUILD_DIR)
 
 $(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-bootstrap.bin: $(BOOT_OBJ_FILES)
-	@echo 'Compiling bootstrap executable'
+	@echo 'Linking bootstrap executable'
 	@mkdir -p $(@D)
 	$(PREFIX)/$(LINK) -Tboot/linker.ld $(LDFLAGS) $(BOOT_OBJ_FILES) -o $@
 
-$(OBJ_DIR)/%.o: %.s
+$(OBJ_DIR)/$(BOOT_DIR)/%.o: $(BOOT_DIR)/%.s
 	@echo 'Compiling $<'
 	@mkdir -p $(@D)
 	$(AS) $(ASFLAGS) $< -o $@
 
-$(OBJ_DIR)/%.o: %.c
+$(OBJ_DIR)/$(BOOT_DIR)/%.o: $(BOOT_DIR)/%.c
+	@echo 'Compiling $<'
+	@mkdir -p $(@D)
+	$(PREFIX)/$(CC) -I${BOOT_INC_DIR} $(CFLAGS) -c $< -o $@
+
+$(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-kernel.bin: ${KERNEL_OBJ_FILES}
+	@echo 'Linking kernel executable'
+	@mkdir -p $(@D)
+	$(PREFIX)/$(LINK) $(LDFLAGS) $(KERNEL_OBJ_FILES) -o $@
+
+$(OBJ_DIR)/${KERNEL_DIR}/%.o: ${KERNEL_DIR}/%.s
+	@echo 'Compiling $<'
+	@mkdir -p $(@D)
+	$(AS) $(ASFLAGS) $< -o $@
+
+$(OBJ_DIR)/${KERNEL_DIR}/%.o: ${KERNEL_DIR}/%.c
 	@echo 'Compiling $<'
 	@mkdir -p $(@D)
 	$(PREFIX)/$(CC) $(CFLAGS) -c $< -o $@
