@@ -1,3 +1,5 @@
+#pragma once
+
 /*  The number of columns. */
 #define COLUMNS 80
 /*  The number of lines. */
