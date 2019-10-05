@@ -7,7 +7,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 $DIR/clean.sh
 
 # Build the iso
-$DIR/create-bootstrap-iso.sh DEBUG
+$DIR/create-iso.sh DEBUG
 
 # Run qemu with the iso
 qemu-system-x86_64 -cdrom influx.iso -s -S &
