@@ -31,5 +31,9 @@ cp build/EFI/boot/$OS_NAME-bootstrap.bin iso/boot/$OS_NAME-bootstrap.bin
 echo 'Copying kernel executable.'
 cp build/EFI/boot/$OS_NAME-kernel.bin iso/boot/$OS_NAME-kernel.bin
 
+# Copy the grub dir
+echo 'Copying grub configuration folder.'
+cp -a grub iso/boot
+
 echo 'Making iso from the iso dir'
-$(PREFIX)grub-mkrescue -o myos.iso iso
+grub-mkrescue -o myos.iso iso
