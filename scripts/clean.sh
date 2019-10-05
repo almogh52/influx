@@ -1,4 +1,4 @@
 #!/bin/bash
 
 make clean
-rm -rf iso myos.iso
+rm -rf iso influx.iso

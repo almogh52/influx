@@ -13,4 +13,4 @@ if [[ $? -ne 0 ]]; then
 fi
 
 # Run qemu with the iso
-qemu-system-x86_64 -cdrom myos.iso
+qemu-system-x86_64 -cdrom influx.iso

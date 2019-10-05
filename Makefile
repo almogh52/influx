@@ -2,7 +2,7 @@
 find_includes_in_dir    = $(find $(1) -name "*.h" | sed 's|/[^/]*$$||' | sort -u)
 
 # OS Configuration
-OS_NAME                 := myos
+OS_NAME                 := influx
 
 # Toolchain Configuration
 CC                      := clang

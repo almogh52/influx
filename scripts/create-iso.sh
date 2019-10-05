@@ -1,6 +1,6 @@
 #!/bin/bash
 
-OS_NAME=myos
+OS_NAME=influx
 
 # Build the project if it's not built
 if [[ "$1" -eq "DEBUG" ]]; then
@@ -36,4 +36,4 @@ echo 'Copying grub configuration folder.'
 cp -a grub iso/boot
 
 echo 'Making iso from the iso dir'
-grub-mkrescue -o myos.iso iso
+grub-mkrescue -o influx.iso iso

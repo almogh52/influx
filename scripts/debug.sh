@@ -10,10 +10,10 @@ $DIR/clean.sh
 $DIR/create-bootstrap-iso.sh DEBUG
 
 # Run qemu with the iso
-qemu-system-x86_64 -cdrom bootstrap.iso -s -S &
+qemu-system-x86_64 -cdrom influx.iso -s -S &
 
 # Run gdb
-gdb -ex "file iso/boot/myos-bootstrap.bin" -ex "layout asm" -ex "target remote localhost:1234" -ex "break _start" -ex "continue"
+gdb -ex "file iso/boot/influx-bootstrap.bin" -ex "layout asm" -ex "target remote localhost:1234" -ex "break _start" -ex "continue"
 
 # Close all qemu processes
 killall qemu-system-x86_64
