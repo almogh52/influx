@@ -17,11 +17,7 @@ fi
 
 # Create the isodir and it's sub-dirs
 echo 'Creating the iso directories.'
-mkdir -p iso/boot iso/boot/grub
-
-# Copy the grub configuration file to it
-echo 'Copying grub configuration file.'
-cp grub.cfg iso/boot/grub
+mkdir -p iso/boot
 
 # Copy the bootstrap executable from the build dir
 echo 'Copying bootstrap executable.'
