@@ -14,7 +14,7 @@ void boot_main(uint32_t multiboot_magic, uint32_t multiboot_info_addr) {
     init_tty();
 
     // Print Bootstrap info
-    printf("%s Bootstrap, v%s\n", OS_NAME, BOOTSTRAP_VERSION);
+    printf("%s Bootstrap, v%s\n\n", OS_NAME, BOOTSTRAP_VERSION);
 
     // Check multiboot2 magic number
     printf("Multiboot2 magic number: 0x%x\n", multiboot_magic);
