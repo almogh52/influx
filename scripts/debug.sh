@@ -9,7 +9,14 @@ $DIR/clean.sh
 # Build the iso
 $DIR/create-iso.sh DEBUG
 
+# If the build failed
+if [[ $? -ne 0 ]]; then
+    echo -e '\033[0;31mCreating ISO failed, Exiting..\033[0m'
+    exit 1
+fi
+
 # Run qemu with the iso
+echo -e '\033[0;36mRunning QEMU and starting debugging..\033[0m'
 qemu-system-x86_64 -cdrom influx.iso -s -S &
 
 # Run gdb
