@@ -77,7 +77,7 @@ void putchar(int c) {
     if (c == '\n' || c == '\r') {
     newline:
         xpos = 0;
-        if (ypos + 1 >= LINES)
+        if (ypos > LINES)
             scroll();
         else
             ypos++;
