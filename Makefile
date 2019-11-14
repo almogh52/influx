@@ -2,6 +2,7 @@
 find_includes_in_dir    = $(find $(1) -name "*.h" | sed 's|/[^/]*$$||' | sort -u)
 
 # OS Configuration
+HOST_OS_NAME := $(shell uname -s | tr A-Z a-z)
 OS_NAME                 := influx
 
 # Toolchain Configuration
@@ -9,7 +10,11 @@ CC                      := clang
 AS                      := nasm
 LINK                    := ld.lld
 C_STANDARD              := -std=gnu18
-PREFIX                  := /usr/local/opt/llvm/bin
+ifeq (${HOST_OS_NAME},darwin)
+	PREFIX              := /usr/local/opt/llvm/bin
+else
+	PREFIX              := /usr/bin
+endif
 
 # Assembler -- Flags
 ASFLAGS                 += -f elf64
