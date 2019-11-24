@@ -8,3 +8,6 @@ iso
 
 # Ignore vscode ipch files
 ipch
+
+# Ignore DS_STORE
+.DS_STORE
