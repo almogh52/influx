@@ -14,6 +14,19 @@ static volatile unsigned char *video;
 void init_tty() {
     int i;
 
+    // Disable cursor using hardware ports
+    asm(".intel_syntax noprefix;"
+        "mov dx, 0x3D4;"
+        "mov al, 0xA;"  // Low cursor shape register
+        "out dx, al;"
+        "inc dx;"
+        "mov al, 0x20;"  // Bits 6-7 unused, bit 5 disables the cursor, bits 0-4 control the cursor
+                         // shape
+        "out dx, al"
+        :
+        :
+        : "dx", "al");
+
     // Set video to point at the video memory
     video = (unsigned char *)VIDEO;
 
