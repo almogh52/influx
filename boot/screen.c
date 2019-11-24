@@ -68,7 +68,7 @@ void scroll() {
     }
 
     // Reset the last row
-    for (int i = COLUMNS * (LINES - 1) * 2; i < COLUMNS * LINES * 2; i++) {
+    for (int i = COLUMNS * (LINES - 1) * 2; i < COLUMNS * (LINES + 1) * 2; i++) {
         *(video + i) = 0;
     }
 }
@@ -77,10 +77,14 @@ void putchar(int c) {
     if (c == '\n' || c == '\r') {
     newline:
         xpos = 0;
-        if (ypos > LINES)
+
+        // If reached the last line, just scroll
+        if (ypos == LINES - 1) {
             scroll();
-        else
+        } else {
             ypos++;
+        }
+
         return;
     }
 
@@ -88,7 +92,7 @@ void putchar(int c) {
     *(video + (xpos + ypos * COLUMNS) * 2 + 1) = ATTRIBUTE;
 
     xpos++;
-    if (xpos >= COLUMNS) goto newline;
+    if (xpos >= COLUMNS) goto newline;  // Handle line overflow by breaking a line
 }
 
 void printf(const char *format, ...) {
