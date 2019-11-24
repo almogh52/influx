@@ -3,7 +3,7 @@
 /*  The number of columns. */
 #define COLUMNS 80
 /*  The number of lines. */
-#define LINES 24
+#define LINES 25
 /*  The attribute of an character. */
 #define ATTRIBUTE 7
 /*  The video memory address. */
