@@ -22,5 +22,5 @@ typedef struct boot_info_mem {
 
 typedef struct boot_info {
     boot_info_mem memory;
-    char *cmd_line;
+    char *cmdline;
 } boot_info;

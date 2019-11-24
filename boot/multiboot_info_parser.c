@@ -51,6 +51,14 @@ boot_info *parse_multiboot_info(uint32_t *multiboot_info_ptr) {
 
             printf("Multiboot2 module: mod_start = 0x%x, mod_end = 0x%x, name = %s\n",
                    module_tag->mod_start, module_tag->mod_end, module_tag->cmdline);
+        } else if (tag->type == MULTIBOOT_TAG_TYPE_CMDLINE) // If the tag is a cmdline tag
+        {
+            struct multiboot_tag_string *cmdline_tag = (struct multiboot_tag_string *)tag;
+
+            // Save the cmdline
+            info.cmdline = cmdline_tag->string;
+
+            printf("Multiboot2 cmdline: %s\n", cmdline_tag->string);
         }
     }
 
