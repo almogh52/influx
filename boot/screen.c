@@ -2,6 +2,8 @@
 
 #include <stdarg.h>
 
+void scroll();
+
 /*  Save the X position. */
 static int xpos;
 

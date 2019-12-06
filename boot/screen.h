@@ -10,7 +10,6 @@
 #define VIDEO 0xB8000
 
 void init_tty();
-void scroll();
 void itoa(char *buf, int base, int d);
 void putchar(int c);
 void printf(const char *format, ...);
