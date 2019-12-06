@@ -3,6 +3,7 @@
 #include <multiboot2.h>
 
 #include "screen.h"
+#include "utils.h"
 
 boot_info info = {0};
 
@@ -49,9 +50,15 @@ boot_info *parse_multiboot_info(uint32_t *multiboot_info_ptr) {
         {
             struct multiboot_tag_module *module_tag = (struct multiboot_tag_module *)tag;
 
+            // Check if we found the kernel module
+            if (strcmp(module_tag->cmdline, KERNEL_BIN_STR)) {
+                info.kernel_module.start_addr = module_tag->mod_start;
+                info.kernel_module.size = module_tag->mod_end - module_tag->mod_start;
+            }
+
             printf("Multiboot2 module: mod_start = 0x%x, mod_end = 0x%x, name = %s\n",
                    module_tag->mod_start, module_tag->mod_end, module_tag->cmdline);
-        } else if (tag->type == MULTIBOOT_TAG_TYPE_CMDLINE) // If the tag is a cmdline tag
+        } else if (tag->type == MULTIBOOT_TAG_TYPE_CMDLINE)  // If the tag is a cmdline tag
         {
             struct multiboot_tag_string *cmdline_tag = (struct multiboot_tag_string *)tag;
 

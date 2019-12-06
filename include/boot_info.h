@@ -4,7 +4,12 @@
 
 #define MAX_MEM_ENTRIES 30
 
-typedef enum boot_info_mem_entry_type {
+typedef struct boot_info_kernel_module {
+    uint64_t start_addr;
+    uint64_t size;
+} boot_info_kernel_module;
+
+typedef enum boot_info_mem_entry_type { 
     AVAILABLE,
     RESERVED
 } boot_info_mem_entry_type;
@@ -21,6 +26,7 @@ typedef struct boot_info_mem {
 } boot_info_mem;
 
 typedef struct boot_info {
+    boot_info_kernel_module kernel_module;
     boot_info_mem memory;
     char *cmdline;
 } boot_info;
