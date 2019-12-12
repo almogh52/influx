@@ -1,20 +1,17 @@
-/* The bootloader will look at this image and start execution at the symbol
+/* Begin putting sections at 1 MiB, a conventional place for kernels to be
+	   loaded at by the bootloader. */
+KERNEL_LMA = 0x0000000000100000;
+KERNEL_VMA = 0xffffffff80000000 + KERNEL_LMA;
+
+/* The bootstrap will look at this image and start execution at the symbol
    designated as the entry point. */
 ENTRY(_start)
  
 /* Tell where the various sections of the object files will be put in the final
-   bootstrap image. */
+   kernel image. */
 SECTIONS
 {
-	/* Begin putting sections at 512 KiB, because the kernel is loaded into 1MiB. */
-	. = 512K;
- 
-	/* First put the multiboot header, as it is required to be put very early
-	   early in the image or the bootloader won't recognize the file format. */
-	.boot :
-	{
-		*(.multiboot_header)
-	}
+	. = KERNEL_VMA;
 
 	/* Code. */
 	.text :
