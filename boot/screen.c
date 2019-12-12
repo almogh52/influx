@@ -1,6 +1,7 @@
 #include "screen.h"
 
 #include <stdarg.h>
+#include <stdbool.h>
 
 void scroll();
 
@@ -40,23 +41,23 @@ void init_tty() {
     ypos = 0;
 }
 
-void itoa(char *buf, int base, int d) {
+void itoa(char *buf, char base, int64_t d) {
     char *p = buf;
     char *p1, *p2;
-    long ud = d;
-    unsigned int divisor = 10;
+    uint64_t ud = (uint64_t)d;
+    uint64_t divisor = 10;
 
     /*  If %d is specified and D is minus, put `-' in the head. */
     if (base == 'd' && d < 0) {
         *p++ = '-';
         buf++;
-        ud = -d;
+        ud = (uint64_t)-d;
     } else if (base == 'x')
         divisor = 16;
 
     /*  Divide UD by DIVISOR until UD == 0. */
     do {
-        unsigned int remainder = ud % divisor;
+        uint64_t remainder = ud % divisor;
 
         *p++ = (remainder < 10) ? (char)remainder + '0' : (char)remainder + 'a' - 10;
     } while (ud /= divisor);
@@ -112,8 +113,8 @@ void putchar(int c) {
 
 void printf(const char *format, ...) {
     va_list ap;
-    int c;
-    char buf[20];
+    char c;
+    char buf[MAX_ARG_BUF_SIZE];
 
     va_start(ap, format);
 
@@ -122,11 +123,12 @@ void printf(const char *format, ...) {
             putchar(c);
         else {
             char *p, *p2;
-            int pad0 = 0, pad = 0;
+            bool pad0 = false, l64 = false;
+            int pad = 0;
 
             c = *format++;
             if (c == '0') {
-                pad0 = 1;
+                pad0 = true;
                 c = *format++;
             }
 
@@ -135,11 +137,16 @@ void printf(const char *format, ...) {
                 c = *format++;
             }
 
+            if (c == 'l') {
+                l64 = true;
+                c = *format++;
+            }
+
             switch (c) {
                 case 'd':
                 case 'u':
                 case 'x':
-                    itoa(buf, c, va_arg(ap, int));
+                    itoa(buf, c, l64 ? va_arg(ap, int64_t) : va_arg(ap, int32_t));
                     p = buf;
                     goto string;
                     break;
