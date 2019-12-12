@@ -1,8 +1,7 @@
 #pragma once
 
 #include <stdint.h>
-
-#include "../include/boot_info.h"
+#include <sys/boot_info.h>
 
 #define KERNEL_BIN_STR "KERNEL_BIN"
 

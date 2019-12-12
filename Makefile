@@ -1,6 +1,3 @@
-# Functions
-find_includes_in_dir    = $(find $(1) -name "*.h" | sed 's|/[^/]*$$||' | sort -u)
-
 # OS Configuration
 HOST_OS_NAME := $(shell uname -s | tr A-Z a-z)
 OS_NAME                 := influx
@@ -56,6 +53,8 @@ OBJ_DIR                 := $(BUILD_DIR)/obj
 SYSROOT_DIR             := $(BUILD_DIR)/sysroot
 EFI_DIR                 := $(BUILD_DIR)/EFI
 
+INCLUDE_DIR             := include
+
 BOOT_DIR                := boot
 BOOT_SRC_FILES          := $(wildcard ${BOOT_DIR}/*.s) $(wildcard ${BOOT_DIR}/*.c)
 BOOT_INC_DIR            := ${BOOT_DIR}/include
@@ -89,7 +88,7 @@ $(OBJ_DIR)/$(BOOT_DIR)/%.o: $(BOOT_DIR)/%.s
 $(OBJ_DIR)/$(BOOT_DIR)/%.o: $(BOOT_DIR)/%.c
 	@echo 'Compiling $<'
 	@mkdir -p $(@D)
-	$(PREFIX)/$(CC) -I${BOOT_INC_DIR} $(CFLAGS) -c $< -o $@
+	$(PREFIX)/$(CC) -I${BOOT_INC_DIR} -I${INCLUDE_DIR} $(CFLAGS) -c $< -o $@
 
 $(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-kernel.bin: ${KERNEL_OBJ_FILES} ${KERNEL_DIR}/linker.ld
 	@echo 'Linking kernel executable'
@@ -104,4 +103,4 @@ $(OBJ_DIR)/${KERNEL_DIR}/%.o: ${KERNEL_DIR}/%.s
 $(OBJ_DIR)/${KERNEL_DIR}/%.o: ${KERNEL_DIR}/%.c
 	@echo 'Compiling $<'
 	@mkdir -p $(@D)
-	$(PREFIX)/$(CC) $(CFLAGS) -c $< -o $@
+	$(PREFIX)/$(CC) -I${INCLUDE_DIR} $(CFLAGS) -c $< -o $@
