@@ -76,10 +76,10 @@ all: $(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-bootstrap.bin $(EFI_DIR)/$(BOOT_DIR)/$(OS
 clean:
 	rm -rf $(BUILD_DIR)
 
-$(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-bootstrap.bin: $(BOOT_OBJ_FILES)
+$(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-bootstrap.bin: $(BOOT_OBJ_FILES) ${BOOT_DIR}/linker.ld
 	@echo 'Linking bootstrap executable'
 	@mkdir -p $(@D)
-	$(PREFIX)/$(LINK) -Tboot/linker.ld $(LDFLAGS) $(BOOT_OBJ_FILES) -o $@
+	$(PREFIX)/$(LINK) -T${BOOT_DIR}/linker.ld $(LDFLAGS) $(BOOT_OBJ_FILES) -o $@
 
 $(OBJ_DIR)/$(BOOT_DIR)/%.o: $(BOOT_DIR)/%.s
 	@echo 'Compiling $<'
@@ -91,10 +91,10 @@ $(OBJ_DIR)/$(BOOT_DIR)/%.o: $(BOOT_DIR)/%.c
 	@mkdir -p $(@D)
 	$(PREFIX)/$(CC) -I${BOOT_INC_DIR} $(CFLAGS) -c $< -o $@
 
-$(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-kernel.bin: ${KERNEL_OBJ_FILES}
+$(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-kernel.bin: ${KERNEL_OBJ_FILES} ${KERNEL_DIR}/linker.ld
 	@echo 'Linking kernel executable'
 	@mkdir -p $(@D)
-	$(PREFIX)/$(LINK) $(LDFLAGS) $(KERNEL_OBJ_FILES) -o $@
+	$(PREFIX)/$(LINK) -T${KERNEL_DIR}/linker.ld $(LDFLAGS) $(KERNEL_OBJ_FILES) -o $@
 
 $(OBJ_DIR)/${KERNEL_DIR}/%.o: ${KERNEL_DIR}/%.s
 	@echo 'Compiling $<'
