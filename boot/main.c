@@ -5,11 +5,14 @@
 
 #include "multiboot_info_parser.h"
 #include "screen.h"
+#include "kernel_parser.h"
 
 void boot_main(uint32_t multiboot_magic, uint32_t multiboot_info_addr) {
     uint32_t *multiboot_info_ptr = (uint32_t *)(uint64_t)multiboot_info_addr;
 
     boot_info *info = 0;
+
+    void *kernel_entry_ptr = 0;
 
     // Clear the screen and initialize terminal variables
     init_tty();
@@ -34,7 +37,11 @@ void boot_main(uint32_t multiboot_magic, uint32_t multiboot_info_addr) {
     // Parse the multiboot structure
     info = parse_multiboot_info(multiboot_info_ptr);
     if (info) {
+        kernel_entry_ptr = load_kernel(info);
+
+        //((void (*)())kernel_entry_ptr)();
     }
+
 
     asm("hlt");
 }
