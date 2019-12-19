@@ -17,25 +17,27 @@ SECTIONS
 	}
 
 	/* Code. */
-	.text :
+	.text : ALIGN(8)
 	{
-		*(.text)
+        *(.start)
+        *(.text)
+        *(.text.*)
 	}
  
 	/* Read-only data. */
-	.rodata :
+	.rodata : ALIGN(8)
 	{
 		*(.rodata)
 	}
  
 	/* Read-write data (initialized) */
-	.data :
+	.data : ALIGN(8)
 	{
 		*(.data)
 	}
  
 	/* Read-write data (uninitialized) and stack */
-	.bss :
+	.bss : ALIGN(8)
 	{
 		*(COMMON)
 		*(.bss)
