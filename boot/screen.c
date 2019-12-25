@@ -59,7 +59,7 @@ void itoa(char *buf, char base, int64_t d) {
     do {
         uint64_t remainder = ud % divisor;
 
-        *p++ = (remainder < 10) ? (char)remainder + '0' : (char)remainder + 'a' - 10;
+        *p++ = (char)((remainder < 10) ? (char)remainder + '0' : (char)remainder + 'a' - 10);
     } while (ud /= divisor);
 
     /*  Terminate BUF. */
@@ -104,7 +104,7 @@ void putchar(int c) {
         return;
     }
 
-    *(video + (xpos + ypos * COLUMNS) * 2) = c & 0xFF;
+    *(video + (xpos + ypos * COLUMNS) * 2) = (unsigned char)c & 0xFF;
     *(video + (xpos + ypos * COLUMNS) * 2 + 1) = ATTRIBUTE;
 
     xpos++;

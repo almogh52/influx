@@ -1,6 +1,6 @@
 bits 32
 
-HIGHER_HALF_OFFSET equ 0xFFFFFFFFFF80000000
+HIGHER_HALF_OFFSET equ 0xFFFFFFFF80000000
 
 extern boot_main, sse_enable
 
