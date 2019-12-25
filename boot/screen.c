@@ -18,7 +18,7 @@ void init_tty() {
     int i;
 
     // Disable cursor using hardware ports
-    asm(".intel_syntax noprefix;"
+    __asm__ __volatile__(
         "mov dx, 0x3D4;"
         "mov al, 0xA;"  // Low cursor shape register
         "out dx, al;"
