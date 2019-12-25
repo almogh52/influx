@@ -14,27 +14,29 @@ SECTIONS
 	. = KERNEL_VMA;
 
 	/* Code. */
-	.text : ALIGN(8)
+	.text : ALIGN(0x1000)
 	{
         *(.start)
         *(.text)
         *(.text.*)
+		*(.init*)
+		*(.fini*)
 	}
  
 	/* Read-only data. */
-	.rodata : ALIGN(8)
+	.rodata : ALIGN(0x1000)
 	{
 		*(.rodata)
 	}
  
 	/* Read-write data (initialized) */
-	.data : ALIGN(8)
+	.data : ALIGN(0x1000)
 	{
 		*(.data)
 	}
  
 	/* Read-write data (uninitialized) and stack */
-	.bss : ALIGN(8)
+	.bss : ALIGN(0x1000)
 	{
 		*(COMMON)
 		*(.bss)
