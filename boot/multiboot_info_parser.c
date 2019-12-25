@@ -5,9 +5,9 @@
 #include "screen.h"
 #include "utils.h"
 
-boot_info info = {0};
-
-boot_info *parse_multiboot_info(uint32_t *multiboot_info_ptr) {
+boot_info parse_multiboot_info(uint32_t *multiboot_info_ptr) {
+    boot_info info = {0};
+    
     uint32_t multiboot_info_size;
 
     // Get the size of the multiboot information
@@ -69,5 +69,5 @@ boot_info *parse_multiboot_info(uint32_t *multiboot_info_ptr) {
         }
     }
 
-    return &info;
+    return info;
 }

@@ -9,8 +9,8 @@
 bool verify_kernel_elf(Elf64_Ehdr *header);
 void load_segments(void *kernel_file, Elf64_Phdr *pheader, unsigned int num_of_pheaders);
 
-void *load_kernel(boot_info *info) {
-    void *kernel_file = (void *)info->kernel_module.start_addr;
+void *load_kernel(boot_info info) {
+    void *kernel_file = (void *)info.kernel_module.start_addr;
     Elf64_Ehdr *header = (Elf64_Ehdr *)kernel_file;
 
     // Verify the kernel's elf

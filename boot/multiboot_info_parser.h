@@ -5,4 +5,4 @@
 
 #define KERNEL_BIN_STR "KERNEL_BIN"
 
-boot_info *parse_multiboot_info(uint32_t *multiboot_info_ptr);
+boot_info parse_multiboot_info(uint32_t *multiboot_info_ptr);
