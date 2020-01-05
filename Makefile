@@ -1,3 +1,6 @@
+# Functions
+rwildcard               = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2) $(filter $(subst *,%,$2),$d))
+
 # OS Configuration
 HOST_OS_NAME            := $(shell uname -s | tr A-Z a-z)
 OS_NAME                 := influx
@@ -83,7 +86,7 @@ KERNEL_CRTI_OBJ         := ${OBJ_DIR}/${KERNEL_DIR}/crti.o
 KENREL_CRTBEGIN_OBJ     := $(shell $(CC) $(CFLAGS) -print-file-name=crtbegin.o)
 KERNEL_CRTEND_OBJ       := $(shell $(CC) $(CFLAGS) -print-file-name=crtend.o)
 KERNEL_CRTN_OBJ         := ${OBJ_DIR}/${KERNEL_DIR}/crtn.o
-KERNEL_SRC_FILES        := $(wildcard ${KERNEL_DIR}/*.s) $(wildcard ${KERNEL_DIR}/*.c) $(wildcard ${KERNEL_DIR}/*.cpp)
+KERNEL_SRC_FILES        := $(call rwildcard,${KERNEL_DIR},*.s *.c *.cpp)
 KERNEL_OBJ_FILES        := $(addprefix $(OBJ_DIR)/, $(KERNEL_SRC_FILES))
 KERNEL_OBJ_FILES        := $(KERNEL_OBJ_FILES:.s=.o)
 KERNEL_OBJ_FILES        := $(KERNEL_OBJ_FILES:.c=.o)
