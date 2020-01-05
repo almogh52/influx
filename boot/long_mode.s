@@ -81,7 +81,7 @@ panic:
 section .data
 align 0x1000
 gdt64:
-align 16
+align 64
 .null_descriptor:
     dq 0
 
