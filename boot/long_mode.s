@@ -2,7 +2,7 @@ bits 32
 
 HIGHER_HALF_OFFSET equ 0xFFFFFFFF80000000
 
-extern boot_main, sse_enable
+extern boot_main, sse_enable, pml4t
 
 global long_mode
 section .text
@@ -80,38 +80,6 @@ panic:
 
 section .data
 align 0x1000
-pml4t:
-;   Set the first entry to point at our first pdp that will identity map the first 4MB
-;   The last 2 bits are for present flag and read/write flag
-    dq pdpt + 11b
-
-;   Set null for the rest of the entries
-    times 510 dq 0
-
-;   Set the last entry to point at our first pdp that will create as a higher half for the kernel
-    dq pdpt + 11b
-
-pdpt:
-;   Identity map for the first 1GB
-    dq pdt + 11b
-
-;    Set null for the rest of the entries
-    times 509 dq 0
-
-;   Map for the higher half 1GB
-    dq pdt + 11b
-
-;   Last entry
-    dq 0
-
-pdt:
-;   Identity map for the first 4MB
-    dq 0 + 10000011b
-    dq 0x200000 + 10000011b
-
-;   Set null for the rest of the entries
-    times 510 dq 0
-
 gdt64:
 align 16
 .null_descriptor:
