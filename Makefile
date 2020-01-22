@@ -53,7 +53,7 @@ ifdef DEBUG
 endif
 
 # C++ Compiler -- Flags
-CXXFLAGS                += ${CFLAGS}
+CXXFLAGS                := ${CFLAGS}
 
 # Set compile standards
 CFLAGS                  += $(C_STANDARD)
