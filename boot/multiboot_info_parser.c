@@ -7,7 +7,7 @@
 
 boot_info parse_multiboot_info(uint32_t *multiboot_info_ptr) {
     boot_info info = {0};
-    
+
     uint32_t multiboot_info_size;
 
     // Get the size of the multiboot information
@@ -41,10 +41,8 @@ boot_info parse_multiboot_info(uint32_t *multiboot_info_ptr) {
                     mmap->type == MULTIBOOT_MEMORY_AVAILABLE ? AVAILABLE : RESERVED;
                 info.memory.entry_count++;
 
-                printf("Memory map entry: base_addr = 0x%x%x, length = 0x%x%x, type = 0x%x\n",
-                       (unsigned)(mmap->addr >> 32), (unsigned)(mmap->addr & 0xffffffff),
-                       (unsigned)(mmap->len >> 32), (unsigned)(mmap->len & 0xffffffff),
-                       (unsigned)mmap->type);
+                printf("Memory map entry: base_addr = 0x%lx, length = 0x%lx, type = 0x%x\n",
+                       mmap->addr, mmap->len, mmap->type);
             }
         } else if (tag->type == MULTIBOOT_TAG_TYPE_MODULE)  // If the tag is a module tag
         {
