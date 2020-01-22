@@ -5,6 +5,12 @@ rwildcard               = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$
 HOST_OS_NAME            := $(shell uname -s | tr A-Z a-z)
 OS_NAME                 := influx
 
+# Color configuration
+COM_COLOR   = \033[0;32m
+LNK_COLOR   = \033[0;33m
+OBJ_COLOR   = \033[0;35m
+NO_COLOR    = \033[m
+
 # Toolchain Configuration
 CC                      := x86_64-elf-gcc
 CXX                     := x86_64-elf-g++
@@ -102,37 +108,37 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 $(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-bootstrap.bin: $(BOOT_OBJ_FILES) ${BOOT_DIR}/linker.ld
-	@echo 'Linking bootstrap executable'
+	@printf '%b' '$(LNK_COLOR)Linking bootstrap executable$(NO_COLOR)\n'
 	@mkdir -p $(@D)
 	$(PREFIX)/$(LINK) -T${BOOT_DIR}/linker.ld $(LDFLAGS) $(BOOT_OBJ_FILES) -o $@
 
 $(OBJ_DIR)/$(BOOT_DIR)/%.o: $(BOOT_DIR)/%.s
-	@echo 'Compiling $<'
+	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'
 	@mkdir -p $(@D)
 	$(AS) $(ASFLAGS) $< -o $@
 
 $(OBJ_DIR)/$(BOOT_DIR)/%.o: $(BOOT_DIR)/%.c
-	@echo 'Compiling $<'
+	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'
 	@mkdir -p $(@D)
 	$(PREFIX)/$(CC) -I${BOOT_INC_DIR} $(CFLAGS) -c $< -o $@
 
 $(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-kernel.bin: ${KERNEL_OBJ_FILES} ${KERNEL_DIR}/linker.ld
-	@echo 'Linking kernel executable'
+	@printf '%b' '$(LNK_COLOR)Linking kernel executable$(NO_COLOR)\n'
 	@echo ${LIBGCC_DIR}
 	@mkdir -p $(@D)
 	$(PREFIX)/$(LINK) -T${KERNEL_DIR}/linker.ld $(LDFLAGS) $(KERNEL_OBJ_FILES) -o $@
 
 $(OBJ_DIR)/${KERNEL_DIR}/%.o: ${KERNEL_DIR}/%.s
-	@echo 'Compiling $<'
+	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'
 	@mkdir -p $(@D)
 	$(AS) $(ASFLAGS) $< -o $@
 
 $(OBJ_DIR)/${KERNEL_DIR}/%.o: ${KERNEL_DIR}/%.c
-	@echo 'Compiling $<'
+	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'
 	@mkdir -p $(@D)
 	$(PREFIX)/$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJ_DIR)/${KERNEL_DIR}/%.o: ${KERNEL_DIR}/%.cpp
-	@echo 'Compiling $<'
+	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'
 	@mkdir -p $(@D)
 	$(PREFIX)/$(CXX) $(CXXFLAGS) -c $< -o $@
