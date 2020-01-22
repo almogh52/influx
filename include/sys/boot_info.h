@@ -11,7 +11,8 @@ typedef struct boot_info_kernel_module {
 
 typedef enum boot_info_mem_entry_type { 
     AVAILABLE,
-    RESERVED
+    RESERVED,
+    KERNEL
 } boot_info_mem_entry_type;
 
 typedef struct boot_info_mem_entry {
