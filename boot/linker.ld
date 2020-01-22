@@ -6,8 +6,8 @@ ENTRY(_start)
    bootstrap image. */
 SECTIONS
 {
-	/* Begin putting sections at 512 KiB, because the kernel is loaded into 1MiB. */
-	. = 512K;
+	/* Begin putting sections at 1MiB, because it's a convention to load operation system at 1MiB. */
+	. = 1M;
  
 	/* First put the multiboot header, as it is required to be put very early
 	   early in the image or the bootloader won't recognize the file format. */

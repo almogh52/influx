@@ -1,6 +1,5 @@
-/* Begin putting sections at 1 MiB, a conventional place for kernels to be
-	   loaded at by the bootloader. */
-KERNEL_LMA = 0x0000000000100000;
+/* Begin putting sections at 2MiB, because the bootstrap is sitting in 1MiB */
+KERNEL_LMA = 2M;
 KERNEL_VMA = 0xffffffff80000000 + KERNEL_LMA;
 
 /* The bootstrap will look at this image and start execution at the symbol
