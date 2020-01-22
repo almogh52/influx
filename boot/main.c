@@ -38,7 +38,7 @@ void boot_main(uint32_t multiboot_magic, uint32_t multiboot_info_addr) {
     info = parse_multiboot_info(multiboot_info_ptr);
 
     // Load the kernel into the memory
-    kernel_entry_ptr = load_kernel(info);
+    kernel_entry_ptr = load_kernel(&info);
 
     // Call the kernel entry point
     ((boot_info(*)())kernel_entry_ptr)(info);
