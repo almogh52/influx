@@ -41,6 +41,7 @@ void boot_main(uint32_t multiboot_magic, uint32_t multiboot_info_addr) {
     kernel_entry_ptr = load_kernel(&info);
 
     // Call the kernel entry point
+    printf("Calling kernel's entry point..\n");
     ((boot_info(*)())kernel_entry_ptr)(info);
 
     // Re-init tty if returend from kernel
