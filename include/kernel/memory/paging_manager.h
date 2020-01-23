@@ -13,7 +13,9 @@ class paging_manager {
     pde_t *get_pde(uint64_t address);
     pte_t *get_pte(uint64_t address);
 
-    pdpe_t *create_pdpe(uint64_t address);
+    pdpe_t *alloc_pdpt(uint64_t pml4t_index, uint64_t alloc_address=0);
+    pde_t *alloc_pdt(pdpe_t *pdpt, uint64_t pdpt_index, uint64_t alloc_address=0);
+    pte_t *alloc_pt(pde_t *pdt, uint64_t pdt_index, uint64_t alloc_address=0);
 
    private:
     pml4e_t *_pml4;
