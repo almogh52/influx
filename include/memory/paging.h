@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #define PAGE_SIZE 4096
+#define AMOUNT_OF_PAGE_TABLE_ENTRIES 512
 
 #define READ_ONLY_ACCESS 0
 #define READ_WRITE_ACCESS 1
