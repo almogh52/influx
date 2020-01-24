@@ -7,7 +7,8 @@
 #include "multiboot_info_parser.h"
 #include "screen.h"
 
-void boot_main(uint32_t multiboot_magic, uint32_t multiboot_info_addr) {
+void boot_main(uint32_t multiboot_magic, uint32_t multiboot_info_old_addr) {
+    uint64_t multiboot_info_addr = multiboot_info_old_addr + HIGHER_HALF_OFFSET;
     uint32_t *multiboot_info_ptr = (uint32_t *)(uint64_t)multiboot_info_addr;
 
     boot_info info;

@@ -2,6 +2,8 @@ MULTIBOOT2_HEADER_MAGIC equ 0xE85250D6
 GRUB_MULTIBOOT_ARCHITECTURE_I386 equ 0
 MULTIBOOT_HEADER_LENGTH equ 0x100000000 - (MULTIBOOT2_HEADER_MAGIC + GRUB_MULTIBOOT_ARCHITECTURE_I386 + (multiboot_header_end - multiboot_header_start))
 
+HIGHER_HALF_OFFSET equ 0xFFFFFF7F80000000
+
 bits 32
 
 align 64
@@ -27,10 +29,10 @@ _start:
 	cli
 
 ;   Load the GDT
-    lgdt [gdt_ptr]
+    lgdt [gdt_ptr - HIGHER_HALF_OFFSET]
 
 ;   Jump to the new code segment
-    jmp 0x8:new_gdt
+    jmp 0x8:new_gdt - HIGHER_HALF_OFFSET
 
 new_gdt:
 ;   Reload segments with the new data segment
@@ -42,7 +44,7 @@ new_gdt:
     mov gs, cx
 
 ;   Set the pointer to the top of the stack
-    mov esp, stack_top
+    mov esp, stack_top - HIGHER_HALF_OFFSET
     mov ebp, esp
 
 ;   Save multiboot parameters and prepare to send them to the kernel
@@ -81,7 +83,7 @@ gdt_end:
 align 32
 gdt_ptr:
     dw (gdt_end - gdt_start - 1)
-    dd gdt_start
+    dd gdt_start - HIGHER_HALF_OFFSET
 
 ; Creating the stack by the System V ABI Spec
 section .bss

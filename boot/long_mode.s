@@ -18,7 +18,7 @@ long_mode:
     mov cr4, eax
 
 ;   Set the physical address of the PML4 table in cr3
-    mov eax, pml4t
+    mov eax, pml4t - HIGHER_HALF_OFFSET
     mov cr3, eax
 
 ;   Read the EFER MSR
@@ -39,13 +39,13 @@ long_mode:
     pop esi
 
 ;   Load the new 64-bit GDT
-    lgdt [gdt64.ptr]
-    jmp 0x8:mode64
+    lgdt [gdt64.ptr - HIGHER_HALF_OFFSET]
+    jmp 0x8:mode64 - HIGHER_HALF_OFFSET
 
 bits 64
 mode64:
 ;   Jump to higher half
-    mov rax, higher_half + HIGHER_HALF_OFFSET
+    mov rax, higher_half
     jmp rax
 
 higher_half:
@@ -57,9 +57,25 @@ higher_half:
     mov fs, cx
     mov gs, cx
 
+;   Update rsp to higher half memory space
+    mov rax, HIGHER_HALF_OFFSET
+    add rsp, rax
+
 ;   Save multiboot parameters
     push rsi
     push rdi
+
+;   Reload the 64-bit GDT
+    lgdt [gdt64.higher_ptr - HIGHER_HALF_OFFSET]
+    jmp far [higher_half_jump_ptr - HIGHER_HALF_OFFSET]
+
+higher_half_continue:
+;   Remove identity mapping in the first 4MiB and invalidate it's page
+    mov qword [pml4t - HIGHER_HALF_OFFSET], 0
+
+;   Invalidate all TLB
+    mov rax, cr3
+    mov cr3, rax
 
 ;   Enable SSE
     call sse_enable
@@ -102,4 +118,11 @@ align 64
     db 0x00      ; Segment base (bit 24 - 31)
 .ptr:
     dw $ - gdt64 - 1
+    dq gdt64 - HIGHER_HALF_OFFSET
+.higher_ptr:
+    dw $ - gdt64 - 1
     dq gdt64
+
+higher_half_jump_ptr:
+    dq higher_half_continue
+    dw 0x8

@@ -1,23 +1,25 @@
+HIGHER_HALF_OFFSET equ 0xFFFFFF7F80000000
+
 global pml4t
 section .data
 align 0x1000
 pml4t:
 ;   Set the first entry to point at our first pdp that will identity map the first 4MiB
 ;   The last 2 bits are for present flag and read/write flag
-    dq pdpt_lower + 11b
+    dq pdpt_lower - HIGHER_HALF_OFFSET + 11b
 
 ;   Set null for the rest of the entries
     times 509 dq 0
 
 ;   Set the before last entry to point at our first pdp that will create as a higher half for the kernel
-    dq pdpt_higher + 11b
+    dq pdpt_higher - HIGHER_HALF_OFFSET + 11b
 
 ;	Set the last entry to point at the PML4T to create recursive mapping
-	dq pml4t + 11b
+	dq pml4t - HIGHER_HALF_OFFSET + 11b
 
 pdpt_lower:
 ;   Identity map for the first 1GiB
-    dq pdt + 11b
+    dq pdt - HIGHER_HALF_OFFSET + 11b
 
 ;    Set null for the rest of the entries
     times 511 dq 0
@@ -27,15 +29,15 @@ pdpt_higher:
     times 510 dq 0
 
 ;   Map for the higher half 1GiB
-    dq pdt + 11b
+    dq pdt - HIGHER_HALF_OFFSET + 11b
 
 ;   Last entry
     dq 0
 
 pdt:
 ;   Identity map for the first 4MiB
-    dq pt + 11b
-    dq pt + 512 + 11b
+    dq pt - HIGHER_HALF_OFFSET + 11b
+    dq pt - HIGHER_HALF_OFFSET + 512 + 11b
 
 ;   Set null for the rest of the entries
     times 510 dq 0
