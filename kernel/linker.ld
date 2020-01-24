@@ -1,6 +1,6 @@
 /* Begin putting sections at 2MiB, because the bootstrap is sitting in 1MiB */
 KERNEL_LMA = 2M;
-KERNEL_VMA = 0xffffffff80000000 + KERNEL_LMA;
+KERNEL_VMA = 0xffffff7f80000000 + KERNEL_LMA;
 
 /* The bootstrap will look at this image and start execution at the symbol
    designated as the entry point. */

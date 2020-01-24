@@ -7,10 +7,13 @@ pml4t:
     dq pdpt_lower + 11b
 
 ;   Set null for the rest of the entries
-    times 510 dq 0
+    times 509 dq 0
 
-;   Set the last entry to point at our first pdp that will create as a higher half for the kernel
+;   Set the before last entry to point at our first pdp that will create as a higher half for the kernel
     dq pdpt_higher + 11b
+
+;	Set the last entry to point at the PML4T to create recursive mapping
+	dq pml4t + 11b
 
 pdpt_lower:
 ;   Identity map for the first 1GiB
