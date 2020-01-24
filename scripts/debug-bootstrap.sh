@@ -23,4 +23,4 @@ qemu-system-x86_64 -cdrom influx.iso -s -S &
 gdb -ex "file iso/boot/influx-bootstrap.bin" -ex "layout asm" -ex "target remote localhost:1234"
 
 # Close all qemu processes
-killall qemu-system-x86_64 > /dev/null 2>&1i
+killall qemu-system-x86_64 > /dev/null 2>&1
