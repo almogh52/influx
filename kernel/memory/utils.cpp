@@ -11,9 +11,16 @@ void *influx::memory::utils::get_pml4() {
     return (void *)cr3;
 }
 
-uint64_t influx::memory::utils::patch_page_entry_address(uint64_t address) {
-    return address & 0x1FF;
+uint64_t influx::memory::utils::patch_page_address_set_value(uint64_t address)
+{
+    return address >> 12;
 }
+
+uint64_t influx::memory::utils::patch_page_address(uint64_t address) {
+    return address & 0xFFFFFFFFFF000;
+}
+
+uint64_t influx::memory::utils::get_page_entry_index(uint64_t address) { return address & 0x1FF; }
 
 uint64_t influx::memory::utils::count_physical_memory(boot_info_mem &mem_info) {
     uint64_t mem_size = 0;
