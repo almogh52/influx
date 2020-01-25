@@ -31,7 +31,7 @@ pdpt_higher:
 pdt:
 ;   Identity map for the first 4MiB
     dq pt - HIGHER_HALF_OFFSET + 11b
-    dq pt - HIGHER_HALF_OFFSET + 512 + 11b
+    dq pt + 0x1000 - HIGHER_HALF_OFFSET + 11b
 
 ;   Set null for the rest of the entries
     times 510 dq 0
