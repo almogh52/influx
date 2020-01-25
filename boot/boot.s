@@ -88,6 +88,7 @@ gdt_ptr:
 ; Creating the stack by the System V ABI Spec
 section .bss
 align 16
+global stack_bottom, stack_top
 stack_bottom:
     resb 16384
 stack_top:
