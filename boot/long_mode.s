@@ -96,6 +96,7 @@ panic:
 
 section .data
 align 0x1000
+global gdt64, gdt64_end
 gdt64:
 align 64
 .null_descriptor:
@@ -122,6 +123,7 @@ align 64
 .higher_ptr:
     dw $ - gdt64 - 1
     dq gdt64
+gdt64_end:
 
 higher_half_jump_ptr:
     dq higher_half_continue

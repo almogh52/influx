@@ -9,7 +9,6 @@
 bool verify_kernel_elf(Elf64_Ehdr *header);
 void load_segments(void *kernel_file, Elf64_Phdr *pheader, unsigned int num_of_pheaders,
                    boot_info_mem *mmap);
-void add_kernel_memory_entry(boot_info_mem *mmap, uint64_t base_addr, uint64_t size);
 
 void *load_kernel(boot_info *info) {
     void *kernel_file = (void *)info->kernel_module.start_addr;

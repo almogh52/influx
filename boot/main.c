@@ -7,6 +7,8 @@
 #include "multiboot_info_parser.h"
 #include "screen.h"
 
+extern uint64_t main_paging[], main_paging_end[], gdt64[], gdt64_end[];
+
 void boot_main(uint32_t multiboot_magic, uint32_t multiboot_info_old_addr) {
     uint64_t multiboot_info_addr = multiboot_info_old_addr + HIGHER_HALF_OFFSET;
     uint32_t *multiboot_info_ptr = (uint32_t *)(uint64_t)multiboot_info_addr;
@@ -40,6 +42,12 @@ void boot_main(uint32_t multiboot_magic, uint32_t multiboot_info_old_addr) {
 
     // Load the kernel into the memory
     kernel_entry_ptr = load_kernel(&info);
+
+    // Add the paging structures and the GDT as part of the kernel memory
+    add_kernel_memory_entry(&info.memory, (uint64_t)((uint64_t)main_paging - HIGHER_HALF_OFFSET),
+                            (uint64_t)((uint64_t)main_paging_end - (uint64_t)main_paging));
+    add_kernel_memory_entry(&info.memory, (uint64_t)((uint64_t)gdt64 - HIGHER_HALF_OFFSET),
+                            (uint64_t)((uint64_t)gdt64_end - (uint64_t)gdt64));
 
     // Call the kernel entry point
     printf("Calling kernel's entry point..\n");

@@ -1,8 +1,9 @@
 HIGHER_HALF_OFFSET equ 0xFFFFFF7F80000000
 
-global pml4t
+global pml4t, main_paging, main_paging_end
 section .data
 align 0x1000
+main_paging:
 pml4t:
 ;   Set the first entry to point at our first pdp that will identity map the first 4MiB
 ;   The last 2 bits are for present flag and read/write flag
@@ -16,13 +17,6 @@ pml4t:
 
 ;	Set the last entry to point at the PML4T to create recursive mapping
 	dq pml4t - HIGHER_HALF_OFFSET + 11b
-
-pdpt_lower:
-;   Identity map for the first 1GiB
-    dq pdt - HIGHER_HALF_OFFSET + 11b
-
-;    Set null for the rest of the entries
-    times 511 dq 0
 
 pdpt_higher:
 ;    Set null for the rest of the entries
@@ -1068,3 +1062,11 @@ pt:
 	dq 0x3fd000 + 11b
 	dq 0x3fe000 + 11b
 	dq 0x3ff000 + 11b
+main_paging_end:
+
+pdpt_lower:
+;   Identity map for the first 1GiB
+    dq pdt - HIGHER_HALF_OFFSET + 11b
+
+;    Set null for the rest of the entries
+    times 511 dq 0
