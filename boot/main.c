@@ -51,12 +51,6 @@ void boot_main(uint32_t multiboot_magic, uint32_t multiboot_info_old_addr) {
     add_kernel_memory_entry(&info.memory, (uint64_t)((uint64_t)stack_bottom - HIGHER_HALF_OFFSET),
                             (uint64_t)((uint64_t)stack_top - (uint64_t)stack_bottom));
 
-    for (int i = 0; i < info.memory.entry_count; i++) {
-        printf("0x%lx - 0x%lx - TYPE: %d\n", info.memory.entries[i].base_addr,
-               info.memory.entries[i].base_addr + info.memory.entries[i].size,
-               info.memory.entries[i].type);
-    }
-
     // Call the kernel entry point
     printf("Calling kernel's entry point..\n");
     ((boot_info(*)())kernel_entry_ptr)(info);
