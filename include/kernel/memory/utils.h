@@ -12,6 +12,7 @@ class utils {
     static uint64_t patch_page_address_set_value(uint64_t address);
     static uint64_t patch_page_address(uint64_t address);
     static uint64_t get_page_entry_index(uint64_t address);
+    static uint64_t get_page_offset(uint64_t virtual_address);
 
     static uint64_t count_physical_memory(const boot_info_mem &mem_info);
     static uint64_t calc_amount_of_pages_for_bitmap(uint64_t bitmap_size);

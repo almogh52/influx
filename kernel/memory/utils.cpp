@@ -20,6 +20,10 @@ uint64_t influx::memory::utils::patch_page_address(uint64_t address) {
 
 uint64_t influx::memory::utils::get_page_entry_index(uint64_t address) { return address & 0x1FF; }
 
+uint64_t influx::memory::utils::get_page_offset(uint64_t virtual_address) {
+    return virtual_address & 0xFFF;
+}
+
 uint64_t influx::memory::utils::count_physical_memory(const boot_info_mem &mem_info) {
     uint64_t mem_size = 0;
 
