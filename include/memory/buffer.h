@@ -1,6 +1,5 @@
 #pragma once
 
-#include <memory/paging.h>
 #include <stdint.h>
 
 typedef struct buffer {
