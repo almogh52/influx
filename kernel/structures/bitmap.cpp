@@ -129,14 +129,14 @@ bool influx::structures::bitmap::search(uint64_t batch_size, bool value, uint64_
     return found;
 }
 
-uint64_t influx::structures::bitmap::search_bit(bool value, uint64_t &batch_index) {
-    bool found = search_bit(_next_search_node * BITS_PER_NODE, _size, value, batch_index) ||
+uint64_t influx::structures::bitmap::search_bit(bool value, uint64_t &bit_index) {
+    bool found = search_bit(_next_search_node * BITS_PER_NODE, _size, value, bit_index) ||
                  (_next_search_node != 0 &&
-                  search_bit(0, _next_search_node * BITS_PER_NODE, value, batch_index));
+                  search_bit(0, _next_search_node * BITS_PER_NODE, value, bit_index));
 
     // If the bit was found, set the next search node
     if (found) {
-        _next_search_node = batch_index / BITS_PER_NODE;
+        _next_search_node = bit_index / BITS_PER_NODE;
     }
 
     return found;
@@ -194,7 +194,7 @@ bool influx::structures::bitmap::search(uint64_t start_node, uint64_t end_node, 
 }
 
 bool influx::structures::bitmap::search_bit(uint64_t start_index, uint64_t end_index, bool value,
-                                            uint64_t &batch_index) {
+                                            uint64_t &bit_index) {
     uint64_t current_index = start_index;
 
     // While we didn't reach the last index
@@ -208,7 +208,7 @@ bool influx::structures::bitmap::search_bit(uint64_t start_index, uint64_t end_i
 
     // If we found a bit that matches the value
     if (current_index < end_index) {
-        batch_index = current_index;
+        bit_index = current_index;
 
         return true;
     } else {

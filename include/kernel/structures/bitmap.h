@@ -36,7 +36,7 @@ class bitmap {
     void set(uint64_t start, uint64_t size, bool value);
 
     bool search(uint64_t batch_size, bool value, uint64_t& batch_index);
-    uint64_t search_bit(bool value, uint64_t& batch_index);
+    uint64_t search_bit(bool value, uint64_t& bit_index);
 
     bit operator[](uint64_t index);
 
@@ -52,7 +52,7 @@ class bitmap {
 
     bool search(uint64_t start_node, uint64_t end_node, uint64_t batch_size, bool value,
                 uint64_t& batch_index);
-    bool search_bit(uint64_t start_index, uint64_t end_index, bool value, uint64_t& batch_index);
+    bool search_bit(uint64_t start_index, uint64_t end_index, bool value, uint64_t& bit_index);
 
     bit get_bit_for_index(uint64_t index) const;
 };
