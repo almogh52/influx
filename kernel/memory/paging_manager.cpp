@@ -38,6 +38,36 @@ uint64_t influx::memory::paging_manager::get_physical_address(uint64_t virtual_a
                : 0;
 }
 
+bool influx::memory::paging_manager::map_page(uint64_t page_base_address) {
+    bool mapped = false;
+
+    uint64_t structures_buffer_physical_address =
+        get_physical_address((uint64_t)_structures_buffer.ptr);
+
+    int64_t page_index = physical_allocator::alloc_page();
+    if (page_index < 0) {
+        return false;
+    }
+
+    // If the buffer for the structures is empty, allocate a new one
+    if (_structures_buffer.size == 0 ||
+        !(mapped = map_page(page_base_address, page_index, _structures_buffer,
+                            structures_buffer_physical_address))) {
+        // Free the current one
+        free_structures_buffer();
+
+        // Allocate new one
+        allocate_structures_buffer();
+
+        // Get the physical address of the structures buffer
+        structures_buffer_physical_address = get_physical_address((uint64_t)_structures_buffer.ptr);
+    }
+
+    return mapped ? mapped
+                  : map_page(page_base_address, page_index, _structures_buffer,
+                             structures_buffer_physical_address);
+}
+
 bool influx::memory::paging_manager::map_page(uint64_t page_base_address, uint64_t page_index,
                                               buffer_t &buf, uint64_t buf_physical_address) {
     uint64_t buf_physical_offset = 0;
@@ -153,8 +183,8 @@ bool influx::memory::paging_manager::temp_map_page(uint64_t page_base_address, b
                                                    uint64_t buf_physical_address,
                                                    int64_t page_index) {
     // If no page index was selected for the temp page, allocate a page for it
-    if (page_index < 0) {
-        page_index = physical_allocator::alloc_page();
+    if (page_index < 0 && (page_index = physical_allocator::alloc_page()) < 0) {
+        return false;
     }
 
     // Map the page to it's virtual address
@@ -218,9 +248,49 @@ void influx::memory::paging_manager::unmap_temp_mapping(uint64_t page_base_addre
 
     // Disable the PTE
     *pte = (pte_t){0};
-    
+
     // Invalidate the page
     invalidate_page(page_base_address);
+}
+
+bool influx::memory::paging_manager::allocate_structures_buffer() {
+    uint64_t structures_mapping_buffer_physical_address =
+        get_physical_address((uint64_t)_structures_mapping_temp_buffer);
+    buffer_t structures_mapping_buffer{.ptr = (void *)_structures_mapping_temp_buffer,
+                                       .size = PAGE_SIZE};
+
+    // Allocate physical pages for the structures buffer
+    int64_t structures_buffer_first_page =
+        physical_allocator::alloc_consecutive_pages(STRUCTURES_BUFFER_SIZE / PAGE_SIZE);
+    if (structures_buffer_first_page < 0) {
+        return false;
+    }
+
+    // Allocate all pages for the structures buffer
+    for (uint8_t i = 0; i < STRUCTURES_BUFFER_SIZE / PAGE_SIZE; i++) {
+        if (!temp_map_page(STRUCTURES_BUFFER_ADDRESS + i * PAGE_SIZE, structures_mapping_buffer,
+                           structures_mapping_buffer_physical_address,
+                           structures_buffer_first_page + i)) {
+            _structures_buffer = {.ptr = nullptr, .size = 0};
+            return false;
+        }
+    }
+
+    // Init the buffer
+    _structures_buffer = {.ptr = (void *)STRUCTURES_BUFFER_ADDRESS, .size = STRUCTURES_BUFFER_SIZE};
+
+    return true;
+}
+
+void influx::memory::paging_manager::free_structures_buffer() {
+    uint64_t structures_mapping_buffer_physical_address =
+        get_physical_address((uint64_t)_structures_mapping_temp_buffer);
+
+    // Unmap all pages for the structures buffer
+    for (uint8_t i = 0; i < STRUCTURES_BUFFER_SIZE / PAGE_SIZE; i++) {
+        unmap_temp_mapping(STRUCTURES_BUFFER_ADDRESS + i * PAGE_SIZE,
+                           structures_mapping_buffer_physical_address, PAGE_SIZE);
+    }
 }
 
 void influx::memory::paging_manager::invalidate_page(uint64_t page_base_virtual_address) {

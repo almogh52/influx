@@ -1,5 +1,6 @@
 #pragma once
 
+#include <kernel/memory/memory.h>
 #include <memory/buffer.h>
 #include <memory/paging.h>
 
@@ -8,7 +9,8 @@
 #define PD_TABLES_BASE 0xffffffffc0000000
 #define PT_TABLES_BASE 0xffffff8000000000
 
-#define PAGE_MAPPING_BUFFER_SIZE (PAGE_SIZE * 8)
+#define STRUCTURES_BUFFER_ADDRESS (HIGHER_HALF_KERNEL_OFFSET + 0x1000)
+#define STRUCTURES_BUFFER_SIZE (PAGE_SIZE * 16)
 
 namespace influx {
 namespace memory {
@@ -21,7 +23,7 @@ class paging_manager {
 
     static uint64_t get_physical_address(uint64_t virtual_address);
 
-    //static void map_page(uint64_t page_base_address, uint64_t page_index);
+    static bool map_page(uint64_t page_base_address);
     static bool map_page(uint64_t page_base_address, uint64_t page_index, buffer_t &buf,
                          uint64_t buf_physical_address);
 
@@ -31,8 +33,11 @@ class paging_manager {
                                    uint64_t buf_size);
 
    private:
-    /*inline static char _mapping_buffer[PAGE_MAPPING_BUFFER_SIZE];
-    inline static uint64_t _mapping_buffer_offset = 0;*/
+    inline static char _structures_mapping_temp_buffer[PAGE_SIZE] __attribute__((aligned(0x1000)));
+    inline static buffer_t _structures_buffer = {.ptr = nullptr, .size = 0};
+
+    static bool allocate_structures_buffer();
+    static void free_structures_buffer();
 
     static void invalidate_page(uint64_t page_base_virtual_address);
 };
