@@ -129,7 +129,7 @@ bool influx::structures::bitmap::search(uint64_t batch_size, bool value, uint64_
     return found;
 }
 
-uint64_t influx::structures::bitmap::search_bit(bool value, uint64_t &bit_index) {
+bool influx::structures::bitmap::search_bit(bool value, uint64_t &bit_index) {
     bool found = search_bit(_next_search_node * BITS_PER_NODE, _size, value, bit_index) ||
                  (_next_search_node != 0 &&
                   search_bit(0, _next_search_node * BITS_PER_NODE, value, bit_index));

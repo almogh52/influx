@@ -36,7 +36,7 @@ class bitmap {
     void set(uint64_t start, uint64_t size, bool value);
 
     bool search(uint64_t batch_size, bool value, uint64_t& batch_index);
-    uint64_t search_bit(bool value, uint64_t& bit_index);
+    bool search_bit(bool value, uint64_t& bit_index);
 
     bit operator[](uint64_t index);
 
