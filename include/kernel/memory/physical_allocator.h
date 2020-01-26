@@ -21,6 +21,7 @@ class physical_allocator {
     static void init(const boot_info &info);
 
     static int64_t alloc_page();
+    static int64_t alloc_consecutive_pages(uint64_t amount);
 
    private:
     inline static structures::bitmap _bitmap;

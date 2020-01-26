@@ -15,8 +15,8 @@ void influx::memory::physical_allocator::init(const boot_info &info) {
     buffer_t structures_buffer;
     uint64_t structures_page_index = 0;
 
-    uint64_t amount_of_memory_pages = utils::calc_amount_of_pages_for_bitmap(
-        (utils::count_physical_memory(info.memory) / PAGE_SIZE) + 1);
+    uint64_t bitmap_size = (utils::count_physical_memory(info.memory) / PAGE_SIZE) + 1;
+    uint64_t amount_of_memory_pages = utils::calc_amount_of_pages_for_bitmap(bitmap_size);
     uint64_t page_chunk_start = 0;
 
     // Parse the memory map to the early bitmap
@@ -92,7 +92,7 @@ void influx::memory::physical_allocator::init(const boot_info &info) {
 
     // Init bitmap object
     _bitmap = structures::bitmap((void *)(HIGHER_HALF_KERNEL_OFFSET + BITMAP_ADDRESS_OFFSET),
-                                 amount_of_memory_pages);
+                                 bitmap_size);
 
     // Parse the memory map to the bitmap
     parse_memory_map_to_bitmap(info.memory, _bitmap);
@@ -104,7 +104,27 @@ void influx::memory::physical_allocator::init(const boot_info &info) {
 int64_t influx::memory::physical_allocator::alloc_page() {
     uint64_t page_index = 0;
 
-    return _bitmap.search_bit(0, page_index) ? page_index : -1;
+    bool found = _bitmap.search_bit(0, page_index);
+
+    // If found, allocate the page
+    if (found) {
+        _bitmap[page_index] = true;
+    }
+
+    return found ? page_index : -1;
+}
+
+int64_t influx::memory::physical_allocator::alloc_consecutive_pages(uint64_t amount) {
+    uint64_t first_page_index = 0;
+
+    bool found = _bitmap.search(amount, 0, first_page_index);
+
+    // If found, allocate the page
+    if (found) {
+        _bitmap.set(first_page_index, amount, 1);
+    }
+
+    return found ? first_page_index : -1;
 }
 
 void influx::memory::physical_allocator::parse_memory_map_to_bitmap(const boot_info_mem &mmap,
