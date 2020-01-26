@@ -1,156 +1,228 @@
 
 #include <kernel/memory/paging_manager.h>
-
+#include <kernel/memory/physical_allocator.h>
 #include <kernel/memory/utils.h>
 #include <stdint.h>
 
-influx::memory::paging_manager::paging_manager(void *pml4) : _pml4((pml4e_t *)pml4) {}
-
 pml4e_t *influx::memory::paging_manager::get_pml4e(uint64_t address) {
-    // Get the entry index of the PML4 entry
-    uint16_t pml4_entry_index = (uint16_t)utils::get_page_entry_index(address >> 39);
-
-    return _pml4 + pml4_entry_index;
+    return (pml4e_t *)PML4T_ADDRESS + utils::get_page_entry_index(address >> 39);
 }
 
 pdpe_t *influx::memory::paging_manager::get_pdpe(uint64_t address) {
-    // Get the PML4E that holds the address
-    pml4e_t *pml4e = get_pml4e(address);
-    pdpe_t *pdpt = (pdpe_t *)utils::patch_page_address(pml4e->pdp_address);
-
-    // Get the entry index of the PDPT entry
-    uint16_t pdpt_entry_index = (uint16_t)utils::get_page_entry_index(address >> 30);
-
-    // If the PML4E isn't present, return null
-    if (!pml4e->present) {
-        return nullptr;
-    }
-
-    return pdpt + pdpt_entry_index;
+    return (pdpe_t *)(PDP_TABLES_BASE + 0x1000 * utils::get_page_entry_index(address >> 39)) +
+           utils::get_page_entry_index(address >> 30);
 }
 
 pde_t *influx::memory::paging_manager::get_pde(uint64_t address) {
-    // Get the PDPE that holds the address
-    pdpe_t *pdpe = get_pdpe(address);
-    pde_t *pdt = nullptr;
-
-    // Get the entry index of the PDT entry
-    uint16_t pdt_entry_index = (uint16_t)utils::get_page_entry_index(address >> 21);
-
-    // If the PDPE isn't present, return null
-    if (!pdpe || !pdpe->present) {
-        return nullptr;
-    }
-
-    // Get the PDT address
-    pdt = (pde_t *)utils::patch_page_address(pdpe->pd_address);
-
-    return pdt + pdt_entry_index;
+    return (pde_t *)(PD_TABLES_BASE + 0x200000 * utils::get_page_entry_index(address >> 39) +
+                     0x1000 * utils::get_page_entry_index(address >> 30)) +
+           utils::get_page_entry_index(address >> 21);
 }
 
 pte_t *influx::memory::paging_manager::get_pte(uint64_t address) {
-    // Get the PDE that holds the address
-    pde_t *pde = get_pde(address);
-    pte_t *pt = nullptr;
-
-    // Get the entry index of the PT entry
-    uint16_t pt_entry_index = (uint16_t)utils::get_page_entry_index(address >> 12);
-
-    // If the PDE isn't present, return null
-    if (!pde || !pde->present) {
-        return nullptr;
-    }
-
-    // Get the PT address
-    pt = (pte_t *)utils::patch_page_address(pde->pt_address);
-
-    return pt + pt_entry_index;
+    return (pte_t *)(PT_TABLES_BASE + 0x40000000 * utils::get_page_entry_index(address >> 39) +
+                     0x200000 * utils::get_page_entry_index(address >> 30) +
+                     0x1000 * utils::get_page_entry_index(address >> 21)) +
+           utils::get_page_entry_index(address >> 12);
 }
 
-pdpe_t *influx::memory::paging_manager::alloc_pdpt(uint64_t pml4t_index, uint64_t alloc_address) {
-    pdpe_t *pdpt = nullptr;
+uint64_t influx::memory::paging_manager::get_physical_address(uint64_t virtual_address) {
+    pml4e_t *pml4e = get_pml4e(virtual_address);
+    pdpe_t *pdpe = get_pdpe(virtual_address);
+    pde_t *pde = get_pde(virtual_address);
+    pte *pte = get_pte(virtual_address);
 
-    // If there isn't already a PDPT for the PML4 index
-    if ((pdpt = get_pdpe(pml4t_index << 39)) != nullptr) {
-        // If an alloc address was specified
-        if (alloc_address != 0) {
-            pdpt = (pdpe_t *)alloc_address;
-        }
-
-        // If the PDPT was allocated
-        if (pdpt) {
-            // Reset all entries
-            for (uint16_t i = 0; i < AMOUNT_OF_PAGE_TABLE_ENTRIES; i++) {
-                *(pdpt + i) = (pdpe_t){0};
-            }
-
-            // Set the PDPT for the PML4E
-            get_pml4e(pml4t_index)->address_placeholder =
-                utils::patch_page_address_set_value((uint64_t)pdpt) & 0xFFFFFFFFFF;
-        }
-    }
-
-    return pdpt;
+    return pml4e->present && pdpe->present && pde->present && pte->present
+               ? utils::patch_page_address(pte->page_address) +
+                     utils::get_page_offset(virtual_address)
+               : 0;
 }
 
-pde_t *influx::memory::paging_manager::alloc_pdt(pdpe_t *pdpt, uint64_t pdpt_index,
-                                                 uint64_t alloc_address) {
-    pde_t *pdt = nullptr;
+bool influx::memory::paging_manager::map_page(uint64_t page_base_address, uint64_t page_index,
+                                              buffer_t &buf, uint64_t buf_physical_address) {
+    uint64_t buf_physical_offset = 0;
 
-    // If there is already a PDT associated with the PDPE
-    if ((pdpt + pdpt_index)->present) {
-        // Get the real address of the PDT
-        // TODO: Get the address from the virtual allocator
-        pdt = (pde_t *)utils::patch_page_address((pdpt + pdpt_index)->pd_address);
-    } else {
-        // If an alloc address was specified
-        if (alloc_address != 0) {
-            pdt = (pde_t *)alloc_address;
+    pml4e_t *pml4e = nullptr;
+    pdpe_t *pdpe = nullptr;
+    pde_t *pde = nullptr;
+    pte_t *pte = nullptr;
+
+    // Get the PML4E for the temp page
+    pml4e = get_pml4e(page_base_address);
+    if (!pml4e->present) {
+        // Check if the buffer has sufficient size for the PDPT
+        if (buf.size >= AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pdpe_t)) {
+            // Allocate PDPT
+            utils::memset(buf.ptr, 0, AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pdpe_t));
+
+            // Increase the page buffer offset and decrease it's size
+            buf.ptr = (uint8_t *)buf.ptr + AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pdpe_t);
+            buf.size -= AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pdpe_t);
+        } else {
+            // Unmap the temp mapping
+            unmap_temp_mapping(page_base_address, buf_physical_address,
+                               buf.size + buf_physical_offset);
+
+            return false;
         }
 
-        // If the PDT was allocated
-        if (pdt) {
-            // Reset all entries
-            for (uint16_t i = 0; i < AMOUNT_OF_PAGE_TABLE_ENTRIES; i++) {
-                *(pdt + i) = (pde_t){0};
-            }
+        // Create the PML4E
+        pml4e->address_placeholder = utils::patch_page_address_set_value(
+                                         (uint64_t)(buf_physical_address + buf_physical_offset)) &
+                                     0xFFFFFFFFFF;
+        pml4e->read_write = true;
+        pml4e->present = true;
 
-            // Set the PDT for the PDPE
-            (pdpt + pdpt_index)->address_placeholder =
-                utils::patch_page_address_set_value((uint64_t)pdt) & 0xFFFFFFFFFF;
-        }
+        // Increase the buf physical offset
+        buf_physical_offset += AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pdpe_t);
     }
 
-    return pdt;
+    // Get the PDPE
+    pdpe = get_pdpe(page_base_address);
+    if (!pdpe->present) {
+        // Check if the buffer has sufficient size for the PDT
+        if (buf.size >= AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pde_t)) {
+            // Allocate PDT
+            utils::memset(buf.ptr, 0, AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pde_t));
+
+            // Increase the page buffer offset and decrease it's size
+            buf.ptr = (uint8_t *)buf.ptr + AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pde_t);
+            buf.size -= AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pde_t);
+        } else {
+            // Unmap the temp mapping
+            unmap_temp_mapping(page_base_address, buf_physical_address,
+                               buf.size + buf_physical_offset);
+
+            return false;
+        }
+
+        // Create the PDPE and allocate the PDT
+        pdpe->address_placeholder = utils::patch_page_address_set_value(
+                                        (uint64_t)(buf_physical_address + buf_physical_offset)) &
+                                    0xFFFFFFFFFF;
+        pdpe->read_write = true;
+        pdpe->present = true;
+
+        // Increase the buf physical offset
+        buf_physical_offset += AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pde_t);
+    }
+
+    // Get the PDE
+    pde = get_pde(page_base_address);
+    if (!pde->present) {
+        // Check if the buffer has sufficient size for the PT
+        if (buf.size >= AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pte_t)) {
+            // Allocate PT
+            utils::memset(buf.ptr, 0, AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pte_t));
+
+            // Increase the page buffer offset and decrease it's size
+            buf.ptr = (uint8_t *)buf.ptr + AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pte_t);
+            buf.size -= AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pte_t);
+        } else {
+            // Unmap the temp mapping
+            unmap_temp_mapping(page_base_address, buf_physical_address,
+                               buf.size + buf_physical_offset);
+
+            return false;
+        }
+
+        // Create the PDE and allocate the PT
+        pde->address_placeholder = utils::patch_page_address_set_value(
+                                       (uint64_t)(buf_physical_address + buf_physical_offset)) &
+                                   0xFFFFFFFFFF;
+        pde->read_write = true;
+        pde->present = true;
+
+        // Increase the buf physical offset
+        buf_physical_offset += AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pde_t);
+    }
+
+    // Get the PTE
+    pte = get_pte(page_base_address);
+
+    // Create the PTE and point it to the page
+    pte->address_placeholder =
+        utils::patch_page_address_set_value(page_index * PAGE_SIZE) & 0xFFFFFFFFFF;
+    pte->read_write = true;
+    pte->present = true;
+
+    return true;
 }
 
-pte_t *influx::memory::paging_manager::alloc_pt(pde_t *pdt, uint64_t pdt_index,
-                                                uint64_t alloc_address) {
-    pte_t *pt = nullptr;
-
-    // If there is already a PT associated with the PDE
-    if ((pdt + pdt_index)->present) {
-        // Get the real address of the PT
-        // TODO: Get the address from the virtual allocator
-        pt = (pte_t *)utils::patch_page_address((pdt + pdt_index)->pt_address);
-    } else {
-        // If an alloc address was specified
-        if (alloc_address != 0) {
-            pt = (pte_t *)alloc_address;
-        }
-
-        // If the PT was allocated
-        if (pt) {
-            // Reset all entries
-            for (uint16_t i = 0; i < AMOUNT_OF_PAGE_TABLE_ENTRIES; i++) {
-                *(pt + i) = (pte_t){0};
-            }
-
-            // Set the PT for the PDE
-            (pdt + pdt_index)->address_placeholder =
-                utils::patch_page_address_set_value((uint64_t)pt) & 0xFFFFFFFFFF;
-        }
+bool influx::memory::paging_manager::temp_map_page(uint64_t page_base_address, buffer_t &buf,
+                                                   uint64_t buf_physical_address,
+                                                   int64_t page_index) {
+    // If no page index was selected for the temp page, allocate a page for it
+    if (page_index < 0) {
+        page_index = physical_allocator::alloc_page();
     }
 
-    return pt;
+    // Map the page to it's virtual address
+    return map_page(page_base_address, page_index, buf, buf_physical_address);
+}
+
+void influx::memory::paging_manager::unmap_temp_mapping(uint64_t page_base_address,
+                                                        uint64_t buf_physical_address,
+                                                        uint64_t buf_size) {
+    pml4e_t *pml4e = get_pml4e(page_base_address);
+
+    pdpe_t *pdpe = nullptr;
+    pde_t *pde = nullptr;
+    pte_t *pte = nullptr;
+
+    uint64_t data_structure_physical_address = 0;
+
+    // If the PML4E isn't present
+    if (!pml4e->present) {
+        return;
+    }
+
+    // Get the PDPT physical address and check if it's in the buffer
+    data_structure_physical_address = utils::patch_page_address(pml4e->pdp_address);
+    if (data_structure_physical_address >= buf_physical_address &&
+        data_structure_physical_address < (buf_physical_address - buf_size)) {
+        // If the PDPT is in the buffer, disable the PML4E
+        *pml4e = (pml4e_t){0};
+    }
+
+    // Get the PDPE
+    pdpe = get_pdpe(page_base_address);
+    if (!pdpe->present) {
+        return;
+    }
+
+    // Get the PDT physical address and check if it's in the buffer
+    data_structure_physical_address = utils::patch_page_address(pdpe->pd_address);
+    if (data_structure_physical_address >= buf_physical_address &&
+        data_structure_physical_address < (buf_physical_address - buf_size)) {
+        // If the PDT is in the buffer, disable the PDPE
+        *pdpe = (pdpe_t){0};
+    }
+
+    // Get the PDE
+    pde = get_pde(page_base_address);
+    if (!pde->present) {
+        return;
+    }
+
+    // Get the PT physical address and check if it's in the buffer
+    data_structure_physical_address = utils::patch_page_address(pde->pt_address);
+    if (data_structure_physical_address >= buf_physical_address &&
+        data_structure_physical_address < (buf_physical_address - buf_size)) {
+        // If the PT is in the buffer, disable the PDE
+        *pde = (pde_t){0};
+    }
+
+    // Get the PTE
+    pte = get_pte(page_base_address);
+
+    // Disable the PTE
+    *pte = (pte_t){0};
+    
+    // Invalidate the page
+    invalidate_page(page_base_address);
+}
+
+void influx::memory::paging_manager::invalidate_page(uint64_t page_base_virtual_address) {
+    __asm__ __volatile__("invlpg [%0]" : : "r"(page_base_virtual_address) : "memory");
 }
