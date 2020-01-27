@@ -25,13 +25,13 @@ long_mode:
     mov ecx, 0xC0000080
     rdmsr
 
-;   Enable long mode (bit no. 8) - Now we're in compatibility mode
-    or eax, 1 << 8
+;   Enable long mode (bit no. 8) and no-execute page-protection (bit no. 11) - Now we're in compatibility mode
+    or eax, (1 << 8) | (1 << 11) 
     wrmsr
 
-;   Re-enable paging with the new 64-bit paging structure
+;   Re-enable paging and write protect with the new 64-bit paging structure
     mov eax, cr0
-    or eax, 1 << 31
+    or eax, (1 << 31) | (1 << 16) 
     mov cr0, eax
 
 ;   Get the multiboot parameters from the stack
