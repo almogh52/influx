@@ -30,6 +30,7 @@ class paging_manager {
     static bool map_page(uint64_t page_base_address);
     static bool map_page(uint64_t page_base_address, uint64_t page_index, buffer_t &buf,
                          uint64_t buf_physical_address);
+    static void unmap_page(uint64_t page_base_address);
 
     static bool temp_map_page(uint64_t page_base_address, buffer_t &buf,
                               uint64_t buf_physical_address, int64_t page_index = -1);

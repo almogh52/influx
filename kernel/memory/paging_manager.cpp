@@ -187,6 +187,21 @@ bool influx::memory::paging_manager::map_page(uint64_t page_base_address, uint64
     return true;
 }
 
+void influx::memory::paging_manager::unmap_page(uint64_t page_base_address) {
+    pml4e_t *pml4e = get_pml4e(page_base_address);
+    pdpe_t *pdpe = get_pdpe(page_base_address);
+    pde_t *pde = get_pde(page_base_address);
+    pte *pte = get_pte(page_base_address);
+
+    // If the PT exists
+    if (pml4e->present && pdpe->present && pde->present) {
+        *(pte) = (pte_t){0};
+
+        // Invalidate the TLB for the page
+        invalidate_page(page_base_address);
+    }
+}
+
 bool influx::memory::paging_manager::temp_map_page(uint64_t page_base_address, buffer_t &buf,
                                                    uint64_t buf_physical_address,
                                                    int64_t page_index) {
