@@ -18,7 +18,7 @@ namespace influx {
 namespace memory {
 class physical_allocator {
    public:
-    static void init(const boot_info &info);
+    static void init(const boot_info_mem &mmap);
 
     static int64_t alloc_page();
     static int64_t alloc_consecutive_pages(uint64_t amount);

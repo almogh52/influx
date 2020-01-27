@@ -4,7 +4,7 @@
 #include <kernel/structures/static_bitmap.h>
 #include <memory/buffer.h>
 
-void influx::memory::physical_allocator::init(const boot_info &info) {
+void influx::memory::physical_allocator::init(const boot_info_mem &mmap) {
     structures::static_bitmap<EARLY_BITMAP_SIZE> early_bitmap;
 
     char temp_buffer_raw[EARLY_TEMP_BUFFER_SIZE] __attribute__((aligned(0x1000)));
@@ -15,12 +15,12 @@ void influx::memory::physical_allocator::init(const boot_info &info) {
     buffer_t structures_buffer;
     uint64_t structures_page_index = 0;
 
-    uint64_t bitmap_size = (utils::count_physical_memory(info.memory) / PAGE_SIZE) + 1;
+    uint64_t bitmap_size = (utils::count_physical_memory(mmap) / PAGE_SIZE) + 1;
     uint64_t amount_of_memory_pages = utils::calc_amount_of_pages_for_bitmap(bitmap_size);
     uint64_t page_chunk_start = 0;
 
     // Parse the memory map to the early bitmap
-    parse_memory_map_to_bitmap(info.memory, early_bitmap);
+    parse_memory_map_to_bitmap(mmap, early_bitmap);
 
     // Search a batch of pages to allocate the bitmap in
     if (!early_bitmap.search(amount_of_memory_pages, 0, page_chunk_start)) {
@@ -95,7 +95,7 @@ void influx::memory::physical_allocator::init(const boot_info &info) {
                                  bitmap_size);
 
     // Parse the memory map to the bitmap
-    parse_memory_map_to_bitmap(info.memory, _bitmap);
+    parse_memory_map_to_bitmap(mmap, _bitmap);
 
     // Copy the early bitmap
     utils::memcpy(_bitmap.get_raw(), early_bitmap.get_raw(), EARLY_BITMAP_SIZE);
