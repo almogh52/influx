@@ -24,6 +24,7 @@ class virtual_allocator {
     static void init(const boot_info_mem &mmap);
 
     static void *allocate(uint64_t size, protection_flags_t pflags);
+    static void free(void *ptr, uint64_t size);
 
    private:
     inline static vma_node_t *_vma_list_head;
@@ -32,7 +33,7 @@ class virtual_allocator {
     static vma_node_t *alloc_vma_node(vma_region_t region);
 
     static void insert_vma_region(vma_region_t region);
-    static void free_vma_region(vma_region_t region);
+    static bool free_vma_region(vma_region_t region);
 
     static void check_for_vma_node_combination(vma_node_t *node);
 

@@ -57,11 +57,41 @@ void influx::memory::virtual_allocator::init(const boot_info_mem &mmap) {
 }
 
 void *influx::memory::virtual_allocator::allocate(uint64_t size, protection_flags_t pflags) {
-    uint64_t aligned_size = (size / PAGE_SIZE) * PAGE_SIZE + (size % PAGE_SIZE ? 4096 : 0);
+    if (size % PAGE_SIZE == 0) {
+        vma_region_t region = find_free_region(size, pflags);
 
-    vma_region_t region = find_free_region(aligned_size, pflags);
+        return allocate(region);
+    } else {
+        // TODO: throw exception
 
-    return allocate(region);
+        return nullptr;
+    }
+}
+
+void influx::memory::virtual_allocator::free(void *ptr, uint64_t size) {
+    uint64_t page_physical_address = 0;
+
+    if (size % PAGE_SIZE == 0 && (uint64_t)ptr % PAGE_SIZE) {
+        // Free the VMA region
+        if (!free_vma_region({.base_addr = (uint64_t)ptr,
+                              .size = size,
+                              .protection_flags = 0,
+                              .allocated = true})) {
+            // TODO: throw exception
+        }
+
+        // Free all physical pages
+        for (uint64_t i = 0; i < size / PAGE_SIZE; i++) {
+            // Get the physical address of the page
+            page_physical_address =
+                paging_manager::get_physical_address((uint64_t)ptr + i * PAGE_SIZE);
+            if (page_physical_address != 0) {
+                physical_allocator::free_page(page_physical_address);
+            }
+        }
+    } else {
+        // TODO: throw exception
+    }
 }
 
 influx::memory::vma_node_t *influx::memory::virtual_allocator::alloc_vma_node(vma_region_t region) {
@@ -192,13 +222,14 @@ void influx::memory::virtual_allocator::insert_vma_region(vma_region_t region) {
     }
 }
 
-void influx::memory::virtual_allocator::free_vma_region(vma_region_t region) {
+bool influx::memory::virtual_allocator::free_vma_region(vma_region_t region) {
     vma_node_t *new_node = nullptr, *remainder_new_node = nullptr;
     vma_node_t *vma_region_container_node = nullptr;
 
     // If there is a node that contains the region
     if ((vma_region_container_node =
-             _vma_list_head->find_node(region.base_addr, &address_in_vma_region)) != nullptr) {
+             _vma_list_head->find_node(region.base_addr, &address_in_vma_region)) != nullptr &&
+        vma_region_container_node->value().allocated == true) {
         // If the container and the region starts in the same address
         if (vma_region_container_node->value().base_addr == region.base_addr) {
             // If they have the size as well
@@ -275,7 +306,11 @@ void influx::memory::virtual_allocator::free_vma_region(vma_region_t region) {
             // Check for VMA node combination
             check_for_vma_node_combination(remainder_new_node);
         }
+
+        return true;
     }
+
+    return false;
 }
 
 void influx::memory::virtual_allocator::check_for_vma_node_combination(
