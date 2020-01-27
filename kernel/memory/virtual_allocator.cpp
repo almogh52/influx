@@ -57,7 +57,7 @@ void influx::memory::virtual_allocator::init(const boot_info_mem &mmap) {
 }
 
 void *influx::memory::virtual_allocator::allocate(uint64_t size, protection_flags_t pflags) {
-    uint64_t aligned_size = size / PAGE_SIZE + (size % PAGE_SIZE ? 1 : 0);
+    uint64_t aligned_size = (size / PAGE_SIZE) * PAGE_SIZE + (size % PAGE_SIZE ? 4096 : 0);
 
     vma_region_t region = find_free_region(aligned_size, pflags);
 
