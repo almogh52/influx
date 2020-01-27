@@ -5,6 +5,8 @@
 #include <memory/protection_flags.h>
 
 void influx::memory::virtual_allocator::init(const boot_info_mem &mmap) {
+    vma_node_t *current_node = nullptr;
+
     // Allocate the head of the vma list which is the entire VMA of the kernel
     _vma_list_head = alloc_vma_node({.base_addr = KERNEL_VMA_START,
                                      .size = KERNEL_VMA_SIZE,
@@ -24,11 +26,34 @@ void influx::memory::virtual_allocator::init(const boot_info_mem &mmap) {
     // Add the physical allocator bitmap VMA region
     insert_vma_region(physical_allocator::get_bitmap_region());
 
+    // Add the paging manager structures VMA region
+    insert_vma_region(paging_manager::get_bitmap_region());
+
     // Add the initial page of VMA list
-    insert_vma_region({.base_addr = (uint64_t)_current_vma_list_page.ptr,
+    insert_vma_region({.base_addr = VMA_LIST_INITIAL_ADDRESS,
                        .size = PAGE_SIZE,
                        .protection_flags = PROT_READ | PROT_WRITE,
                        .allocated = true});
+
+    // Invalidate all non-tracked memory
+    current_node = _vma_list_head;
+    while (current_node != nullptr) {
+        // If the region isn't allocated and it's in the early memory region, invalidate it
+        if (current_node->value().allocated == false) {
+            for (uint64_t i = current_node->value().base_addr % PAGE_SIZE == 0
+                                  ? current_node->value().base_addr
+                                  : current_node->value().base_addr + PAGE_SIZE -
+                                        (current_node->value().base_addr % PAGE_SIZE);
+                 i < (current_node->value().base_addr + current_node->value().size) &&
+                 i < (HIGHER_HALF_KERNEL_OFFSET + EARLY_MEMORY_SIZE);
+                 i += PAGE_SIZE) {
+                paging_manager::set_pte_permissions(i, PROT_NONE);
+            }
+        }
+
+        // Move to the next node
+        current_node = current_node->next();
+    }
 }
 
 void *influx::memory::virtual_allocator::allocate(uint64_t size, protection_flags_t pflags) {
