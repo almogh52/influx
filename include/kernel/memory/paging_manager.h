@@ -4,6 +4,7 @@
 #include <memory/buffer.h>
 #include <memory/paging.h>
 #include <memory/protection_flags.h>
+#include <memory/vma_region.h>
 
 #define PML4T_ADDRESS 0xfffffffffffff000
 #define PDP_TABLES_BASE 0xffffffffffe00000
@@ -17,6 +18,8 @@ namespace influx {
 namespace memory {
 class paging_manager {
    public:
+    static vma_region_t get_bitmap_region();
+
     static pml4e_t *get_pml4e(uint64_t address);
     static pdpe_t *get_pdpe(uint64_t address);
     static pde_t *get_pde(uint64_t address);

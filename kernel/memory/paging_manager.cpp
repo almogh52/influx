@@ -4,6 +4,13 @@
 #include <kernel/memory/utils.h>
 #include <stdint.h>
 
+vma_region_t influx::memory::paging_manager::get_bitmap_region() {
+    return {.base_addr = STRUCTURES_BUFFER_ADDRESS,
+            .size = STRUCTURES_BUFFER_SIZE,
+            .protection_flags = PROT_READ | PROT_WRITE,
+            .allocated = true};
+}
+
 pml4e_t *influx::memory::paging_manager::get_pml4e(uint64_t address) {
     return (pml4e_t *)PML4T_ADDRESS + utils::get_page_entry_index(address >> 39);
 }
@@ -304,7 +311,8 @@ bool influx::memory::paging_manager::allocate_structures_buffer() {
         }
 
         // Set the page as R/W
-        paging_manager::set_pte_permissions(STRUCTURES_BUFFER_ADDRESS + i * PAGE_SIZE, PROT_READ | PROT_WRITE);
+        paging_manager::set_pte_permissions(STRUCTURES_BUFFER_ADDRESS + i * PAGE_SIZE,
+                                            PROT_READ | PROT_WRITE);
     }
 
     // Init the buffer
