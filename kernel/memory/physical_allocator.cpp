@@ -3,6 +3,7 @@
 #include <kernel/memory/utils.h>
 #include <kernel/structures/static_bitmap.h>
 #include <memory/buffer.h>
+#include <memory/protection_flags.h>
 
 void influx::memory::physical_allocator::init(const boot_info_mem &mmap) {
     structures::static_bitmap<EARLY_BITMAP_SIZE> early_bitmap;
@@ -99,6 +100,16 @@ void influx::memory::physical_allocator::init(const boot_info_mem &mmap) {
 
     // Copy the early bitmap
     utils::memcpy(_bitmap.get_raw(), early_bitmap.get_raw(), EARLY_BITMAP_SIZE);
+}
+
+vma_region_t influx::memory::physical_allocator::get_bitmap_region() {
+    uint64_t bytes_for_bitmap =
+        utils::calc_amount_of_pages_for_bitmap(_bitmap.size()) * PAGE_SIZE / 8;
+
+    return {.base_addr = (HIGHER_HALF_KERNEL_OFFSET + BITMAP_ADDRESS_OFFSET),
+            .size = bytes_for_bitmap,
+            .protection_flags = PROT_READ | PROT_WRITE,
+            .allocated = true};
 }
 
 int64_t influx::memory::physical_allocator::alloc_page() {

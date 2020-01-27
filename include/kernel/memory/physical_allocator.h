@@ -3,6 +3,7 @@
 #include <kernel/memory/memory.h>
 #include <kernel/structures/bitmap.h>
 #include <memory/paging.h>
+#include <memory/vma_region.h>
 #include <stdint.h>
 #include <sys/boot_info.h>
 
@@ -19,6 +20,8 @@ namespace memory {
 class physical_allocator {
    public:
     static void init(const boot_info_mem &mmap);
+
+    static vma_region_t get_bitmap_region();
 
     static int64_t alloc_page();
     static int64_t alloc_consecutive_pages(uint64_t amount);
