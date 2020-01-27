@@ -285,6 +285,9 @@ void influx::memory::paging_manager::set_pte_permissions(uint64_t virtual_addres
         } else {
             pte->no_execute = true;
         }
+
+        // Invalidate the page to refresh it
+        invalidate_page(virtual_address);
     }
 }
 
