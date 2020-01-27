@@ -71,7 +71,7 @@ void *influx::memory::virtual_allocator::allocate(uint64_t size, protection_flag
 void influx::memory::virtual_allocator::free(void *ptr, uint64_t size) {
     uint64_t page_physical_address = 0;
 
-    if (size % PAGE_SIZE == 0 && (uint64_t)ptr % PAGE_SIZE) {
+    if (size % PAGE_SIZE == 0 && (uint64_t)ptr % PAGE_SIZE == 0) {
         // Free the VMA region
         if (!free_vma_region({.base_addr = (uint64_t)ptr,
                               .size = size,
@@ -80,9 +80,12 @@ void influx::memory::virtual_allocator::free(void *ptr, uint64_t size) {
             // TODO: throw exception
         }
 
-        // Free all physical pages
+        // Free all physical pages and mapping
         for (uint64_t i = 0; i < size / PAGE_SIZE; i++) {
-            // Get the physical address of the page
+            // Free the mapping to the page
+            paging_manager::unmap_page((uint64_t)ptr + i * PAGE_SIZE);
+
+            // Get the physical address of the page and free it if available
             page_physical_address =
                 paging_manager::get_physical_address((uint64_t)ptr + i * PAGE_SIZE);
             if (page_physical_address != 0) {
@@ -381,6 +384,14 @@ void *influx::memory::virtual_allocator::allocate(vma_region_t region) {
     } else {
         // Insert the VMA region
         insert_vma_region(region);
+
+        // Map pages
+        // TODO: Swap this with page-fault exception
+        for (uint64_t i = 0; i < region.size / PAGE_SIZE; i++) {
+            paging_manager::map_page(region.base_addr + i * PAGE_SIZE);
+            paging_manager::set_pte_permissions(region.base_addr + i * PAGE_SIZE,
+                                                region.protection_flags);
+        }
 
         return (void *)region.base_addr;
     }
