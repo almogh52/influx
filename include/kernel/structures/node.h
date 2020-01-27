@@ -14,13 +14,13 @@ class node {
     node<T> *insert(node<T> *new_node) {
         node<T> *current_node = this;
 
-		// If the new node should replace the head
-		if (new_node->_value < _value) {
-			new_node->_next = this;
-			_prev = new_node;
+        // If the new node should replace the head
+        if (new_node->_value < _value) {
+            new_node->_next = this;
+            _prev = new_node;
 
-			return new_node;
-		}
+            return new_node;
+        }
 
         // While we didn't reach the end of the list and the next node is bigger than the new
         // node
@@ -41,7 +41,21 @@ class node {
             new_node->_next->_prev = new_node;
         }
 
-		return this;
+        return this;
+    }
+
+    void insert_next(node<T> *new_node) {
+        // Set the next and prev of the new node
+        new_node->_next = _next;
+        new_node->_prev = this;
+
+        // Set the next node of the current node to the new node
+        _next = new_node;
+
+        // Set the next node's prev as the new node
+        if (new_node->_next != nullptr) {
+            new_node->_next->_prev = new_node;
+        }
     }
 
     node<T> *remove(node<T> *node) {
@@ -100,7 +114,7 @@ class node {
         return nullptr;
     }
 
-	template <typename C>
+    template <typename C>
     node<T> *find_node(C val, bool (*compare_func)(T &, C &)) {
         node<T> *current_node = this;
 
@@ -131,17 +145,11 @@ class node {
         return len;
     }
 
-	T& value() {
-		return _value;
-	}
+    T &value() { return _value; }
 
-	node<T> *&prev() {
-		return _prev;
-	}
+    node<T> *&prev() { return _prev; }
 
-	node<T> *&next() {
-		return _next;
-	}
+    node<T> *&next() { return _next; }
 
    private:
     T _value;
