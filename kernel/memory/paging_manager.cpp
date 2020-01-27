@@ -100,7 +100,7 @@ bool influx::memory::paging_manager::map_page(uint64_t page_base_address, uint64
         pml4e->address_placeholder = utils::patch_page_address_set_value(
                                          (uint64_t)(buf_physical_address + buf_physical_offset)) &
                                      0xFFFFFFFFFF;
-        pml4e->read_write = true;
+        pml4e->read_write = READ_WRITE_ACCESS;
         pml4e->present = true;
 
         // Increase the buf physical offset
@@ -130,7 +130,7 @@ bool influx::memory::paging_manager::map_page(uint64_t page_base_address, uint64
         pdpe->address_placeholder = utils::patch_page_address_set_value(
                                         (uint64_t)(buf_physical_address + buf_physical_offset)) &
                                     0xFFFFFFFFFF;
-        pdpe->read_write = true;
+        pdpe->read_write = READ_WRITE_ACCESS;
         pdpe->present = true;
 
         // Increase the buf physical offset
@@ -160,7 +160,7 @@ bool influx::memory::paging_manager::map_page(uint64_t page_base_address, uint64
         pde->address_placeholder = utils::patch_page_address_set_value(
                                        (uint64_t)(buf_physical_address + buf_physical_offset)) &
                                    0xFFFFFFFFFF;
-        pde->read_write = true;
+        pde->read_write = READ_WRITE_ACCESS;
         pde->present = true;
 
         // Increase the buf physical offset
@@ -173,8 +173,9 @@ bool influx::memory::paging_manager::map_page(uint64_t page_base_address, uint64
     // Create the PTE and point it to the page
     pte->address_placeholder =
         utils::patch_page_address_set_value(page_index * PAGE_SIZE) & 0xFFFFFFFFFF;
-    pte->read_write = true;
+    pte->read_write = READ_ONLY_ACCESS;
     pte->present = true;
+    pte->no_execute = true;
 
     return true;
 }
@@ -253,6 +254,33 @@ void influx::memory::paging_manager::unmap_temp_mapping(uint64_t page_base_addre
     invalidate_page(page_base_address);
 }
 
+void influx::memory::paging_manager::set_pte_permissions(uint64_t virtual_address,
+                                                         protection_flags_t pflags) {
+    pml4e_t *pml4e = get_pml4e(virtual_address);
+    pdpe_t *pdpe = get_pdpe(virtual_address);
+    pde_t *pde = get_pde(virtual_address);
+    pte *pte = get_pte(virtual_address);
+
+    // If the PTE is present
+    if (pml4e->present && pdpe->present && pde->present) {
+        // If the protection flag are none, disable the PTE
+        if (pflags == PROT_NONE) {
+            pte->present = false;
+        } else if (pflags & (PROT_READ | PROT_WRITE)) {
+            pte->read_write = READ_WRITE_ACCESS;
+        } else if (pflags & PROT_READ) {
+            pte->read_write = READ_ONLY_ACCESS;
+        }
+
+        // If the PTE should be executable
+        if (pflags & PROT_EXEC) {
+            pte->no_execute = false;
+        } else {
+            pte->no_execute = true;
+        }
+    }
+}
+
 bool influx::memory::paging_manager::allocate_structures_buffer() {
     uint64_t structures_mapping_buffer_physical_address =
         get_physical_address((uint64_t)_structures_mapping_temp_buffer);
@@ -274,6 +302,9 @@ bool influx::memory::paging_manager::allocate_structures_buffer() {
             _structures_buffer = {.ptr = nullptr, .size = 0};
             return false;
         }
+
+        // Set the page as R/W
+        paging_manager::set_pte_permissions(STRUCTURES_BUFFER_ADDRESS + i * PAGE_SIZE, PROT_READ | PROT_WRITE);
     }
 
     // Init the buffer

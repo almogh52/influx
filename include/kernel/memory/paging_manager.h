@@ -3,6 +3,7 @@
 #include <kernel/memory/memory.h>
 #include <memory/buffer.h>
 #include <memory/paging.h>
+#include <memory/protection_flags.h>
 
 #define PML4T_ADDRESS 0xfffffffffffff000
 #define PDP_TABLES_BASE 0xffffffffffe00000
@@ -31,6 +32,8 @@ class paging_manager {
                               uint64_t buf_physical_address, int64_t page_index = -1);
     static void unmap_temp_mapping(uint64_t page_base_address, uint64_t buf_physical_address,
                                    uint64_t buf_size);
+
+    static void set_pte_permissions(uint64_t virtual_address, protection_flags_t pflags);
 
    private:
     inline static char _structures_mapping_temp_buffer[PAGE_SIZE] __attribute__((aligned(0x1000)));
