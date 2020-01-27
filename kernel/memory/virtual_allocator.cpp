@@ -151,32 +151,122 @@ void influx::memory::virtual_allocator::insert_vma_region(vma_region_t region) {
 
     // If a new node was inserted
     if (new_node) {
-        // If the previous node and the new node has the same allocated status and protection flags,
-        // combine them
-        if (new_node->prev() != nullptr &&
-            new_node->prev()->value().allocated == region.allocated &&
-            new_node->prev()->value().protection_flags == region.protection_flags) {
-            // Increase the size of the previous node
-            new_node->prev()->value().size += region.size;
+        // Check for VMA node combination
+        check_for_vma_node_combination(new_node);
+    }
+}
 
-            // Set the new node as the previous node
-            new_node = new_node->prev();
+void influx::memory::virtual_allocator::free_vma_region(vma_region_t region) {
+    vma_node_t *new_node = nullptr, *remainder_new_node = nullptr;
+    vma_node_t *vma_region_container_node = nullptr;
 
-            // Delete the new node
-            _vma_list_head = _vma_list_head->remove(new_node->next());
+    // If there is a node that contains the region
+    if ((vma_region_container_node =
+             _vma_list_head->find_node(region.base_addr, &address_in_vma_region)) != nullptr) {
+        // If the container and the region starts in the same address
+        if (vma_region_container_node->value().base_addr == region.base_addr) {
+            // If they have the size as well
+            if (vma_region_container_node->value().size == region.size) {
+                // Free the region
+                vma_region_container_node->value().allocated = false;
+                vma_region_container_node->value().protection_flags = 0;
+            } else {
+                // Allocate a node for the remainder of the allocated region and insert it
+                new_node = alloc_vma_node(
+                    {.base_addr = region.base_addr + region.size,
+                     .size = vma_region_container_node->value().size - region.size,
+                     .protection_flags = vma_region_container_node->value().protection_flags,
+                     .allocated = true});
+                vma_region_container_node->insert_next(new_node);
+
+                // Resize the container
+                vma_region_container_node->value().size = region.size;
+
+                // Free the container region
+                vma_region_container_node->value().allocated = false;
+                vma_region_container_node->value().protection_flags = 0;
+            }
+        } else {
+            // If the container and the region ends are the same
+            if ((vma_region_container_node->value().base_addr +
+                 vma_region_container_node->value().size) == (region.base_addr + region.size)) {
+                // Resize the container region
+                vma_region_container_node->value().size -= region.size;
+
+                // Allocate a node for the new free region
+                new_node = alloc_vma_node({.base_addr = region.base_addr,
+                                           .size = region.size,
+                                           .protection_flags = 0,
+                                           .allocated = false});
+                vma_region_container_node->insert_next(new_node);
+            } else {
+                // Resize the container region
+                vma_region_container_node->value().size =
+                    vma_region_container_node->value().base_addr - region.base_addr;
+
+                // Allocate a noder for the remainder region
+                remainder_new_node = alloc_vma_node(
+                    {.base_addr = region.base_addr + region.size,
+                     .size = (vma_region_container_node->value().base_addr +
+                              vma_region_container_node->value().size) -
+                             (region.base_addr + region.size),
+                     .protection_flags = vma_region_container_node->value().protection_flags,
+                     .allocated = true});
+
+                // Allocate a node for the new free region
+                new_node = alloc_vma_node({.base_addr = region.base_addr,
+                                           .size = region.size,
+                                           .protection_flags = 0,
+                                           .allocated = false});
+                vma_region_container_node->insert_next(new_node);
+
+                // Set the remainder VMA region node as the next node for the new node
+                new_node->insert_next(remainder_new_node);
+            }
         }
 
-        // If the next node and the new node has the same allocated status and protection flags,
-        // combine them
-        if (new_node->next() != nullptr &&
-            new_node->next()->value().allocated == region.allocated &&
-            new_node->next()->value().protection_flags == region.protection_flags) {
-            // Increase the size of the current node
-            new_node->value().size += new_node->next()->value().size;
+        // Check for VMA node combination for the container
+        check_for_vma_node_combination(vma_region_container_node);
 
-            // Delete the next node
-            _vma_list_head = _vma_list_head->remove(new_node->next());
+        // If a new node was allocated
+        if (new_node) {
+            // Check for VMA node combination
+            check_for_vma_node_combination(new_node);
         }
+
+        // If a remainder node was allocated
+        if (remainder_new_node) {
+            // Check for VMA node combination
+            check_for_vma_node_combination(remainder_new_node);
+        }
+    }
+}
+
+void influx::memory::virtual_allocator::check_for_vma_node_combination(
+    influx::memory::vma_node_t *node) {
+    // If the previous node and the node has the same allocated status and protection flags,
+    // combine them
+    if (node->prev() != nullptr && node->prev()->value().allocated == node->value().allocated &&
+        node->prev()->value().protection_flags == node->value().protection_flags) {
+        // Increase the size of the previous node
+        node->prev()->value().size += node->value().size;
+
+        // Set the node as the previous node
+        node = node->prev();
+
+        // Delete the node
+        _vma_list_head = _vma_list_head->remove(node->next());
+    }
+
+    // If the next node and the node has the same allocated status and protection flags,
+    // combine them
+    if (node->next() != nullptr && node->next()->value().allocated == node->value().allocated &&
+        node->next()->value().protection_flags == node->value().protection_flags) {
+        // Increase the size of the current node
+        node->value().size += node->next()->value().size;
+
+        // Delete the next node
+        _vma_list_head = _vma_list_head->remove(node->next());
     }
 }
 

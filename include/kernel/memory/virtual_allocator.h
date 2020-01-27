@@ -32,8 +32,11 @@ class virtual_allocator {
     static vma_node_t *alloc_vma_node(vma_region_t region);
 
     static void insert_vma_region(vma_region_t region);
-    static bool address_in_vma_region(vma_region_t &region, uint64_t &address);
+    static void free_vma_region(vma_region_t region);
 
+    static void check_for_vma_node_combination(vma_node_t *node);
+
+    static bool address_in_vma_region(vma_region_t &region, uint64_t &address);
     static vma_region_t find_free_region(uint64_t size, protection_flags_t pflags);
 };
 };  // namespace memory
