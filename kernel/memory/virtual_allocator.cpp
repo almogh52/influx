@@ -31,6 +31,22 @@ void influx::memory::virtual_allocator::init(const boot_info_mem &mmap) {
                        .allocated = true});
 }
 
+void *influx::memory::virtual_allocator::allocate(uint64_t size, protection_flags_t pflags) {
+    uint64_t aligned_size = size + (size % PAGE_SIZE ? 1 : 0);
+
+    vma_region_t region = find_free_region(size, pflags);
+
+    // If a region wasn't found
+    if (region.size == 0) {
+        return nullptr;
+    } else {
+        // Insert the VMA region
+        insert_vma_region(region);
+
+        return (void *)region.base_addr;
+    }
+}
+
 influx::memory::vma_node_t *influx::memory::virtual_allocator::alloc_vma_node(vma_region_t region) {
     void *vma_node_ptr = nullptr;
     vma_node_t *vma_node = nullptr;
@@ -167,4 +183,25 @@ void influx::memory::virtual_allocator::insert_vma_region(vma_region_t region) {
 bool influx::memory::virtual_allocator::address_in_vma_region(vma_region_t &region,
                                                               uint64_t &address) {
     return address >= region.base_addr && address < (region.base_addr + region.size);
+}
+
+vma_region_t influx::memory::virtual_allocator::find_free_region(uint64_t size,
+                                                                 protection_flags_t pflags) {
+    vma_node_t *current_node = _vma_list_head;
+
+    // While we didn't reach the end of the list and the current node cannot fit the new region
+    while (current_node != nullptr && current_node->value().size >= size &&
+           current_node->value().allocated == false) {
+        current_node = current_node->next();
+    }
+
+    // If a node wasn't found, return empty region
+    if (!current_node) {
+        return {0};
+    } else {
+        return {.base_addr = current_node->value().base_addr,
+                .size = size,
+                .protection_flags = pflags,
+                .allocated = true};
+    }
 }
