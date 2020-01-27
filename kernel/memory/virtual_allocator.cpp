@@ -102,7 +102,11 @@ void influx::memory::virtual_allocator::insert_vma_region(vma_region_t region) {
                 vma_region_container_node->value().size -= region.size;
 
                 // Insert it to the list
-                _vma_list_head = _vma_list_head->insert(new_node);
+                if (vma_region_container_node->prev() != nullptr) {
+                    vma_region_container_node->prev()->insert_next(new_node);
+                } else {
+                    _vma_list_head = _vma_list_head->insert(new_node);
+                }
             }
         } else {
             // If the container ends where the new region ends
@@ -116,7 +120,7 @@ void influx::memory::virtual_allocator::insert_vma_region(vma_region_t region) {
                 vma_region_container_node->value().size -= region.size;
 
                 // Insert it to the list
-                _vma_list_head = _vma_list_head->insert(new_node);
+                vma_region_container_node->insert_next(new_node);
             } else {
                 // Allocate the new node
                 new_node = alloc_vma_node(region);
@@ -135,10 +139,10 @@ void influx::memory::virtual_allocator::insert_vma_region(vma_region_t region) {
                     region.base_addr - vma_region_container_node->value().base_addr;
 
                 // Insert it to the list
-                _vma_list_head = _vma_list_head->insert(new_node);
+                vma_region_container_node->insert_next(new_node);
 
                 // Insert a new region after the new node
-                _vma_list_head = _vma_list_head->insert(remainder_new_node);
+                new_node->insert_next(remainder_new_node);
             }
         }
     } else {
@@ -287,7 +291,7 @@ vma_region_t influx::memory::virtual_allocator::find_free_region(uint64_t size,
 
     // If a node wasn't found, return empty region
     if (!current_node) {
-        return {0};
+        return {.base_addr = 0, .size = 0, .protection_flags = 0, .allocated = false};
     } else {
         return {.base_addr = current_node->value().base_addr,
                 .size = size,
