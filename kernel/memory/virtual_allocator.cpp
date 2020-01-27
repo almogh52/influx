@@ -40,6 +40,9 @@ influx::memory::vma_node_t *influx::memory::virtual_allocator::alloc_vma_node(vm
         // Allocate and map the initial VMA list address
         paging_manager::map_page(VMA_LIST_INITIAL_ADDRESS);
 
+        // Set the page as R/W
+        paging_manager::set_pte_permissions(VMA_LIST_INITIAL_ADDRESS, PROT_READ | PROT_WRITE);
+
         // Set the buffer
         _current_vma_list_page = {.ptr = (void *)VMA_LIST_INITIAL_ADDRESS, .size = PAGE_SIZE};
     } else if (_current_vma_list_page.size < sizeof(vma_node_t)) {

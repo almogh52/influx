@@ -45,6 +45,9 @@ void influx::memory::physical_allocator::init(const boot_info_mem &mmap) {
         __asm__ __volatile__("hlt");
     }
 
+    // Set R/W access to the page
+    paging_manager::set_pte_permissions(EARLY_TEMP_PAGE_BASE_ADDRESS, PROT_READ | PROT_WRITE);
+
     // Create the buffer for the strucutures page
     structures_buffer = {.ptr = (void *)EARLY_TEMP_PAGE_BASE_ADDRESS, .size = PAGE_SIZE};
 
@@ -85,6 +88,9 @@ void influx::memory::physical_allocator::init(const boot_info_mem &mmap) {
                 __asm__ __volatile__("hlt");
             }
         }
+
+        // Set R/W access to the page
+        paging_manager::set_pte_permissions(HIGHER_HALF_KERNEL_OFFSET + BITMAP_ADDRESS_OFFSET + i * PAGE_SIZE, PROT_READ | PROT_WRITE);
     }
 
     // Unmap the structures page
