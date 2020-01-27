@@ -90,7 +90,9 @@ void influx::memory::physical_allocator::init(const boot_info_mem &mmap) {
         }
 
         // Set R/W access to the page
-        paging_manager::set_pte_permissions(HIGHER_HALF_KERNEL_OFFSET + BITMAP_ADDRESS_OFFSET + i * PAGE_SIZE, PROT_READ | PROT_WRITE);
+        paging_manager::set_pte_permissions(
+            HIGHER_HALF_KERNEL_OFFSET + BITMAP_ADDRESS_OFFSET + i * PAGE_SIZE,
+            PROT_READ | PROT_WRITE);
     }
 
     // Unmap the structures page
@@ -142,6 +144,12 @@ int64_t influx::memory::physical_allocator::alloc_consecutive_pages(uint64_t amo
     }
 
     return found ? first_page_index : -1;
+}
+
+void influx::memory::physical_allocator::free_page(uint64_t page_index) {
+    if (page_index < _bitmap.size()) {
+        _bitmap[page_index] = false;
+    }
 }
 
 void influx::memory::physical_allocator::parse_memory_map_to_bitmap(const boot_info_mem &mmap,
