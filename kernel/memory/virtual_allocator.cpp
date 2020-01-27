@@ -32,7 +32,7 @@ void influx::memory::virtual_allocator::init(const boot_info_mem &mmap) {
 }
 
 void *influx::memory::virtual_allocator::allocate(uint64_t size, protection_flags_t pflags) {
-    uint64_t aligned_size = size + (size % PAGE_SIZE ? 1 : 0);
+    uint64_t aligned_size = size / PAGE_SIZE + (size % PAGE_SIZE ? 1 : 0);
 
     vma_region_t region = find_free_region(aligned_size, pflags);
 
@@ -284,8 +284,8 @@ vma_region_t influx::memory::virtual_allocator::find_free_region(uint64_t size,
     vma_node_t *current_node = _vma_list_head;
 
     // While we didn't reach the end of the list and the current node cannot fit the new region
-    while (current_node != nullptr && current_node->value().size >= size &&
-           current_node->value().allocated == false) {
+    while (current_node != nullptr && current_node->value().size <= size &&
+           current_node->value().allocated == true) {
         current_node = current_node->next();
     }
 
