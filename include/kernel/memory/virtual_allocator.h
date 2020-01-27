@@ -38,6 +38,8 @@ class virtual_allocator {
 
     static bool address_in_vma_region(vma_region_t &region, uint64_t &address);
     static vma_region_t find_free_region(uint64_t size, protection_flags_t pflags);
+
+    static void *allocate(vma_region_t region);
 };
 };  // namespace memory
 };  // namespace influx

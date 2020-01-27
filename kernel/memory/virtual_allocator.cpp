@@ -61,24 +61,18 @@ void *influx::memory::virtual_allocator::allocate(uint64_t size, protection_flag
 
     vma_region_t region = find_free_region(aligned_size, pflags);
 
-    // If a region wasn't found
-    if (region.size == 0) {
-        return nullptr;
-    } else {
-        // Insert the VMA region
-        insert_vma_region(region);
-
-        return (void *)region.base_addr;
-    }
+    return allocate(region);
 }
 
 influx::memory::vma_node_t *influx::memory::virtual_allocator::alloc_vma_node(vma_region_t region) {
     void *vma_node_ptr = nullptr;
     vma_node_t *vma_node = nullptr;
 
+    vma_region_t vma_list_page_region;
+
     // Check if it's the initial alloc
     if (_current_vma_list_page.ptr == nullptr) {
-        // Allocate and map the initial VMA list address
+        // Allocate and map the initial VMA list page
         paging_manager::map_page(VMA_LIST_INITIAL_ADDRESS);
 
         // Set the page as R/W
@@ -87,7 +81,20 @@ influx::memory::vma_node_t *influx::memory::virtual_allocator::alloc_vma_node(vm
         // Set the buffer
         _current_vma_list_page = {.ptr = (void *)VMA_LIST_INITIAL_ADDRESS, .size = PAGE_SIZE};
     } else if (_current_vma_list_page.size < sizeof(vma_node_t)) {
-        // TODO: Find a virtual address to continue the VMA list in
+        // Find a free region for the VMA list new page
+        vma_list_page_region = find_free_region(PAGE_SIZE, PROT_READ | PROT_WRITE);
+
+        // Allocate and map a VMA list page
+        paging_manager::map_page(vma_list_page_region.base_addr);
+
+        // Set the page as R/W
+        paging_manager::set_pte_permissions(VMA_LIST_INITIAL_ADDRESS, PROT_READ | PROT_WRITE);
+
+        // Set the buffer
+        _current_vma_list_page = {.ptr = (void *)vma_list_page_region.base_addr, .size = PAGE_SIZE};
+
+        // Set the region as allocated in the VMA list
+        allocate(region);
     }
 
     // Allocate the node
@@ -322,5 +329,17 @@ vma_region_t influx::memory::virtual_allocator::find_free_region(uint64_t size,
                 .size = size,
                 .protection_flags = pflags,
                 .allocated = true};
+    }
+}
+
+void *influx::memory::virtual_allocator::allocate(vma_region_t region) {
+    // If a region wasn't found
+    if (region.size == 0) {
+        return nullptr;
+    } else {
+        // Insert the VMA region
+        insert_vma_region(region);
+
+        return (void *)region.base_addr;
     }
 }
