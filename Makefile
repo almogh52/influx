@@ -100,14 +100,6 @@ KERNEL_OBJ_FILES        := $(KERNEL_OBJ_FILES:.cpp=.o)
 KERNEL_OBJ_FILES        := $(filter-out ${KERNEL_CRTI_OBJ} ${KERNEL_CRTN_OBJ}, ${KERNEL_OBJ_FILES})
 KERNEL_OBJ_FILES        := $(KERNEL_CRTI_OBJ) $(KENREL_CRTBEGIN_OBJ) ${KERNEL_OBJ_FILES} $(KERNEL_CRTEND_OBJ) $(KERNEL_CRTN_OBJ)
 
-VENDOR_DIR              := vendor
-VENDOR_SRC_FILES        := $(call rwildcard,${VENDOR_DIR}/libcxxrt/src,*.s *.c *.cpp *.cc)
-VENDOR_OBJ_FILES        := $(addprefix $(OBJ_DIR)/, $(VENDOR_SRC_FILES))
-VENDOR_OBJ_FILES        := $(VENDOR_OBJ_FILES:.s=.o)
-VENDOR_OBJ_FILES        := $(VENDOR_OBJ_FILES:.c=.o)
-VENDOR_OBJ_FILES        := $(VENDOR_OBJ_FILES:.cpp=.o)
-VENDOR_OBJ_FILES        := $(VENDOR_OBJ_FILES:.cc=.o)
-
 .PHONY: all clean debug
 
 all: $(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-bootstrap.bin $(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-kernel.bin
@@ -130,11 +122,11 @@ $(OBJ_DIR)/$(BOOT_DIR)/%.o: $(BOOT_DIR)/%.c
 	@mkdir -p $(@D)
 	$(PREFIX)/$(CC) -I${BOOT_INC_DIR} $(CFLAGS) -c $< -o $@
 
-$(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-kernel.bin: ${KERNEL_OBJ_FILES} ${VENDOR_OBJ_FILES} ${KERNEL_DIR}/linker.ld
+$(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-kernel.bin: ${KERNEL_OBJ_FILES} ${KERNEL_DIR}/linker.ld
 	@printf '%b' '$(LNK_COLOR)Linking kernel executable$(NO_COLOR)\n'
 	@echo ${LIBGCC_DIR}
 	@mkdir -p $(@D)
-	$(PREFIX)/$(LINK) -T${KERNEL_DIR}/linker.ld $(LDFLAGS) $(KERNEL_OBJ_FILES) $(VENDOR_OBJ_FILES) -o $@
+	$(PREFIX)/$(LINK) -T${KERNEL_DIR}/linker.ld $(LDFLAGS) $(KERNEL_OBJ_FILES) -o $@
 
 $(OBJ_DIR)/${KERNEL_DIR}/%.o: ${KERNEL_DIR}/%.s
 	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'
@@ -147,26 +139,6 @@ $(OBJ_DIR)/${KERNEL_DIR}/%.o: ${KERNEL_DIR}/%.c
 	$(PREFIX)/$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJ_DIR)/${KERNEL_DIR}/%.o: ${KERNEL_DIR}/%.cpp
-	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'
-	@mkdir -p $(@D)
-	$(PREFIX)/$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(OBJ_DIR)/${VENDOR_DIR}/%.o: ${VENDOR_DIR}/%.s
-	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'
-	@mkdir -p $(@D)
-	$(AS) $(ASFLAGS) $< -o $@
-
-$(OBJ_DIR)/${VENDOR_DIR}/%.o: ${VENDOR_DIR}/%.c
-	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'
-	@mkdir -p $(@D)
-	$(PREFIX)/$(CC) $(CFLAGS) -c $< -o $@
-
-$(OBJ_DIR)/${VENDOR_DIR}/%.o: ${VENDOR_DIR}/%.cpp
-	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'
-	@mkdir -p $(@D)
-	$(PREFIX)/$(CXX) $(CXXFLAGS) -c $< -o $@
-
-$(OBJ_DIR)/${VENDOR_DIR}/%.o: ${VENDOR_DIR}/%.cc
 	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'
 	@mkdir -p $(@D)
 	$(PREFIX)/$(CXX) $(CXXFLAGS) -c $< -o $@
