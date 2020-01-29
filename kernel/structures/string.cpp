@@ -4,13 +4,13 @@
 #include <kernel/structures/string.h>
 
 influx::structures::string::string(influx::structures::string::const_pointer s, size_t len)
-    : _capacity(string::capacity_for_string_size(len)), _data((pointer)kcalloc(0, _capacity)) {
+    : _capacity(string::capacity_for_string_size(len)), _data((pointer)kcalloc(_capacity, sizeof(value_type))) {
     kassert(_data != nullptr);
     memory::utils::memcpy(_data, s, len);
 }
 
 influx::structures::string::string(size_t n, influx::structures::string::value_type c)
-    : _capacity(string::capacity_for_string_size(n)), _data((pointer)kcalloc(0, _capacity)) {
+    : _capacity(string::capacity_for_string_size(n)), _data((pointer)kcalloc(_capacity, sizeof(value_type))) {
     kassert(_data != nullptr);
     memory::utils::memset(_data, c, n);
 }
@@ -31,7 +31,7 @@ void influx::structures::string::resize(size_t n, influx::structures::string::va
     if (n + 1 > _capacity) {
         // Allocate the new data
         _capacity = string::capacity_for_string_size(n);
-        new_data = (pointer)kcalloc(0, _capacity);
+        new_data = (pointer)kcalloc(_capacity, sizeof(value_type));
 
         // Copy old data
         memory::utils::memcpy(new_data, _data, str_len);
@@ -119,7 +119,7 @@ influx::structures::string &influx::structures::string::assign(
 
         // Allocate the new data
         _capacity = new_capacity;
-        _data = (pointer)kcalloc(0, new_capacity);
+        _data = (pointer)kcalloc(new_capacity, sizeof(value_type));
     }
 
     // Copy the data from the string to the data
