@@ -73,6 +73,8 @@ class string {
     inline bool operator!=(const_pointer s) const { return !operator==(s); }
     inline bool operator!=(value_type c) const { return !operator==(c); }
 
+	void reverse();
+
    private:
     size_t _capacity;
     pointer _data;

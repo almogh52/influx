@@ -67,6 +67,11 @@ influx::structures::string::reference influx::structures::string::at(size_t pos)
 size_t influx::structures::string::length(const_pointer s) {
     size_t len = 0;
 
+    // Check if the string pointer is null
+    if (!s) {
+        return 0;
+    }
+
     // While we didn't reach the end of the string
     while (*(s + len)) {
         len++;
@@ -142,4 +147,17 @@ influx::structures::string influx::structures::string::operator+(
     new_str += s;
 
     return new_str;
+}
+
+void influx::structures::string::reverse()
+{
+    value_type temp;
+    uint64_t str_len = length();
+
+    // Swap matching characters in both ends of the string
+    for (uint64_t i = 0; i < str_len / 2; i++) {
+        temp = _data[i];
+        _data[i] = _data[str_len - i - 1];
+        _data[str_len - i - 1] = temp;
+    }
 }
