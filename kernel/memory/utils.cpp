@@ -45,7 +45,7 @@ void influx::memory::utils::memset(void *ptr, uint8_t value, uint64_t amount) {
     }
 }
 
-void influx::memory::utils::memcpy(void *dst, void *src, uint64_t amount) {
+void influx::memory::utils::memcpy(void *dst, const void *src, uint64_t amount) {
     // Copy chunks of 8 byte from src to dst
     for (uint64_t i = 0; i < amount / sizeof(uint64_t); i++) {
         *((uint64_t *)dst + i) = *((uint64_t *)src + i);

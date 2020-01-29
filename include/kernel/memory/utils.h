@@ -18,7 +18,7 @@ class utils {
     static uint64_t calc_amount_of_pages_for_bitmap(uint64_t bitmap_size);
 
     static void memset(void *ptr, uint8_t value, uint64_t amount);
-    static void memcpy(void *dst, void *src, uint64_t amount);
+    static void memcpy(void *dst, const void *src, uint64_t amount);
 };
 };  // namespace memory
 };  // namespace influx
