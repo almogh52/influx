@@ -18,6 +18,8 @@ extern "C" int liballoc_unlock() {
 
     // Release the mutex
     liballoc_mutex = 0;
+
+    return 0;
 }
 
 extern "C" void *liballoc_alloc(uint64_t amount_of_pages) {
