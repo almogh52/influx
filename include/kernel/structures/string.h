@@ -87,3 +87,5 @@ class string {
 };
 };  // namespace structures
 };  // namespace influx
+
+inline influx::structures::string operator "" _s(const char *str, size_t len) { return influx::structures::string(str, len); };
