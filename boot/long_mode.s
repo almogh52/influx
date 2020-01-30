@@ -1,8 +1,8 @@
 bits 32
 
-HIGHER_HALF_OFFSET equ 0xFFFFFFFF80000000
+HIGHER_HALF_OFFSET equ 0xFFFFFF7F80000000
 
-extern boot_main, sse_enable
+extern boot_main, sse_enable, pml4t
 
 global long_mode
 section .text
@@ -18,20 +18,20 @@ long_mode:
     mov cr4, eax
 
 ;   Set the physical address of the PML4 table in cr3
-    mov eax, pml4t
+    mov eax, pml4t - HIGHER_HALF_OFFSET
     mov cr3, eax
 
 ;   Read the EFER MSR
     mov ecx, 0xC0000080
     rdmsr
 
-;   Enable long mode (bit no. 8) - Now we're in compatibility mode
-    or eax, 1 << 8
+;   Enable long mode (bit no. 8) and no-execute page-protection (bit no. 11) - Now we're in compatibility mode
+    or eax, (1 << 8) | (1 << 11) 
     wrmsr
 
-;   Re-enable paging with the new 64-bit paging structure
+;   Re-enable paging and write protect with the new 64-bit paging structure
     mov eax, cr0
-    or eax, 1 << 31
+    or eax, (1 << 31) | (1 << 16) 
     mov cr0, eax
 
 ;   Get the multiboot parameters from the stack
@@ -39,13 +39,13 @@ long_mode:
     pop esi
 
 ;   Load the new 64-bit GDT
-    lgdt [gdt64.ptr]
-    jmp 0x8:mode64
+    lgdt [gdt64.ptr - HIGHER_HALF_OFFSET]
+    jmp 0x8:mode64 - HIGHER_HALF_OFFSET
 
 bits 64
 mode64:
 ;   Jump to higher half
-    mov rax, higher_half + HIGHER_HALF_OFFSET
+    mov rax, higher_half
     jmp rax
 
 higher_half:
@@ -57,9 +57,25 @@ higher_half:
     mov fs, cx
     mov gs, cx
 
+;   Update rsp to higher half memory space
+    mov rax, HIGHER_HALF_OFFSET
+    add rsp, rax
+
 ;   Save multiboot parameters
     push rsi
     push rdi
+
+;   Reload the 64-bit GDT
+    lgdt [gdt64.higher_ptr - HIGHER_HALF_OFFSET]
+    jmp far [higher_half_jump_ptr - HIGHER_HALF_OFFSET]
+
+higher_half_continue:
+;   Remove identity mapping in the first 4MiB and invalidate it's page
+    mov qword [pml4t - HIGHER_HALF_OFFSET], 0
+
+;   Invalidate all TLB
+    mov rax, cr3
+    mov cr3, rax
 
 ;   Enable SSE
     call sse_enable
@@ -80,40 +96,9 @@ panic:
 
 section .data
 align 0x1000
-pml4t:
-;   Set the first entry to point at our first pdp that will identity map the first 4MB
-;   The last 2 bits are for present flag and read/write flag
-    dq pdpt + 11b
-
-;   Set null for the rest of the entries
-    times 510 dq 0
-
-;   Set the last entry to point at our first pdp that will create as a higher half for the kernel
-    dq pdpt + 11b
-
-pdpt:
-;   Identity map for the first 1GB
-    dq pdt + 11b
-
-;    Set null for the rest of the entries
-    times 509 dq 0
-
-;   Map for the higher half 1GB
-    dq pdt + 11b
-
-;   Last entry
-    dq 0
-
-pdt:
-;   Identity map for the first 4MB
-    dq 0 + 10000011b
-    dq 0x200000 + 10000011b
-
-;   Set null for the rest of the entries
-    times 510 dq 0
-
+global gdt64, gdt64_end
 gdt64:
-align 16
+align 64
 .null_descriptor:
     dq 0
 
@@ -134,4 +119,12 @@ align 16
     db 0x00      ; Segment base (bit 24 - 31)
 .ptr:
     dw $ - gdt64 - 1
+    dq gdt64 - HIGHER_HALF_OFFSET
+.higher_ptr:
+    dw $ - gdt64 - 1
     dq gdt64
+gdt64_end:
+
+higher_half_jump_ptr:
+    dq higher_half_continue
+    dw 0x8
