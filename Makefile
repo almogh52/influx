@@ -61,6 +61,7 @@ endif
 # C++ Compiler -- Flags
 CXXFLAGS                := ${CFLAGS}
 CXXFLAGS                += -fno-exceptions
+CXXFLAGS                += -fno-rtti
 
 # Set compile standards
 CFLAGS                  += $(C_STANDARD)
