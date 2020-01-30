@@ -1,6 +1,15 @@
+# Functions
+rwildcard               = $(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2) $(filter $(subst *,%,$2),$d))
+
 # OS Configuration
 HOST_OS_NAME            := $(shell uname -s | tr A-Z a-z)
 OS_NAME                 := influx
+
+# Color configuration
+COM_COLOR   = \033[0;32m
+LNK_COLOR   = \033[0;33m
+OBJ_COLOR   = \033[0;35m
+NO_COLOR    = \033[m
 
 # Toolchain Configuration
 CC                      := x86_64-elf-gcc
@@ -50,7 +59,9 @@ ifdef DEBUG
 endif
 
 # C++ Compiler -- Flags
-CXXFLAGS                += ${CFLAGS}
+CXXFLAGS                := ${CFLAGS}
+CXXFLAGS                += -fno-exceptions
+CXXFLAGS                += -fno-rtti
 
 # Set compile standards
 CFLAGS                  += $(C_STANDARD)
@@ -83,7 +94,7 @@ KERNEL_CRTI_OBJ         := ${OBJ_DIR}/${KERNEL_DIR}/crti.o
 KENREL_CRTBEGIN_OBJ     := $(shell $(CC) $(CFLAGS) -print-file-name=crtbegin.o)
 KERNEL_CRTEND_OBJ       := $(shell $(CC) $(CFLAGS) -print-file-name=crtend.o)
 KERNEL_CRTN_OBJ         := ${OBJ_DIR}/${KERNEL_DIR}/crtn.o
-KERNEL_SRC_FILES        := $(wildcard ${KERNEL_DIR}/*.s) $(wildcard ${KERNEL_DIR}/*.c) $(wildcard ${KERNEL_DIR}/*.cpp)
+KERNEL_SRC_FILES        := $(call rwildcard,${KERNEL_DIR},*.s *.c *.cpp)
 KERNEL_OBJ_FILES        := $(addprefix $(OBJ_DIR)/, $(KERNEL_SRC_FILES))
 KERNEL_OBJ_FILES        := $(KERNEL_OBJ_FILES:.s=.o)
 KERNEL_OBJ_FILES        := $(KERNEL_OBJ_FILES:.c=.o)
@@ -99,37 +110,37 @@ clean:
 	rm -rf $(BUILD_DIR)
 
 $(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-bootstrap.bin: $(BOOT_OBJ_FILES) ${BOOT_DIR}/linker.ld
-	@echo 'Linking bootstrap executable'
+	@printf '%b' '$(LNK_COLOR)Linking bootstrap executable$(NO_COLOR)\n'
 	@mkdir -p $(@D)
 	$(PREFIX)/$(LINK) -T${BOOT_DIR}/linker.ld $(LDFLAGS) $(BOOT_OBJ_FILES) -o $@
 
 $(OBJ_DIR)/$(BOOT_DIR)/%.o: $(BOOT_DIR)/%.s
-	@echo 'Compiling $<'
+	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'
 	@mkdir -p $(@D)
 	$(AS) $(ASFLAGS) $< -o $@
 
 $(OBJ_DIR)/$(BOOT_DIR)/%.o: $(BOOT_DIR)/%.c
-	@echo 'Compiling $<'
+	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'
 	@mkdir -p $(@D)
 	$(PREFIX)/$(CC) -I${BOOT_INC_DIR} $(CFLAGS) -c $< -o $@
 
 $(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-kernel.bin: ${KERNEL_OBJ_FILES} ${KERNEL_DIR}/linker.ld
-	@echo 'Linking kernel executable'
+	@printf '%b' '$(LNK_COLOR)Linking kernel executable$(NO_COLOR)\n'
 	@echo ${LIBGCC_DIR}
 	@mkdir -p $(@D)
 	$(PREFIX)/$(LINK) -T${KERNEL_DIR}/linker.ld $(LDFLAGS) $(KERNEL_OBJ_FILES) -o $@
 
 $(OBJ_DIR)/${KERNEL_DIR}/%.o: ${KERNEL_DIR}/%.s
-	@echo 'Compiling $<'
+	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'
 	@mkdir -p $(@D)
 	$(AS) $(ASFLAGS) $< -o $@
 
 $(OBJ_DIR)/${KERNEL_DIR}/%.o: ${KERNEL_DIR}/%.c
-	@echo 'Compiling $<'
+	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'
 	@mkdir -p $(@D)
 	$(PREFIX)/$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJ_DIR)/${KERNEL_DIR}/%.o: ${KERNEL_DIR}/%.cpp
-	@echo 'Compiling $<'
+	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'
 	@mkdir -p $(@D)
 	$(PREFIX)/$(CXX) $(CXXFLAGS) -c $< -o $@

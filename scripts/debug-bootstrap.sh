@@ -20,7 +20,7 @@ echo -e '\033[0;36mRunning QEMU and starting debugging..\033[0m'
 qemu-system-x86_64 -cdrom influx.iso -s -S &
 
 # Run gdb
-gdb -ex "file iso/boot/influx-bootstrap.bin" -ex "layout asm" -ex "target remote localhost:1234" -ex "break _start" -ex "continue"
+gdb -ex "file iso/boot/influx-bootstrap.bin" -ex "layout split" -ex "target remote localhost:1234"
 
 # Close all qemu processes
-killall qemu-system-x86_64
+killall qemu-system-x86_64 > /dev/null 2>&1

@@ -1,3 +1,8 @@
+/* Begin putting sections at 2MiB, because the bootstrap is sitting in 1MiB */
+HIGHER_HALF   = 0xffffff7f80000000;
+BOOTSTRAP_LMA = 1M;
+BOOTSTRAP_VMA = HIGHER_HALF + BOOTSTRAP_LMA;
+
 /* The bootloader will look at this image and start execution at the symbol
    designated as the entry point. */
 ENTRY(_start)
@@ -6,18 +11,18 @@ ENTRY(_start)
    bootstrap image. */
 SECTIONS
 {
-	/* Begin putting sections at 512 KiB, because the kernel is loaded into 1MiB. */
-	. = 512K;
+	/* Begin putting sections at 1MiB, because it's a convention to load operation system at 1MiB. */
+	. = BOOTSTRAP_VMA;
  
 	/* First put the multiboot header, as it is required to be put very early
 	   early in the image or the bootloader won't recognize the file format. */
-	.boot :
+	.boot : AT(ADDR(.boot) - HIGHER_HALF)
 	{
 		*(.multiboot_header)
 	}
 
 	/* Code. */
-	.text : ALIGN(0x1000)
+	.text ALIGN(0x1000) : AT(ADDR(.text) - HIGHER_HALF)
 	{
         *(.start)
         *(.text)
@@ -25,19 +30,19 @@ SECTIONS
 	}
  
 	/* Read-only data. */
-	.rodata : ALIGN(0x1000)
+	.rodata ALIGN(0x1000) : AT(ADDR(.rodata) - HIGHER_HALF)
 	{
 		*(.rodata)
 	}
  
 	/* Read-write data (initialized) */
-	.data : ALIGN(0x1000)
+	.data ALIGN(0x1000) : AT(ADDR(.data) - HIGHER_HALF)
 	{
 		*(.data)
 	}
  
 	/* Read-write data (uninitialized) and stack */
-	.bss : ALIGN(0x1000)
+	.bss ALIGN(0x1000) : AT(ADDR(.bss) - HIGHER_HALF)
 	{
 		*(COMMON)
 		*(.bss)
