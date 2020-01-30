@@ -1,5 +1,4 @@
 #include <kernel/format.h>
-#include <stdarg.h>
 
 influx::structures::string influx::to_string(int64_t d, influx::integer_base base, bool sign,
                                              uint64_t padding) {
@@ -56,12 +55,9 @@ influx::integer_base influx::get_integer_base_for_character(char c) {
     }
 }
 
-influx::structures::string influx::format(const char *fmt, ...) {
+influx::structures::string influx::vformat(const char *fmt, va_list args) {
     structures::string str;
-
-    va_list args;
-    va_start(args, fmt);
-
+    
     uint64_t specifier_len = 0;
     uint8_t padding = 0;
     bool pad_0 = false, long_int = false;
@@ -127,8 +123,8 @@ influx::structures::string influx::format(const char *fmt, ...) {
                     str += va_arg(args, const char *);
                     break;
 
-				case 'S':
-					str += *(structures::string *)va_arg(args, void *);
+                case 'S':
+                    str += *(structures::string *)va_arg(args, void *);
                     break;
 
                 case 'p':
@@ -146,6 +142,18 @@ influx::structures::string influx::format(const char *fmt, ...) {
             }
         }
     }
+
+    return str;
+}
+
+influx::structures::string influx::format(const char *fmt, ...) {
+    structures::string str;
+
+    va_list args;
+    va_start(args, fmt);
+
+    // Pass the va_args to the format function
+    str = vformat(fmt, args);
 
     va_end(args);
 
