@@ -23,6 +23,7 @@ void influx::early_console::stdout_putchar(char c) {
     // If the character is for a new line
     if (c == '\n' || c == '\r') {
         new_line();
+        return;
     }
 
     // Set the character with default attribute
