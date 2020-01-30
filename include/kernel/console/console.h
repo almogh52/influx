@@ -15,6 +15,7 @@ class console {
 	static void putchar(char c);
 	static void putchar(output_stream stream, char c);
 	static void print(structures::string str);
+	static void print(const char *fmt, ...);
 	static void print(output_stream stream, structures::string str);
 	static void print(output_stream stream, const char *fmt, ...);
 
