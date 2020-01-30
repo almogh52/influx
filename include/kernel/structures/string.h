@@ -52,7 +52,7 @@ class string {
     inline string& assign(const_pointer s) { return assign(s, string::length(s)); }
     inline string& assign(const string& s) { return assign(s, s.length()); }
 
-	static int compare(const_pointer s1, const_pointer s2);
+    static int compare(const_pointer s1, const_pointer s2);
     inline int compare(const_pointer s) const { return string::compare(*this, s); }
     inline int compare(const string& s) const { return compare((const_pointer)s); }
 
@@ -72,8 +72,9 @@ class string {
     inline bool operator!=(const string& s) const { return !operator==(s); }
     inline bool operator!=(const_pointer s) const { return !operator==(s); }
     inline bool operator!=(value_type c) const { return !operator==(c); }
+    inline value_type& operator[](size_t pos) { return at(pos); }
 
-	void reverse();
+    void reverse();
 
    private:
     size_t _capacity;
@@ -88,4 +89,6 @@ class string {
 };  // namespace structures
 };  // namespace influx
 
-inline influx::structures::string operator "" _s(const char *str, size_t len) { return influx::structures::string(str, len); };
+inline influx::structures::string operator"" _s(const char* str, size_t len) {
+    return influx::structures::string(str, len);
+};
