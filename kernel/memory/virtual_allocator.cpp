@@ -2,6 +2,7 @@
 #include <kernel/memory/physical_allocator.h>
 #include <kernel/memory/utils.h>
 #include <kernel/memory/virtual_allocator.h>
+#include <kernel/console/early_console.h>
 #include <memory/protection_flags.h>
 
 void influx::memory::virtual_allocator::init(const boot_info_mem &mmap) {
@@ -28,6 +29,9 @@ void influx::memory::virtual_allocator::init(const boot_info_mem &mmap) {
 
     // Add the paging manager structures VMA region
     insert_vma_region(paging_manager::get_bitmap_region());
+
+    // Add the early console VMA region
+    insert_vma_region(early_console::get_vma_region());
 
     // Add the initial page of VMA list
     insert_vma_region({.base_addr = VMA_LIST_INITIAL_ADDRESS,
