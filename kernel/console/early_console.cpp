@@ -56,15 +56,15 @@ void influx::early_console::stdout_clear() {
 
 void influx::early_console::scroll() {
     // Move all lines from line 2, 1 up
-    for (uint16_t i = (AMOUNT_OF_COLUMNS * 2) / sizeof(uint64_t);
+    for (uint64_t i = (AMOUNT_OF_COLUMNS * 2) / sizeof(uint64_t);
          i < (AMOUNT_OF_COLUMNS * AMOUNT_OF_LINES * 2) / sizeof(uint64_t); i++) {
         *((uint64_t *)_video + i - (AMOUNT_OF_COLUMNS * 2) / sizeof(uint64_t)) =
             *((uint64_t *)_video + i);
     }
 
     // Clear the last row
-    for (uint16_t i = (AMOUNT_OF_COLUMNS * (AMOUNT_OF_LINES - 1) * 2) / sizeof(uint64_t);
-         i < (AMOUNT_OF_COLUMNS * (AMOUNT_OF_LINES + 1) * 2) / sizeof(uint64_t); i++) {
+    for (uint64_t i = (AMOUNT_OF_COLUMNS * (AMOUNT_OF_LINES - 1) * 2) / sizeof(uint64_t);
+         i < (AMOUNT_OF_COLUMNS * AMOUNT_OF_LINES * 2) / sizeof(uint64_t); i++) {
         *((uint64_t *)_video + i) = 0;
     }
 }
