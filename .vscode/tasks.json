@@ -1,0 +1,42 @@
+{
+	// See https://go.microsoft.com/fwlink/?LinkId=733558
+	// for the documentation about the tasks.json format
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run OS in Debugging",
+			"type": "shell",
+			"command": "qemu-system-x86_64 -cdrom influx.iso -s -S",
+			"dependsOn": ["Build OS in Debug mode"],
+			"isBackground": true,
+			"problemMatcher": [
+				{
+					"pattern": [
+						{
+							"regexp": ".",
+							"file": 1,
+							"location": 2,
+							"message": 3
+						}
+					],
+					"background": {
+						"activeOnStart": true,
+						"beginsPattern": ".",
+						"endsPattern": "."
+					}
+				}
+			]
+		},
+		{
+			"label": "Build OS in Debug mode",
+			"type": "shell",
+			"command": "./scripts/create-iso.sh DEBUG",
+			"dependsOn": "Clean build"
+		},
+		{
+			"label": "Clean build",
+			"type": "shell",
+			"command": "./scripts/clean.sh"
+		}
+	]
+}
