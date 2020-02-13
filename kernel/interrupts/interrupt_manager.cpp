@@ -13,7 +13,7 @@ influx::interrupts::interrupt_manager::interrupt_manager()
 }
 
 void influx::interrupts::interrupt_manager::load_idt() {
-    descriptor_table_register_t idtr{.base_virtual_address = (uint64_t)_idt, .limit = IDT_SIZE};
+    descriptor_table_register_t idtr {.limit = IDT_SIZE, .base_virtual_address = (uint64_t)_idt};
 
     // Load IDT
     __asm__ __volatile__(
