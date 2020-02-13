@@ -28,5 +28,8 @@ void influx::kernel::kmain(const boot_info info) {
 
     log("Finished initializing memory manager and console.\n");
 
+    // Init interrupt manager
+    _interrupt_manager = new interrupts::interrupt_manager();
+
     asm("hlt");
 }
