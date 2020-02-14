@@ -1,16 +1,19 @@
+#include <kernel/structures/string.h>
+
 #include <kernel/assert.h>
 #include <kernel/memory/heap.h>
 #include <kernel/memory/utils.h>
-#include <kernel/structures/string.h>
 
 influx::structures::string::string(influx::structures::string::const_pointer s, size_t len)
-    : _capacity(string::capacity_for_string_size(len)), _data((pointer)kcalloc(_capacity, sizeof(value_type))) {
+    : _capacity(string::capacity_for_string_size(len)),
+      _data((pointer)kcalloc(_capacity, sizeof(value_type))) {
     kassert(_data != nullptr);
     memory::utils::memcpy(_data, s, len);
 }
 
 influx::structures::string::string(size_t n, influx::structures::string::value_type c)
-    : _capacity(string::capacity_for_string_size(n)), _data((pointer)kcalloc(_capacity, sizeof(value_type))) {
+    : _capacity(string::capacity_for_string_size(n)),
+      _data((pointer)kcalloc(_capacity, sizeof(value_type))) {
     kassert(_data != nullptr);
     memory::utils::memset(_data, c, n);
 }
@@ -149,8 +152,7 @@ influx::structures::string influx::structures::string::operator+(
     return new_str;
 }
 
-void influx::structures::string::reverse()
-{
+void influx::structures::string::reverse() {
     value_type temp;
     uint64_t str_len = length();
 

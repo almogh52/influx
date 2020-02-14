@@ -1,5 +1,6 @@
-#include <kernel/assert.h>
 #include <kernel/console/console.h>
+
+#include <kernel/assert.h>
 #include <kernel/format.h>
 #include <stdarg.h>
 
