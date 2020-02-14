@@ -7,16 +7,15 @@
 typedef struct interrupt_descriptor {
 	uint16_t offset_1;
 	uint16_t selector;
+	uint8_t interrupt_stack_table_index;
 	union
 	{
-		uint16_t attributes;
+		uint8_t attributes;
 		struct {
-			uint16_t interrupt_stack_table_index : 3;
-			uint16_t reserved : 5;
-			uint16_t type : 4;
-			uint16_t zero_1 : 1;
-			uint16_t privilege_level : 2;
-			uint16_t present : 1;
+			uint8_t type : 4;
+			uint8_t zero_1 : 1;
+			uint8_t privilege_level : 2;
+			uint8_t present : 1;
 		};
 	};
 	uint16_t offset_2;
