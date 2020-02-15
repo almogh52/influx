@@ -21,6 +21,7 @@ class interrupt_manager {
     interrupt_descriptor_t *_idt;
 
     void load_idt();
+    void init_exception_interrupts();
 };
 };  // namespace interrupts
 };  // namespace influx

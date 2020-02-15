@@ -1,6 +1,7 @@
 #include <descriptor_table_register.h>
 
 #include <kernel/gdt.h>
+#include <kernel/interrupts/exception_interrupt_handler.h>
 #include <kernel/interrupts/interrupt_manager.h>
 #include <kernel/memory/utils.h>
 #include <kernel/memory/virtual_allocator.h>
@@ -11,7 +12,10 @@ influx::interrupts::interrupt_manager::interrupt_manager()
                                                                          PROT_READ | PROT_WRITE)) {
     // Init the IDT
     memory::utils::memset(_idt, 0, IDT_SIZE);
-    _log("IDT allocated and initialized in the address %p.\n", _idt);
+    _log("IDT initialized in the address %p.\n", _idt);
+
+    // Init exception interrupts
+    init_exception_interrupts();
 
     // Load the IDT
     load_idt();
@@ -33,8 +37,7 @@ void influx::interrupts::interrupt_manager::set_interrupt_service_routine(
 
     // Set the descriptor in the IDT for the ISR
     _idt[interrupt_index] = descriptor;
-    _log("ISR (address = %p, type = %d) has been set for interrupt %x.", isr.routine_address,
-         isr.type, interrupt_index);
+    _log("ISR (%p) has been set for interrupt %x.\n", isr.routine_address, interrupt_index);
 }
 
 void influx::interrupts::interrupt_manager::load_idt() {
@@ -49,4 +52,14 @@ void influx::interrupts::interrupt_manager::load_idt() {
         : "rax");
 
     _log("IDT loaded.\n");
+}
+
+void influx::interrupts::interrupt_manager::init_exception_interrupts() {
+    interrupt_service_routine isr{.type = interrupt_service_routine_type::trap_gate,
+                                  .routine_address = (uint64_t)exception_interrupt_handler};
+
+    // Set the exception interrupt handler as the interrupt handler for the first 20 interrupts
+    for (uint8_t i = 0; i < 20; i++) {
+        set_interrupt_service_routine(i, isr);
+    }
 }
