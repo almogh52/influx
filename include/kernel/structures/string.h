@@ -1,5 +1,5 @@
 #pragma once
-
+#include <kernel/structures/memblock.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -17,19 +17,18 @@ class string {
 
     string(const_pointer s, size_t len);
     string(size_t n, value_type c);
-    ~string();
     inline string() : string("", 0) {}
     inline string(const_pointer s) : string(s, string::length(s)) {}
     inline string(const string& s) : string(s, s.length()) {}
 
-    inline pointer data() { return _data; }
-    inline const_pointer data() const { return _data; }
-    inline const_pointer c_str() const { return _data; }
+    inline pointer data() { return _data.data(); }
+    inline const_pointer data() const { return _data.data(); }
+    inline const_pointer c_str() const { return _data.data(); }
 
     void resize(size_t n, value_type c);
-    inline size_t capacity() const { return _capacity; }
+    inline size_t capacity() const { return _data.capacity(); }
     inline void resize(size_t n) { resize(n, 0); }
-    inline void clear() { resize(0); }
+    inline void clear() { _data.clear(); }
 
     reference at(size_t pos);
     inline const_reference at(size_t pos) const { return at(pos); }
@@ -50,14 +49,17 @@ class string {
     string& assign(const_pointer s, size_t len);
     string& assign(size_t n, value_type c);
     inline string& assign(const_pointer s) { return assign(s, string::length(s)); }
-    inline string& assign(const string& s) { return assign(s, s.length()); }
+    inline string& assign(const string& s) {
+        _data = s._data;
+        return *this;
+    }
 
     static int compare(const_pointer s1, const_pointer s2);
     inline int compare(const_pointer s) const { return string::compare(*this, s); }
     inline int compare(const string& s) const { return compare((const_pointer)s); }
 
-    inline operator const_pointer() const { return _data; }
-    inline operator pointer() const { return _data; }
+    inline operator const_pointer() const { return _data.data(); }
+    inline operator pointer() { return _data.data(); }
 
     string operator+(const string& s) const;
     inline const string& operator=(const string& s) { return assign(s); }
@@ -77,8 +79,7 @@ class string {
     void reverse();
 
    private:
-    size_t _capacity;
-    pointer _data;
+    memblock _data;
 
     inline static constexpr size_t capacity_for_string_size(size_t size) {
         return (size + 1) % capacity_alignment == 0

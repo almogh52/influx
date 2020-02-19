@@ -21,6 +21,7 @@ class memblock {
     memblock(size_type n);
     memblock(const memblock& b);
     ~memblock(void);
+    void assign(const memblock& b);
     void assign(const void* p, size_type n);
     void resize(size_type new_size);
     inline void clear(void) noexcept { resize(0); }
@@ -35,6 +36,10 @@ class memblock {
         return begin() + i;
     }
     inline iterator end(void) const { return iat(capacity()); }
+    inline const memblock& operator=(const memblock& b) {
+        assign(b);
+        return *this;
+    }
 
    private:
     size_type _capacity;

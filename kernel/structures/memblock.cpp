@@ -3,7 +3,7 @@
 #include <kernel/memory/heap.h>
 #include <kernel/memory/utils.h>
 
-influx::structures::memblock::memblock() : _capacity(0),_data(nullptr) {}
+influx::structures::memblock::memblock() : _capacity(0), _data(nullptr) {}
 
 influx::structures::memblock::memblock(const void *p, influx::structures::memblock::size_type n)
     : _capacity(n), _data((pointer)p) {}
@@ -22,6 +22,15 @@ influx::structures::memblock::~memblock() {
     if (_data != nullptr) {
         kfree(_data);
     }
+}
+
+void influx::structures::memblock::assign(const influx::structures::memblock &b) {
+    // Allocate the new block
+    _capacity = b._capacity;
+    _data = (pointer)krealloc(_data, _capacity);
+
+    // Copy the data
+    memory::utils::memcpy(_data, b._data, _capacity);
 }
 
 void influx::structures::memblock::assign(const void *p,
