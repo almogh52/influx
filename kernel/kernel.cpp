@@ -5,6 +5,7 @@
 #include <kernel/logger.h>
 #include <kernel/memory/physical_allocator.h>
 #include <kernel/memory/virtual_allocator.h>
+#include <kernel/drivers/pci.h>
 
 void influx::kernel::start(const boot_info info) {
     early_kmain(info);
@@ -30,6 +31,10 @@ void influx::kernel::kmain(const boot_info info) {
 
     // Init interrupt manager
     _interrupt_manager = new interrupts::interrupt_manager();
+
+    // Init PCI driver
+    _pci_driver = new drivers::pci();
+    _pci_driver->detect_devices();
 
     asm("cli; hlt");
 }
