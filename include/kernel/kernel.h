@@ -1,7 +1,7 @@
 #pragma once
 #include <sys/boot_info.h>
 #include <kernel/interrupts/interrupt_manager.h>
-#include <kernel/drivers/pci.h>
+#include <kernel/drivers/driver_manager.h>
 
 #define OS_NAME "Influx"
 #define KERNEL_VERSION "0.2.0"
@@ -13,7 +13,7 @@ namespace influx {
 
 	private:
 		inline static interrupts::interrupt_manager *_interrupt_manager = nullptr;
-		inline static drivers::pci *_pci_driver = nullptr;
+		inline static drivers::driver_manager *_driver_manager = nullptr;
 
 		static void early_kmain(const boot_info info);
 		static void kmain(const boot_info info);

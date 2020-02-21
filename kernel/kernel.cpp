@@ -32,9 +32,9 @@ void influx::kernel::kmain(const boot_info info) {
     // Init interrupt manager
     _interrupt_manager = new interrupts::interrupt_manager();
 
-    // Init PCI driver
-    _pci_driver = new drivers::pci();
-    _pci_driver->detect_devices();
+    // Init driver manager and load drivers
+    _driver_manager = new drivers::driver_manager();
+    _driver_manager->load_drivers();
 
     asm("cli; hlt");
 }

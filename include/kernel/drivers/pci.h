@@ -1,4 +1,6 @@
 #pragma once
+#include <kernel/drivers/driver.h>
+
 #include <kernel/logger.h>
 #include <kernel/structures/vector.h>
 #include <pci_descriptor.h>
@@ -20,29 +22,29 @@
 
 namespace influx {
 namespace drivers {
-class pci {
+class pci : public driver {
    public:
     pci();
 
-    void detect_devices();
+    virtual void load();
 
     uint8_t read_config_byte(uint16_t bus, uint8_t device, uint8_t function, uint8_t offset);
     uint16_t read_config_word(uint16_t bus, uint8_t device, uint8_t function, uint8_t offset);
-    uint32_t read_config_dword(uint16_t bus, uint8_t device, uint8_t function,
-                                      uint8_t offset);
+    uint32_t read_config_dword(uint16_t bus, uint8_t device, uint8_t function, uint8_t offset);
 
     void write_config_byte(uint16_t bus, uint8_t device, uint8_t function, uint8_t offset,
-                                  uint8_t data);
+                           uint8_t data);
     void write_config_word(uint16_t bus, uint8_t device, uint8_t function, uint8_t offset,
-                                  uint16_t data);
+                           uint16_t data);
     void write_config_dword(uint16_t bus, uint8_t device, uint8_t function, uint8_t offset,
-                                   uint32_t data);
-                            
+                            uint32_t data);
+
     const structures::vector<pci_descriptor_t>& descriptors();
 
    private:
-    logger _log;
     structures::vector<pci_descriptor_t> _descriptors;
+
+    void detect_devices();
 
     uint32_t calc_address(uint16_t bus, uint8_t device, uint8_t function, uint8_t offset);
 

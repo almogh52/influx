@@ -2,9 +2,17 @@
 
 #include <kernel/ports.h>
 
-influx::drivers::pci::pci() : _log("PCI Driver") {}
+influx::drivers::pci::pci() : driver("PCI") {}
+
+void influx::drivers::pci::load()
+{
+    // Detect the PCI devices
+    detect_devices();
+}
 
 void influx::drivers::pci::detect_devices() {
+    _log("Detecting PCI devices..\n");
+
     // For each device in bus try to detect a device
     for (uint16_t bus = 0; bus < AMOUNT_OF_BUSES; ++bus) {
         for (uint8_t device = 0; device < AMOUNT_OF_DEVICES_PER_BUS; ++device) {
