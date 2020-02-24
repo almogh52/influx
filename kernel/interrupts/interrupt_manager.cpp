@@ -5,6 +5,8 @@
 #include <kernel/interrupts/interrupt_manager.h>
 #include <kernel/memory/utils.h>
 #include <kernel/memory/virtual_allocator.h>
+#include <kernel/pic.h>
+#include <kernel/ports.h>
 
 influx::interrupts::interrupt_manager::interrupt_manager()
     : _log("Interrupt Manager"),
@@ -16,6 +18,10 @@ influx::interrupts::interrupt_manager::interrupt_manager()
 
     // Init exception interrupts
     init_exception_interrupts();
+
+    // Remap PIC interrupts
+    _log("Remmaping PICs interrupt offsets..\n");
+    remap_ipc_interrupts();
 
     // Load the IDT
     load_idt();
@@ -52,6 +58,35 @@ void influx::interrupts::interrupt_manager::load_idt() {
         : "rax");
 
     _log("IDT loaded.\n");
+}
+
+void influx::interrupts::interrupt_manager::remap_ipc_interrupts() {
+    uint8_t mask1, mask2;
+
+    // Save masks
+    mask1 = ports::in<uint8_t>(PIC1_DATA);
+    mask2 = ports::in<uint8_t>(PIC2_DATA);
+
+    // Init master and slave PIC in cascade mode
+    ports::out<uint8_t>(ICW1_INIT | ICW1_ICW4, PIC1_COMMAND);
+    ports::out<uint8_t>(ICW1_INIT | ICW1_ICW4, PIC2_COMMAND);
+
+    // Set master and slave PIC offsets
+    ports::out<uint8_t>(PIC1_INTERRUPTS_OFFSET, PIC1_DATA);
+    ports::out<uint8_t>(PIC2_INTERRUPTS_OFFSET, PIC2_DATA);
+
+    // Set cascade exits in the 2 PICs
+    ports::out<uint8_t>(
+        4, PIC1_DATA);  // Tell Master PIC that there is a slave PIC at IRQ2 (0000 0100)
+    ports::out<uint8_t>(2, PIC2_DATA);  // Tell Slave PIC its cascade identity (0000 0010)
+
+    // Set 8086 mode for both PICs
+    ports::out<uint8_t>(ICW4_8086, PIC1_DATA);
+    ports::out<uint8_t>(ICW4_8086, PIC2_DATA);
+
+    // Restore masks
+    ports::out<uint8_t>(mask1, PIC1_DATA);
+    ports::out<uint8_t>(mask2, PIC2_DATA);
 }
 
 void influx::interrupts::interrupt_manager::init_exception_interrupts() {

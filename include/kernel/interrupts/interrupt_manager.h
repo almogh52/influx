@@ -8,6 +8,9 @@
 #define AMOUNT_OF_INTERRUPT_DESCRIPTORS 256
 #define IDT_SIZE (sizeof(interrupt_descriptor_t) * AMOUNT_OF_INTERRUPT_DESCRIPTORS)
 
+#define PIC1_INTERRUPTS_OFFSET 32
+#define PIC2_INTERRUPTS_OFFSET 40
+
 namespace influx {
 namespace interrupts {
 class interrupt_manager {
@@ -21,6 +24,8 @@ class interrupt_manager {
     interrupt_descriptor_t *_idt;
 
     void load_idt();
+    void remap_ipc_interrupts();
+
     void init_exception_interrupts();
 };
 };  // namespace interrupts
