@@ -11,6 +11,8 @@ class driver_manager {
 
     void load_drivers();
 
+    driver *get_driver(const structures::string &driver_name) const;
+
    private:
     logger _log;
     structures::vector<driver *> _drivers;
