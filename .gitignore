@@ -11,3 +11,6 @@ ipch
 
 # Ignore DS_STORE
 .DS_STORE
+
+# Ignore hard drive image
+hdd.img
