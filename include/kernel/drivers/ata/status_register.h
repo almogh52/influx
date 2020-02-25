@@ -17,6 +17,8 @@ struct ata_status_register {
             uint8_t bsy : 1;
         };
     };
+
+    bool fetch_failed;
 };
 };  // namespace drivers
 };  // namespace influx

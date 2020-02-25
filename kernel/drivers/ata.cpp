@@ -2,12 +2,27 @@
 
 #include <kernel/drivers/ata/command.h>
 #include <kernel/drivers/ata/constants.h>
+#include <kernel/kernel.h>
 #include <kernel/memory/utils.h>
 #include <kernel/ports.h>
 
-influx::drivers::ata::ata() : driver("ATA") {}
+influx::drivers::ata::ata() : driver("ATA"), _primary_irq_called(0), _secondary_irq_called(0) {}
 
 void influx::drivers::ata::load() {
+    // Register IRQ handlers
+    _log("Registering IRQs handlers..\n");
+    kernel::interrupt_manager()->set_irq_handler(ATA_PRIMARY_IRQ,
+                                                 (uint64_t)influx::drivers::ata_primary_irq, this);
+    kernel::interrupt_manager()->set_irq_handler(
+        ATA_SECONDARY_IRQ, (uint64_t)influx::drivers::ata_secondary_irq, this);
+
+    // Disable IRQs for both ATA controllers
+    ports::out<uint8_t>(ATA_DISABLE_INTERRUTPS,
+                        ata_primary_bus.control_base + ATA_CONTROL_DEVICE_REGISTER);
+    ports::out<uint8_t>(ATA_DISABLE_INTERRUTPS,
+                        ata_secondary_bus.control_base + ATA_CONTROL_DEVICE_REGISTER);
+
+    // Detect the available drives
     _log("Detecting drives..\n");
     detect_drives();
 
@@ -16,6 +31,26 @@ void influx::drivers::ata::load() {
         _log("No drives found!\n");
     } else {
         _log("%d drives were found.\n", _drives.size());
+    }
+
+    // Re-enable IRQs for both ATA controllers
+    ports::out<uint8_t>(ATA_ENABLE_INTERRUTPS,
+                        ata_primary_bus.control_base + ATA_CONTROL_DEVICE_REGISTER);
+    ports::out<uint8_t>(ATA_ENABLE_INTERRUTPS,
+                        ata_secondary_bus.control_base + ATA_CONTROL_DEVICE_REGISTER);
+}
+
+void influx::drivers::ata::wait_for_primary_irq() {
+    // Wait for the IRQ notifiction and reset the variable
+    while (!__sync_bool_compare_and_swap(&_primary_irq_called, 1, 0)) {
+        __sync_synchronize();
+    }
+}
+
+void influx::drivers::ata::wait_for_secondary_irq() {
+    // Wait for the IRQ notifiction and reset the variable
+    while (!__sync_bool_compare_and_swap(&_secondary_irq_called, 1, 0)) {
+        __sync_synchronize();
     }
 }
 
@@ -45,6 +80,119 @@ void influx::drivers::ata::detect_drives() {
     if (drive.present) {
         _drives.push_back(drive);
     }
+}
+
+bool influx::drivers::ata::access_drive_sectors(const influx::drivers::ata_drive &drive,
+                                                influx::drivers::ata_access_type access_type,
+                                                uint32_t lba, uint16_t amount_of_sectors,
+                                                uint16_t *data) {
+    ata_status_register status_reg;
+
+    // Select the drive
+    if (!select_drive(drive)) {
+        _log("Selecting drive falied!\n");
+        return false;
+    }
+
+    // Send sector count
+    ports::out<uint8_t>(amount_of_sectors >= 256 ? 0 : (uint8_t)amount_of_sectors,
+                        (uint16_t)(drive.controller.io_base + ATA_IO_SECTOR_COUNT_REGISTER));
+
+    // Send the LBA
+    ports::out<uint8_t>((uint8_t)(0xA0 | ((uint8_t)drive.slave << 4) | ((lba >> 24) & 0x0F)),
+                        (uint16_t)(drive.controller.io_base + ATA_IO_DRIVE_REGISTER));
+    ports::out<uint8_t>((uint8_t)lba,
+                        (uint16_t)(drive.controller.io_base + ATA_IO_SECTOR_NUMBER_REGISTER));
+    ports::out<uint8_t>((uint8_t)(lba >> 8),
+                        (uint16_t)(drive.controller.io_base + ATA_IO_LCYL_REGISTER));
+    ports::out<uint8_t>((uint8_t)(lba >> 16),
+                        (uint16_t)(drive.controller.io_base + ATA_IO_HCYL_REGISTER));
+
+    // Send the access command
+    ports::out<uint8_t>(
+        (uint8_t)(access_type == ata_access_type::read ? ata_command::read : ata_command::write),
+        (uint16_t)(drive.controller.io_base + ATA_IO_COMMAND_REGISTER));
+
+    // For each sector
+    for (uint16_t sector = 0; sector < amount_of_sectors; sector++) {
+        // Wait for the controller to finish loading the drive and check if there are errors
+        if ((status_reg =
+                 read_status_register_with_mask(drive.controller, ATA_STATUS_BSY, 0, 30000))
+                .fetch_failed ||
+            status_reg.err) {
+            return false;
+        }
+
+        // If this is a write operation
+        if (access_type == ata_access_type::write) {
+            for (uint64_t i = (sector * ATA_SECTOR_SIZE) / sizeof(uint16_t);
+                 i < ((sector + 1) * ATA_SECTOR_SIZE) / sizeof(uint16_t); i++) {
+                ports::out<uint16_t>(data[i],
+                                     (uint16_t)(drive.controller.io_base + ATA_IO_DATA_REGISTER));
+            }
+        }
+
+        // Wait for IRQ
+        if (drive.controller == ata_primary_bus) {
+            wait_for_primary_irq();
+        } else {
+            wait_for_secondary_irq();
+        }
+
+        // If an error occurred
+        if ((status_reg = read_status_register(drive.controller)).err) {
+            return false;
+        }
+
+        // If this is a read operation, read data from the data register
+        if (access_type == ata_access_type::read) {
+            for (uint64_t i = (sector * ATA_SECTOR_SIZE) / sizeof(uint16_t);
+                 i < ((sector + 1) * ATA_SECTOR_SIZE) / sizeof(uint16_t); i++) {
+                data[i] = ports::in<uint16_t>(
+                    (uint16_t)(drive.controller.io_base + ATA_IO_DATA_REGISTER));
+            }
+        }
+    }
+
+    // Flush cache after write
+    if (access_type == ata_access_type::write) {
+        ports::out<uint8_t>((uint8_t)ata_command::cache_flush,
+                            (uint16_t)(drive.controller.io_base + ATA_IO_COMMAND_REGISTER));
+
+        // Wait for the controller to flush the cache
+        read_status_register_with_mask(drive.controller, ATA_STATUS_BSY, 0, 10000);
+    }
+
+    return true;
+}
+
+bool influx::drivers::ata::select_drive(const influx::drivers::ata_drive &drive) {
+    // Wait for controller to be ready to select drive
+    if (read_status_register_with_mask(drive.controller, ATA_STATUS_BSY | ATA_STATUS_DRQ, 0, 10000)
+            .fetch_failed) {
+        return false;
+    }
+
+    // If the selected drive is the wanted drive
+    if (_selected_drive == drive) {
+        return true;
+    }
+
+    // Select the drive
+    ports::out<uint8_t>((uint8_t)(0xA0 | ((uint8_t)drive.slave << 4)),
+                        (uint16_t)(drive.controller.io_base + ATA_IO_DRIVE_REGISTER));
+    delay(drive.controller);
+
+    // Wait for controller to select the drive
+    if (read_status_register_with_mask(drive.controller, ATA_STATUS_BSY | ATA_STATUS_DRQ, 0, 10000)
+            .fetch_failed) {
+        return false;
+    }
+
+    // Set it as the current selected drive
+    _selected_drive = drive;
+
+    return true;
 }
 
 void influx::drivers::ata::delay(const influx::drivers::ata_bus &controller) const {
@@ -122,7 +270,7 @@ influx::drivers::ata_drive influx::drivers::ata::identify_drive(
     // Read the status register until BSY and DRQ are clear
     status = read_status_register_with_mask(controller, ATA_STATUS_BSY | ATA_STATUS_DRQ,
                                             ATA_STATUS_DRQ, 10000);
-    if (status.raw == 0) {  // Drive not found
+    if (status.raw == 0 || status.fetch_failed) {  // Drive not found
         return drive;
     }
 
@@ -156,7 +304,7 @@ influx::drivers::ata_drive influx::drivers::ata::identify_drive(
 
 influx::drivers::ata_status_register influx::drivers::ata::read_status_register(
     const influx::drivers::ata_bus &controller) const {
-    ata_status_register status_reg;
+    ata_status_register status_reg{0, false};
     status_reg.raw = ports::in<uint8_t>((uint16_t)(controller.io_base + ATA_IO_STATUS_REGISTER));
     return status_reg;
 }
@@ -164,7 +312,7 @@ influx::drivers::ata_status_register influx::drivers::ata::read_status_register(
 influx::drivers::ata_status_register influx::drivers::ata::read_status_register_with_mask(
     const influx::drivers::ata_bus &controller, uint8_t mask, uint8_t value,
     uint64_t amount_of_tries) const {
-    ata_status_register status_reg = {0};
+    ata_status_register status_reg = {0, false};
 
     do {
         // Wait 400ns
@@ -177,7 +325,7 @@ influx::drivers::ata_status_register influx::drivers::ata::read_status_register_
 
     // If amount of tries reached 0, reset the status register
     if (amount_of_tries == 0) {
-        status_reg = {0};
+        status_reg.fetch_failed = true;
     }
 
     return status_reg;
