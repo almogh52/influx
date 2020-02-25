@@ -1,7 +1,10 @@
 #include <kernel/console/early_console.h>
 
 influx::early_console::early_console()
-    : _video((unsigned char *)EARLY_VIDEO_MEMORY_ADDRESS), _x_pos(0), _y_pos(0) {
+    : _video((unsigned char *)EARLY_VIDEO_MEMORY_ADDRESS),
+      _attribute(DEFAULT_ATTRIBUTE),
+      _x_pos(0),
+      _y_pos(0) {
     // Disable cursor using hardware ports
     __asm__ __volatile__(
         "mov dx, 0x3D4;"
@@ -26,9 +29,9 @@ void influx::early_console::stdout_putchar(char c) {
         return;
     }
 
-    // Set the character with default attribute
+    // Set the character with the current attribute
     *(_video + (_x_pos + _y_pos * AMOUNT_OF_COLUMNS) * 2) = (unsigned char)c & 0xFF;
-    *(_video + (_x_pos + _y_pos * AMOUNT_OF_COLUMNS) * 2 + 1) = DEFAULT_ATTRIBUTE;
+    *(_video + (_x_pos + _y_pos * AMOUNT_OF_COLUMNS) * 2 + 1) = _attribute;
 
     // Increase the X position and check for new line
     _x_pos++;
@@ -37,14 +40,29 @@ void influx::early_console::stdout_putchar(char c) {
     }
 }
 
-void influx::early_console::stdout_write(influx::structures::string &str)
-{
-	size_t str_len = str.length();
+void influx::early_console::stdout_write(influx::structures::string &str) {
+    console_color color;
+    size_t str_len = str.length();
 
-	// For each character, print it to the screen
-	for (size_t i = 0; i < str_len; i++) {
-		stdout_putchar(str[i]);
-	}
+    // For each character, print it to the screen
+    for (size_t i = 0; i < str_len; i++) {
+        // If the character is the escape key and there are at least 2 more characters after it
+        if (str[i] == 27 && str_len - i - 1 >= 2) {
+            // Get the wanted color
+            color = (console_color)(str[i + 2] - '0');
+
+            // Set attribute by the color
+            _attribute = attribute_to_color(color);
+
+            // Skip those characters
+            i += 2;
+        } else {
+            stdout_putchar(str[i]);
+        }
+    }
+
+    // Reset attribute
+    _attribute = DEFAULT_ATTRIBUTE;
 }
 
 void influx::early_console::stdout_clear() {
@@ -81,10 +99,41 @@ void influx::early_console::new_line() {
     }
 }
 
-vma_region influx::early_console::get_vma_region()
-{
+vma_region influx::early_console::get_vma_region() {
     return {.base_addr = EARLY_VIDEO_MEMORY_ADDRESS,
             .size = AMOUNT_OF_COLUMNS * AMOUNT_OF_LINES * 2,
             .protection_flags = PROT_READ | PROT_WRITE,
             .allocated = true};
+}
+
+uint8_t influx::early_console::attribute_to_color(influx::console_color color) const {
+    switch (color) {
+        default:
+        case console_color::clear:
+            return DEFAULT_ATTRIBUTE;
+
+        case console_color::gray:
+            return 0x8;
+
+        case console_color::blue:
+            return 0x9;
+
+        case console_color::green:
+            return 0xA;
+
+        case console_color::cyan:
+            return 0xB;
+
+        case console_color::red:
+            return 0xC;
+
+        case console_color::pink:
+            return 0xD;
+
+        case console_color::yellow:
+            return 0xE;
+
+        case console_color::white:
+            return 0xF;
+    }
 }
