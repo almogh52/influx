@@ -36,5 +36,8 @@ void influx::kernel::kmain(const boot_info info) {
     _driver_manager = new drivers::driver_manager();
     _driver_manager->load_drivers();
 
-    asm("cli; hlt");
+    // Listen to interrupts and halt
+    while (true) {
+        __asm__ __volatile__ ("hlt");
+    }
 }
