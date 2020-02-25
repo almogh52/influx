@@ -19,6 +19,9 @@ class ata : public driver {
 
     virtual void load();
 
+    bool access_drive_sectors(const ata_drive &drive, ata_access_type access_type, uint32_t lba,
+                              uint16_t amount_of_sectors, uint16_t *data);
+
     const structures::vector<ata_drive> drives() const { return _drives; };
 
     friend void ata_primary_irq(influx::interrupts::interrupt_frame *frame, ata *ata);
@@ -34,9 +37,6 @@ class ata : public driver {
     void wait_for_secondary_irq();
 
     void detect_drives();
-
-    bool access_drive_sectors(const ata_drive &drive, ata_access_type access_type, uint32_t lba,
-                              uint16_t amount_of_sectors, uint16_t *data);
 
     bool select_drive(const ata_drive &drive);
     void delay(const ata_bus &controller) const;
