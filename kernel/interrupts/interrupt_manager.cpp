@@ -5,7 +5,7 @@
 #include <kernel/interrupts/interrupt_manager.h>
 #include <kernel/memory/utils.h>
 #include <kernel/memory/virtual_allocator.h>
-#include <kernel/pic.h>
+#include <kernel/drivers/pic.h>
 #include <kernel/ports.h>
 #include <kernel/assert.h>
 

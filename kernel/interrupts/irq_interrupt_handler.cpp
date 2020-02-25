@@ -1,7 +1,7 @@
 #include <kernel/console/console.h>
 #include <kernel/interrupts/interrupt_manager.h>
 #include <kernel/kernel.h>
-#include <kernel/pic.h>
+#include <kernel/drivers/pic.h>
 #include <kernel/ports.h>
 
 template <uint8_t number>
