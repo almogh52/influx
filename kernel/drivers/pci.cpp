@@ -4,8 +4,7 @@
 
 influx::drivers::pci::pci() : driver("PCI") {}
 
-void influx::drivers::pci::load()
-{
+void influx::drivers::pci::load() {
     // Detect the PCI devices
     detect_devices();
 }
@@ -18,6 +17,13 @@ void influx::drivers::pci::detect_devices() {
         for (uint8_t device = 0; device < AMOUNT_OF_DEVICES_PER_BUS; ++device) {
             detect_device(bus, device);
         }
+    }
+
+    // If no drives were found
+    if (_descriptors.empty()) {
+        _log("No PCI devices found!\n");
+    } else {
+        _log("%d PCI devices were found.\n", _descriptors.size());
     }
 }
 
@@ -163,7 +169,7 @@ void influx::drivers::pci::detect_function(uint16_t bus, uint8_t device, uint8_t
     }
 
     // Print the device found
-    _log("Found PCI device %d:%d:%d - Vendor: %d, Class: %d, Subclass: %d\n", bus, device,
+    _log("Found PCI device %d:%d:%d: Vendor: %d, Class: %d, Subclass: %d\n", bus, device,
          descriptor.device_id, descriptor.vendor_id, descriptor.class_code, descriptor.subclass);
 
     // Add the descriptor to the list of descriptors
