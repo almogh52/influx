@@ -7,6 +7,11 @@
 #include <kernel/memory/virtual_allocator.h>
 #include <kernel/pic.h>
 #include <kernel/ports.h>
+#include <kernel/assert.h>
+
+#define ADD_IRQ_HANDLER(number) set_interrupt_service_routine(PIC1_INTERRUPTS_OFFSET + number, \
+                                  {.type = interrupt_service_routine_type::interrupt_gate, \
+                                   .routine_address = (uint64_t)irq_interrupt_handler<number>})
 
 influx::interrupts::interrupt_manager::interrupt_manager()
     : _log("Interrupt Manager"),
@@ -16,15 +21,24 @@ influx::interrupts::interrupt_manager::interrupt_manager()
     memory::utils::memset(_idt, 0, IDT_SIZE);
     _log("IDT initialized in the address %p.\n", _idt);
 
-    // Init exception interrupts
-    init_exception_interrupts();
+    // Register exception interrupts
+    _log("Resitering exception interrupt handlers..\n");
+    register_exception_interrupts();
+
+    // Register exception interrupts
+    _log("Resitering PIC interrupt handlers..\n");
+    register_pic_interrupts();
 
     // Remap PIC interrupts
     _log("Remmaping PICs interrupt offsets..\n");
-    remap_ipc_interrupts();
+    remap_pic_interrupts();
 
     // Load the IDT
     load_idt();
+
+    // Enable interrupts
+    _log("Enabling interrupts..\n");
+    enable_interrupts();
 }
 
 void influx::interrupts::interrupt_manager::set_interrupt_service_routine(
@@ -46,6 +60,25 @@ void influx::interrupts::interrupt_manager::set_interrupt_service_routine(
     _log("ISR (%p) has been set for interrupt %x.\n", isr.routine_address, interrupt_index);
 }
 
+void influx::interrupts::interrupt_manager::set_irq_handler(uint8_t irq, uint64_t irq_handler_address, void *irq_handler_data)
+{
+    kassert(irq >= 0 && irq < PIC_INTERRUPT_COUNT);
+    kassert(_irqs[irq].handler_address == 0);
+
+    // Set IRQ handler
+    _irqs[irq].handler_address = irq_handler_address;
+    _irqs[irq].handler_data = irq_handler_data;
+    _log("IRQ handler (%p) has been set for IRQ %x.\n", irq_handler_address, irq);
+}
+
+void influx::interrupts::interrupt_manager::enable_interrupts() const {
+    __asm__ __volatile__("sti");
+}
+
+void influx::interrupts::interrupt_manager::disable_interrupts() const {
+    __asm__ __volatile__("cli");
+}
+
 void influx::interrupts::interrupt_manager::load_idt() {
     descriptor_table_register_t idtr{.limit = IDT_SIZE, .base_virtual_address = (uint64_t)_idt};
 
@@ -60,13 +93,7 @@ void influx::interrupts::interrupt_manager::load_idt() {
     _log("IDT loaded.\n");
 }
 
-void influx::interrupts::interrupt_manager::remap_ipc_interrupts() {
-    uint8_t mask1, mask2;
-
-    // Save masks
-    mask1 = ports::in<uint8_t>(PIC1_DATA);
-    mask2 = ports::in<uint8_t>(PIC2_DATA);
-
+void influx::interrupts::interrupt_manager::remap_pic_interrupts() {
     // Init master and slave PIC in cascade mode
     ports::out<uint8_t>(ICW1_INIT | ICW1_ICW4, PIC1_COMMAND);
     ports::out<uint8_t>(ICW1_INIT | ICW1_ICW4, PIC2_COMMAND);
@@ -84,12 +111,12 @@ void influx::interrupts::interrupt_manager::remap_ipc_interrupts() {
     ports::out<uint8_t>(ICW4_8086, PIC1_DATA);
     ports::out<uint8_t>(ICW4_8086, PIC2_DATA);
 
-    // Restore masks
-    ports::out<uint8_t>(mask1, PIC1_DATA);
-    ports::out<uint8_t>(mask2, PIC2_DATA);
+    // Activate all IRQs in both PICs
+    ports::out<uint8_t>(0, PIC1_DATA);
+    ports::out<uint8_t>(0, PIC2_DATA);
 }
 
-void influx::interrupts::interrupt_manager::init_exception_interrupts() {
+void influx::interrupts::interrupt_manager::register_exception_interrupts() {
     interrupt_service_routine isr{.type = interrupt_service_routine_type::trap_gate,
                                   .routine_address = (uint64_t)exception_interrupt_handler};
 
@@ -97,4 +124,23 @@ void influx::interrupts::interrupt_manager::init_exception_interrupts() {
     for (uint8_t i = 0; i < 20; i++) {
         set_interrupt_service_routine(i, isr);
     }
+}
+
+void influx::interrupts::interrupt_manager::register_pic_interrupts() {
+    ADD_IRQ_HANDLER(0);
+    ADD_IRQ_HANDLER(1);
+    ADD_IRQ_HANDLER(2);
+    ADD_IRQ_HANDLER(3);
+    ADD_IRQ_HANDLER(4);
+    ADD_IRQ_HANDLER(5);
+    ADD_IRQ_HANDLER(6);
+    ADD_IRQ_HANDLER(7);
+    ADD_IRQ_HANDLER(8);
+    ADD_IRQ_HANDLER(9);
+    ADD_IRQ_HANDLER(10);
+    ADD_IRQ_HANDLER(11);
+    ADD_IRQ_HANDLER(12);
+    ADD_IRQ_HANDLER(13);
+    ADD_IRQ_HANDLER(14);
+    ADD_IRQ_HANDLER(15);
 }
