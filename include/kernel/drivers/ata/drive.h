@@ -14,5 +14,9 @@ struct ata_drive {
     structures::string model_number;
     structures::string firmware_revision;
 };
+
+inline bool operator==(const ata_drive& a, const ata_drive& b) {
+    return a.present && b.present && a.controller == b.controller && a.slave == b.slave;
+};
 };  // namespace drivers
 };  // namespace influx
