@@ -62,6 +62,7 @@ class string {
     inline operator pointer() { return _data.data(); }
 
     string operator+(const string& s) const;
+    inline string operator+(char c) const { return *this + string(1, c); }
     inline const string& operator=(const string& s) { return assign(s); }
     inline const string& operator=(const_pointer s) { return assign(s); }
     inline const string& operator=(const_reference c) { return assign(1, c); }
