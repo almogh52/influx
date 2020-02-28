@@ -1,5 +1,6 @@
-#include <kernel/assert.h>
 #include <kernel/console/console.h>
+
+#include <kernel/assert.h>
 #include <kernel/format.h>
 #include <stdarg.h>
 
@@ -26,6 +27,16 @@ void influx::console::putchar(influx::output_stream stream, char c) {
     }
 }
 
+void influx::console::vprint(const char *fmt, va_list args) {
+    structures::string str;
+
+    // Pass the va_args to the format function
+    str = vformat(fmt, args);
+
+    // Print the string to stdout
+    print(output_stream::stdout, str);
+}
+
 void influx::console::print(influx::structures::string str) {
     influx::console::print(output_stream::stdout, str);
 }
@@ -36,13 +47,9 @@ void influx::console::print(const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
 
-    // Pass the va_args to the format function
-    str = vformat(fmt, args);
+    vprint(fmt, args);
 
     va_end(args);
-
-    // Print the string to stdout
-    print(output_stream::stdout, str);
 }
 
 void influx::console::print(influx::output_stream stream, influx::structures::string str) {

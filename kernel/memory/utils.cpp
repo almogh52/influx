@@ -1,4 +1,5 @@
 #include <kernel/memory/utils.h>
+
 #include <memory/paging.h>
 
 void *influx::memory::utils::get_pml4() {

@@ -67,8 +67,11 @@ CXXFLAGS                += -fno-rtti
 CFLAGS                  += $(C_STANDARD)
 CXXFLAGS                += $(CXX_STANDARD)
 
+# Set interrupt handlers compile flags
+INTERRUPTS_FLAGS        := $(CXXFLAGS) -mgeneral-regs-only
+
 # libgcc location
-LIBGCC_DIR             := $(dir $(shell $(CC) $(CFLAGS) -print-libgcc-file-name))
+LIBGCC_DIR              := $(dir $(shell $(CC) $(CFLAGS) -print-libgcc-file-name))
 
 # Linker flags
 LDFLAGS                 += -nostdlib
@@ -140,6 +143,11 @@ $(OBJ_DIR)/${KERNEL_DIR}/%.o: ${KERNEL_DIR}/%.c
 	@mkdir -p $(@D)
 	$(PREFIX)/$(CC) $(CFLAGS) -c $< -o $@
 
+$(OBJ_DIR)/${KERNEL_DIR}/%_interrupt_handler.o: ${KERNEL_DIR}/%_interrupt_handler.cpp
+	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'
+	@mkdir -p $(@D)
+	$(PREFIX)/$(CXX) $(INTERRUPTS_FLAGS) -c $< -o $@
+	
 $(OBJ_DIR)/${KERNEL_DIR}/%.o: ${KERNEL_DIR}/%.cpp
 	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'
 	@mkdir -p $(@D)

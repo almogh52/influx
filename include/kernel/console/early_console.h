@@ -1,6 +1,7 @@
 #pragma once
-
 #include <kernel/console/console.h>
+
+#include <kernel/console/color.h>
 #include <kernel/memory/memory.h>
 #include <memory/vma_region.h>
 #include <stdint.h>
@@ -29,10 +30,13 @@ class early_console : public console {
    private:
     unsigned char *_video;
 
-	uint8_t _x_pos;
-	uint8_t _y_pos;
+    uint8_t _attribute;
+    uint8_t _x_pos;
+    uint8_t _y_pos;
 
-	void scroll();
-	void new_line();
+    void scroll();
+    void new_line();
+
+    uint8_t attribute_to_color(console_color color) const;
 };
 };  // namespace influx

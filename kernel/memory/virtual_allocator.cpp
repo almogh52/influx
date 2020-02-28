@@ -1,8 +1,9 @@
+#include <kernel/memory/virtual_allocator.h>
+
+#include <kernel/console/early_console.h>
 #include <kernel/memory/paging_manager.h>
 #include <kernel/memory/physical_allocator.h>
 #include <kernel/memory/utils.h>
-#include <kernel/memory/virtual_allocator.h>
-#include <kernel/console/early_console.h>
 #include <memory/protection_flags.h>
 
 void influx::memory::virtual_allocator::init(const boot_info_mem &mmap) {
