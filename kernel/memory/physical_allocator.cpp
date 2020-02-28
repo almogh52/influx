@@ -1,5 +1,6 @@
-#include <kernel/memory/paging_manager.h>
 #include <kernel/memory/physical_allocator.h>
+
+#include <kernel/memory/paging_manager.h>
 #include <kernel/memory/utils.h>
 #include <kernel/structures/static_bitmap.h>
 #include <memory/buffer.h>

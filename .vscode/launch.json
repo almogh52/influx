@@ -1,0 +1,34 @@
+{
+	// Use IntelliSense to learn about possible attributes.
+	// Hover to view descriptions of existing attributes.
+	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Kernel Debug",
+			"type": "cppdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}/iso/boot/influx-kernel.bin",
+			"miDebuggerServerAddress": "localhost:1234",
+			"args": [],
+			"cwd": "${workspaceRoot}",
+			"environment": [],
+			"externalConsole": true,
+			"MIMode": "gdb",
+			"preLaunchTask": "Run OS in Debugging"
+		},
+		{
+			"name": "Bootstrap Debug",
+			"type": "cppdbg",
+			"request": "launch",
+			"program": "${workspaceFolder}/iso/boot/influx-bootstrap.bin",
+			"miDebuggerServerAddress": "localhost:1234",
+			"args": [],
+			"cwd": "${workspaceRoot}",
+			"environment": [],
+			"externalConsole": true,
+			"MIMode": "gdb",
+			"preLaunchTask": "Run OS in Debugging"
+		}
+	]
+}
