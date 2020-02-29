@@ -100,7 +100,7 @@ bool influx::drivers::ata::ata::access_drive_sectors(const influx::drivers::ata:
                         (uint16_t)(drive.controller.io_base + ATA_IO_SECTOR_COUNT_REGISTER));
 
     // Send the LBA
-    ports::out<uint8_t>((uint8_t)(0xA0 | ((uint8_t)drive.slave << 4) | ((lba >> 24) & 0x0F)),
+    ports::out<uint8_t>((uint8_t)(0xE0 | ((uint8_t)drive.slave << 4) | ((lba >> 24) & 0x0F)),
                         (uint16_t)(drive.controller.io_base + ATA_IO_DRIVE_REGISTER));
     ports::out<uint8_t>((uint8_t)lba,
                         (uint16_t)(drive.controller.io_base + ATA_IO_SECTOR_NUMBER_REGISTER));
