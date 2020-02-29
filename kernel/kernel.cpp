@@ -5,7 +5,6 @@
 #include <kernel/logger.h>
 #include <kernel/memory/physical_allocator.h>
 #include <kernel/memory/virtual_allocator.h>
-#include <kernel/drivers/pci.h>
 
 void influx::kernel::start(const boot_info info) {
     early_kmain(info);

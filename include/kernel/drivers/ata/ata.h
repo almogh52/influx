@@ -11,6 +11,8 @@
 
 #define MAX_ATA_STRING_LENGTH 100
 
+#define MAX_ATA_SECTOR_ACCESS 256
+
 namespace influx {
 namespace drivers {
 namespace ata {
