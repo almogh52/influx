@@ -5,9 +5,10 @@
 
 namespace influx {
 namespace drivers {
-struct ata_drive {
+namespace ata {
+struct drive {
     bool present;
-    ata_bus controller;
+    bus controller;
     bool slave;
     uint64_t size;
     structures::string serial_number;
@@ -15,8 +16,9 @@ struct ata_drive {
     structures::string firmware_revision;
 };
 
-inline bool operator==(const ata_drive& a, const ata_drive& b) {
+inline bool operator==(const drive& a, const drive& b) {
     return a.present && b.present && a.controller == b.controller && a.slave == b.slave;
 };
+};  // namespace ata
 };  // namespace drivers
 };  // namespace influx

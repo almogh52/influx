@@ -1,4 +1,4 @@
-#include <kernel/drivers/ata.h>
+#include <kernel/drivers/ata/ata.h>
 
 #include <kernel/drivers/ata/command.h>
 #include <kernel/drivers/ata/constants.h>
@@ -6,15 +6,16 @@
 #include <kernel/memory/utils.h>
 #include <kernel/ports.h>
 
-influx::drivers::ata::ata() : driver("ATA"), _primary_irq_called(0), _secondary_irq_called(0) {}
+influx::drivers::ata::ata::ata()
+    : driver("ATA"), _primary_irq_called(0), _secondary_irq_called(0) {}
 
-void influx::drivers::ata::load() {
+void influx::drivers::ata::ata::load() {
     // Register IRQ handlers
     _log("Registering IRQs handlers..\n");
     kernel::interrupt_manager()->set_irq_handler(ATA_PRIMARY_IRQ,
-                                                 (uint64_t)influx::drivers::ata_primary_irq, this);
+                                                 (uint64_t)influx::drivers::ata::primary_irq, this);
     kernel::interrupt_manager()->set_irq_handler(
-        ATA_SECONDARY_IRQ, (uint64_t)influx::drivers::ata_secondary_irq, this);
+        ATA_SECONDARY_IRQ, (uint64_t)influx::drivers::ata::secondary_irq, this);
 
     // Disable IRQs for both ATA controllers
     ports::out<uint8_t>(ATA_DISABLE_INTERRUTPS,
@@ -40,22 +41,22 @@ void influx::drivers::ata::load() {
                         ata_secondary_bus.control_base + ATA_CONTROL_DEVICE_REGISTER);
 }
 
-void influx::drivers::ata::wait_for_primary_irq() {
+void influx::drivers::ata::ata::wait_for_primary_irq() {
     // Wait for the IRQ notifiction and reset the variable
     while (!__sync_bool_compare_and_swap(&_primary_irq_called, 1, 0)) {
         __sync_synchronize();
     }
 }
 
-void influx::drivers::ata::wait_for_secondary_irq() {
+void influx::drivers::ata::ata::wait_for_secondary_irq() {
     // Wait for the IRQ notifiction and reset the variable
     while (!__sync_bool_compare_and_swap(&_secondary_irq_called, 1, 0)) {
         __sync_synchronize();
     }
 }
 
-void influx::drivers::ata::detect_drives() {
-    ata_drive drive;
+void influx::drivers::ata::ata::detect_drives() {
+    drive drive;
 
     // Try to identify the master drive for the primary ATA bus
     drive = identify_drive(ata_primary_bus, false);
@@ -82,11 +83,11 @@ void influx::drivers::ata::detect_drives() {
     }
 }
 
-bool influx::drivers::ata::access_drive_sectors(const influx::drivers::ata_drive &drive,
-                                                influx::drivers::ata_access_type access_type,
-                                                uint32_t lba, uint16_t amount_of_sectors,
-                                                uint16_t *data) {
-    ata_status_register status_reg;
+bool influx::drivers::ata::ata::access_drive_sectors(const influx::drivers::ata::drive &drive,
+                                                     influx::drivers::ata::access_type access_type,
+                                                     uint32_t lba, uint16_t amount_of_sectors,
+                                                     uint16_t *data) {
+    status_register status_reg;
 
     // Select the drive
     if (!select_drive(drive)) {
@@ -110,7 +111,7 @@ bool influx::drivers::ata::access_drive_sectors(const influx::drivers::ata_drive
 
     // Send the access command
     ports::out<uint8_t>(
-        (uint8_t)(access_type == ata_access_type::read ? ata_command::read : ata_command::write),
+        (uint8_t)(access_type == access_type::read ? command::read : command::write),
         (uint16_t)(drive.controller.io_base + ATA_IO_COMMAND_REGISTER));
 
     // For each sector
@@ -124,7 +125,7 @@ bool influx::drivers::ata::access_drive_sectors(const influx::drivers::ata_drive
         }
 
         // If this is a write operation
-        if (access_type == ata_access_type::write) {
+        if (access_type == access_type::write) {
             for (uint64_t i = (sector * ATA_SECTOR_SIZE) / sizeof(uint16_t);
                  i < ((sector + 1) * ATA_SECTOR_SIZE) / sizeof(uint16_t); i++) {
                 ports::out<uint16_t>(data[i],
@@ -145,7 +146,7 @@ bool influx::drivers::ata::access_drive_sectors(const influx::drivers::ata_drive
         }
 
         // If this is a read operation, read data from the data register
-        if (access_type == ata_access_type::read) {
+        if (access_type == access_type::read) {
             for (uint64_t i = (sector * ATA_SECTOR_SIZE) / sizeof(uint16_t);
                  i < ((sector + 1) * ATA_SECTOR_SIZE) / sizeof(uint16_t); i++) {
                 data[i] = ports::in<uint16_t>(
@@ -155,8 +156,8 @@ bool influx::drivers::ata::access_drive_sectors(const influx::drivers::ata_drive
     }
 
     // Flush cache after write
-    if (access_type == ata_access_type::write) {
-        ports::out<uint8_t>((uint8_t)ata_command::cache_flush,
+    if (access_type == access_type::write) {
+        ports::out<uint8_t>((uint8_t)command::cache_flush,
                             (uint16_t)(drive.controller.io_base + ATA_IO_COMMAND_REGISTER));
 
         // Wait for the controller to flush the cache
@@ -166,7 +167,7 @@ bool influx::drivers::ata::access_drive_sectors(const influx::drivers::ata_drive
     return true;
 }
 
-bool influx::drivers::ata::select_drive(const influx::drivers::ata_drive &drive) {
+bool influx::drivers::ata::ata::select_drive(const influx::drivers::ata::drive &drive) {
     // Wait for controller to be ready to select drive
     if (read_status_register_with_mask(drive.controller, ATA_STATUS_BSY | ATA_STATUS_DRQ, 0, 10000)
             .fetch_failed) {
@@ -195,7 +196,7 @@ bool influx::drivers::ata::select_drive(const influx::drivers::ata_drive &drive)
     return true;
 }
 
-void influx::drivers::ata::delay(const influx::drivers::ata_bus &controller) const {
+void influx::drivers::ata::ata::delay(const influx::drivers::ata::bus &controller) const {
     // Read the status register port 4 times to create a 400ns delay
     ports::in<uint8_t>((uint16_t)(controller.io_base + ATA_IO_STATUS_REGISTER));
     ports::in<uint8_t>((uint16_t)(controller.io_base + ATA_IO_STATUS_REGISTER));
@@ -203,7 +204,7 @@ void influx::drivers::ata::delay(const influx::drivers::ata_bus &controller) con
     ports::in<uint8_t>((uint16_t)(controller.io_base + ATA_IO_STATUS_REGISTER));
 }
 
-influx::structures::string influx::drivers::ata::ata_get_string(char *base, uint64_t size) {
+influx::structures::string influx::drivers::ata::ata::ata_get_string(char *base, uint64_t size) {
     uint64_t end = 0;
     char temp = 0;
     char str_buffer[MAX_ATA_STRING_LENGTH] = {0};
@@ -232,10 +233,10 @@ influx::structures::string influx::drivers::ata::ata_get_string(char *base, uint
     return str_buffer;
 }
 
-influx::drivers::ata_drive influx::drivers::ata::identify_drive(
-    const influx::drivers::ata_bus &controller, bool slave) {
-    ata_drive drive;
-    ata_status_register status;
+influx::drivers::ata::drive influx::drivers::ata::ata::identify_drive(
+    const influx::drivers::ata::bus &controller, bool slave) {
+    drive drive;
+    status_register status;
 
     uint32_t identify_data[ATA_IDENTIFY_DATA_SIZE / sizeof(uint32_t)];
 
@@ -263,7 +264,7 @@ influx::drivers::ata_drive influx::drivers::ata::identify_drive(
     ports::out<uint8_t>(0, (uint16_t)(controller.io_base + ATA_IO_HCYL_REGISTER));
 
     // Send the IDENTIFY command
-    ports::out<uint8_t>((uint8_t)ata_command::identify,
+    ports::out<uint8_t>((uint8_t)command::identify,
                         (uint16_t)(controller.io_base + ATA_IO_COMMAND_REGISTER));
     delay(controller);
 
@@ -302,17 +303,17 @@ influx::drivers::ata_drive influx::drivers::ata::identify_drive(
     return drive;
 }
 
-influx::drivers::ata_status_register influx::drivers::ata::read_status_register(
-    const influx::drivers::ata_bus &controller) const {
-    ata_status_register status_reg{0, false};
+influx::drivers::ata::status_register influx::drivers::ata::ata::read_status_register(
+    const influx::drivers::ata::bus &controller) const {
+    status_register status_reg{0, false};
     status_reg.raw = ports::in<uint8_t>((uint16_t)(controller.io_base + ATA_IO_STATUS_REGISTER));
     return status_reg;
 }
 
-influx::drivers::ata_status_register influx::drivers::ata::read_status_register_with_mask(
-    const influx::drivers::ata_bus &controller, uint8_t mask, uint8_t value,
+influx::drivers::ata::status_register influx::drivers::ata::ata::read_status_register_with_mask(
+    const influx::drivers::ata::bus &controller, uint8_t mask, uint8_t value,
     uint64_t amount_of_tries) const {
-    ata_status_register status_reg = {0, false};
+    status_register status_reg = {0, false};
 
     do {
         // Wait 400ns

@@ -1,11 +1,11 @@
 #include <kernel/drivers/driver_manager.h>
 
 #include <kernel/drivers/pci.h>
-#include <kernel/drivers/ata.h>
+#include <kernel/drivers/ata/ata.h>
 
 influx::drivers::driver_manager::driver_manager() : _log("Driver Manager") {
     _drivers.push_back(new pci());
-    _drivers.push_back(new ata());
+    _drivers.push_back(new ata::ata());
 }
 
 void influx::drivers::driver_manager::load_drivers() {

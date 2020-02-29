@@ -3,7 +3,8 @@
 
 namespace influx {
 namespace drivers {
-struct ata_status_register {
+namespace ata {
+struct status_register {
     union {
         uint8_t raw;
         struct {
@@ -20,5 +21,6 @@ struct ata_status_register {
 
     bool fetch_failed;
 };
+};  // namespace ata
 };  // namespace drivers
 };  // namespace influx
