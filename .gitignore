@@ -14,3 +14,6 @@ ipch
 
 # Ignore hard drive image
 hdd.img
+
+# Ignore generated headers
+include/kernel/console/bga_u_vga16_font.h

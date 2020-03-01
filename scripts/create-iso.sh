@@ -2,6 +2,13 @@
 
 OS_NAME=influx
 
+# Get the script's dir
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+# Generate headers
+echo -e '\033[0;36mGenerating headers..\033[0m'
+$DIR/generate_headers.sh
+
 echo -e '\033[0;36mCompiling..\033[0m'
 
 # Build the project if it's not built
