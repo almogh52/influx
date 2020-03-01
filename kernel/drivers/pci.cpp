@@ -136,6 +136,13 @@ uint8_t influx::drivers::pci::get_header_type(uint16_t bus, uint8_t device, uint
     return (uint8_t)(dword >> 16);
 }
 
+uint32_t influx::drivers::pci::get_bar(uint16_t bus, uint8_t device, uint8_t function,
+                                       uint8_t offset) {
+    uint32_t bar = read_config_dword(bus, device, function, offset);
+
+    return bar & 0x1 ? bar & 0xFFFFFFFC : bar & 0xFFFFFFF0;
+}
+
 void influx::drivers::pci::detect_device(uint16_t bus, uint8_t device) {
     uint16_t vendor_id = get_vendor_id(bus, device, 0);
     uint8_t header_type = get_header_type(bus, device, 0);
@@ -157,11 +164,20 @@ void influx::drivers::pci::detect_device(uint16_t bus, uint8_t device) {
 }
 
 void influx::drivers::pci::detect_function(uint16_t bus, uint8_t device, uint8_t function) {
-    pci_descriptor_t descriptor{.vendor_id = get_vendor_id(bus, device, function),
+    pci_descriptor_t descriptor{.bus = bus,
+                                .device = device,
+                                .function = function,
+                                .vendor_id = get_vendor_id(bus, device, function),
                                 .device_id = get_device_id(bus, device, function),
                                 .class_code = get_class_code(bus, device, function),
                                 .subclass = get_subclass(bus, device, function),
-                                .prog_if = get_prog_if(bus, device, function)};
+                                .prog_if = get_prog_if(bus, device, function),
+                                .bar0 = get_bar(bus, device, function, BAR0_OFFSET),
+                                .bar1 = get_bar(bus, device, function, BAR1_OFFSET),
+                                .bar2 = get_bar(bus, device, function, BAR2_OFFSET),
+                                .bar3 = get_bar(bus, device, function, BAR3_OFFSET),
+                                .bar4 = get_bar(bus, device, function, BAR4_OFFSET),
+                                .bar5 = get_bar(bus, device, function, BAR5_OFFSET)};
 
     // Ignore invalid descriptors
     if (descriptor.vendor_id == 0xffff) {
@@ -169,7 +185,7 @@ void influx::drivers::pci::detect_function(uint16_t bus, uint8_t device, uint8_t
     }
 
     // Print the device found
-    _log("Found PCI device %d:%d:%d: Vendor: %d, Class: %d, Subclass: %d\n", bus, device,
+    _log("Found device %d:%d:%x - Vendor: %x, Class: %d, Subclass: %d\n", bus, device,
          descriptor.device_id, descriptor.vendor_id, descriptor.class_code, descriptor.subclass);
 
     // Add the descriptor to the list of descriptors

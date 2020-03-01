@@ -15,6 +15,12 @@
 #define SUBCLASS_OFFSET 0x8
 #define PROG_IF_OFFSET 0x8
 #define HEADER_TYPE_OFFSET 0xC
+#define BAR0_OFFSET 0x10
+#define BAR1_OFFSET 0x14
+#define BAR2_OFFSET 0x18
+#define BAR3_OFFSET 0x1C
+#define BAR4_OFFSET 0x20
+#define BAR5_OFFSET 0x24
 
 #define AMOUNT_OF_BUSES 256
 #define AMOUNT_OF_DEVICES_PER_BUS 32
@@ -54,6 +60,7 @@ class pci : public driver {
     uint8_t get_subclass(uint16_t bus, uint8_t device, uint8_t function);
     uint8_t get_prog_if(uint16_t bus, uint8_t device, uint8_t function);
     uint8_t get_header_type(uint16_t bus, uint8_t device, uint8_t function);
+    uint32_t get_bar(uint16_t bus, uint8_t device, uint8_t function, uint8_t offset);
 
     void detect_device(uint16_t bus, uint8_t device);
     void detect_function(uint16_t bus, uint8_t device, uint8_t function);
