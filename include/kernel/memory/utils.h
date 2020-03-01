@@ -19,6 +19,7 @@ class utils {
 
     static void memset(void *ptr, uint8_t value, uint64_t amount);
     static void memcpy(void *dst, const void *src, uint64_t amount);
+    static int memcmp(const void *a, const void *b, uint64_t amount);
 };
 };  // namespace memory
 };  // namespace influx
