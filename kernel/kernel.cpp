@@ -1,5 +1,6 @@
 #include <kernel/kernel.h>
 
+#include <kernel/console/bga_console.h>
 #include <kernel/console/console.h>
 #include <kernel/console/early_console.h>
 #include <kernel/logger.h>
@@ -34,6 +35,9 @@ void influx::kernel::kmain(const boot_info info) {
     // Init driver manager and load drivers
     _driver_manager = new drivers::driver_manager();
     _driver_manager->load_drivers();
+
+    // Init BGA console
+    console::set_console(new bga_console());
 
     // Listen to interrupts and halt
     while (true) {
