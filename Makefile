@@ -6,10 +6,10 @@ HOST_OS_NAME            := $(shell uname -s | tr A-Z a-z)
 OS_NAME                 := influx
 
 # Color configuration
-COM_COLOR   = \033[0;32m
-LNK_COLOR   = \033[0;33m
-OBJ_COLOR   = \033[0;35m
-NO_COLOR    = \033[m
+COM_COLOR               := \033[0;32m
+LNK_COLOR               := \033[0;33m
+OBJ_COLOR               := \033[0;35m
+NO_COLOR                := \033[m
 
 # Toolchain Configuration
 CC                      := x86_64-elf-gcc
@@ -25,7 +25,7 @@ else
 endif
 
 # Build Configuration - Include
-INCLUDE_DIR             := include
+INCLUDE_DIR             := include vendor/scalable-font
 
 # Assembler -- Flags
 ASFLAGS                 += -f elf64
