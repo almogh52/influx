@@ -46,15 +46,18 @@ uint64_t influx::memory::paging_manager::get_physical_address(uint64_t virtual_a
                : 0;
 }
 
-bool influx::memory::paging_manager::map_page(uint64_t page_base_address) {
+bool influx::memory::paging_manager::map_page(uint64_t page_base_address, int64_t page_index) {
     bool mapped = false;
 
     uint64_t structures_buffer_physical_address =
         get_physical_address((uint64_t)_structures_buffer.ptr);
 
-    int64_t page_index = physical_allocator::alloc_page();
+    // If no physical page was given, allocate one
     if (page_index < 0) {
-        return false;
+        page_index = physical_allocator::alloc_page();
+        if (page_index < 0) {
+            return false;
+        }
     }
 
     // If the buffer for the structures is empty, allocate a new one

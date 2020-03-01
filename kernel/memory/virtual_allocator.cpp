@@ -61,11 +61,12 @@ void influx::memory::virtual_allocator::init(const boot_info_mem &mmap) {
     }
 }
 
-void *influx::memory::virtual_allocator::allocate(uint64_t size, protection_flags_t pflags) {
+void *influx::memory::virtual_allocator::allocate(uint64_t size, protection_flags_t pflags,
+                                                  int64_t physical_page_index) {
     if (size % PAGE_SIZE == 0) {
         vma_region_t region = find_free_region(size, pflags);
 
-        return allocate(region);
+        return allocate(region, physical_page_index);
     } else {
         // TODO: throw exception
 
@@ -382,7 +383,8 @@ vma_region_t influx::memory::virtual_allocator::find_free_region(uint64_t size,
     }
 }
 
-void *influx::memory::virtual_allocator::allocate(vma_region_t region) {
+void *influx::memory::virtual_allocator::allocate(vma_region_t region,
+                                                  int64_t physical_page_index) {
     // If a region wasn't found
     if (region.size == 0) {
         return nullptr;
@@ -393,7 +395,9 @@ void *influx::memory::virtual_allocator::allocate(vma_region_t region) {
         // Map pages
         // TODO: Swap this with page-fault exception
         for (uint64_t i = 0; i < region.size / PAGE_SIZE; i++) {
-            paging_manager::map_page(region.base_addr + i * PAGE_SIZE);
+            paging_manager::map_page(
+                region.base_addr + i * PAGE_SIZE,
+                physical_page_index == -1 ? physical_page_index : physical_page_index + i);
             paging_manager::set_pte_permissions(region.base_addr + i * PAGE_SIZE,
                                                 region.protection_flags);
         }

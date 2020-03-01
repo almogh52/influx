@@ -23,7 +23,7 @@ class virtual_allocator {
    public:
     static void init(const boot_info_mem &mmap);
 
-    static void *allocate(uint64_t size, protection_flags_t pflags);
+    static void *allocate(uint64_t size, protection_flags_t pflags, int64_t physical_page_index=-1);
     static void free(void *ptr, uint64_t size);
 
    private:
@@ -40,7 +40,7 @@ class virtual_allocator {
     static bool address_in_vma_region(vma_region_t &region, uint64_t &address);
     static vma_region_t find_free_region(uint64_t size, protection_flags_t pflags);
 
-    static void *allocate(vma_region_t region);
+    static void *allocate(vma_region_t region, int64_t physical_page_index=-1);
 };
 };  // namespace memory
 };  // namespace influx
