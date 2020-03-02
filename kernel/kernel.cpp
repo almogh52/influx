@@ -38,6 +38,7 @@ void influx::kernel::kmain(const boot_info info) {
     _driver_manager->load_drivers();
 
     // Init BGA console
+    log("Loading BGA console..\n");
     console::set_console(new bga_console());
 
     // Listen to interrupts and halt
