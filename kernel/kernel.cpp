@@ -6,6 +6,7 @@
 #include <kernel/logger.h>
 #include <kernel/memory/physical_allocator.h>
 #include <kernel/memory/virtual_allocator.h>
+#include <kernel/icxxabi.h>
 
 void influx::kernel::start(const boot_info info) {
     early_kmain(info);
@@ -43,4 +44,7 @@ void influx::kernel::kmain(const boot_info info) {
     while (true) {
         __asm__ __volatile__ ("hlt");
     }
+
+    // Destruct all global objects
+    __cxa_finalize(nullptr);
 }
