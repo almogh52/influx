@@ -4,7 +4,9 @@ influx::early_console::early_console()
     : _video((unsigned char *)EARLY_VIDEO_MEMORY_ADDRESS),
       _attribute(DEFAULT_ATTRIBUTE),
       _x_pos(0),
-      _y_pos(0) {
+      _y_pos(0) {}
+
+bool influx::early_console::load() {
     // Disable cursor using hardware ports
     __asm__ __volatile__(
         "mov dx, 0x3D4;"
@@ -20,6 +22,8 @@ influx::early_console::early_console()
 
     // Clear the video memory
     stdout_clear();
+
+    return true;
 }
 
 void influx::early_console::stdout_putchar(char c) {

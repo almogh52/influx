@@ -4,7 +4,7 @@
 #define BGA_PCI_DEVICE_ID 0x1111
 #define BGA_PCI_VENDOR_ID 0x1234
 
-#define SCREEN_HEIGHT 720
+#define SCREEN_HEIGHT 960
 #define SCREEN_WIDTH 960
 
 namespace influx {

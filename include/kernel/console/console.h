@@ -19,6 +19,8 @@ class console {
     static void print(output_stream stream, structures::string str);
     static void print(output_stream stream, const char *fmt, ...);
 
+    virtual bool load() = 0;
+
     virtual void stdout_putchar(char c) = 0;
     virtual void stdout_write(structures::string &str) = 0;
     virtual void stdout_clear() = 0;
@@ -31,5 +33,6 @@ class console {
 
    private:
     inline static console *_console = nullptr;
+    inline static structures::string _history = "";
 };
 };  // namespace influx

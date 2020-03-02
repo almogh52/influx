@@ -19,6 +19,8 @@ class bga_console : public console {
    public:
     bga_console();
 
+    virtual bool load();
+
     virtual void stdout_putchar(char c);
     virtual void stdout_write(structures::string &str);
     virtual void stdout_clear();

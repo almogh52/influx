@@ -15,11 +15,13 @@
 
 influx::bga_console::bga_console()
     : _log("BGA Console"),
-      _driver((drivers::graphics::bga *)kernel::driver_manager()->get_driver("BGA")) {
+      _driver((drivers::graphics::bga *)kernel::driver_manager()->get_driver("BGA")) {}
+
+bool influx::bga_console::load() {
     // Check that the drive is found
     if (!_driver) {
         _log("BGA driver not found!\n");
-        return;
+        return false;
     }
 
     // Enable the BGA
@@ -32,6 +34,8 @@ influx::bga_console::bga_console()
     ssfn_fg = DEFAULT_FOREGROUND_COLOR;                 // Set default color
     ssfn_x = 0;                                         // Set start X coordinate
     ssfn_y = 0;                                         // Set start Y coordinate
+
+    return true;
 }
 
 void influx::bga_console::stdout_putchar(char c) {
@@ -80,10 +84,12 @@ void influx::bga_console::stdout_clear() {
 
 void influx::bga_console::scroll() {
     // Move all lines from line 2, 1 up
-    memory::utils::memcpy(ssfn_dst_ptr, ssfn_dst_ptr + ssfn_dst_pitch * GLYPH_HEIGHT, (SCREEN_HEIGHT - GLYPH_HEIGHT) * ssfn_dst_pitch);
+    memory::utils::memcpy(ssfn_dst_ptr, ssfn_dst_ptr + ssfn_dst_pitch * GLYPH_HEIGHT,
+                          (SCREEN_HEIGHT - GLYPH_HEIGHT) * ssfn_dst_pitch);
 
     // Clear the last row
-    memory::utils::memset(ssfn_dst_ptr + ssfn_dst_pitch * (BGA_AMOUNT_OF_LINES - 1) * GLYPH_HEIGHT, 0, ssfn_dst_pitch * GLYPH_HEIGHT);
+    memory::utils::memset(ssfn_dst_ptr + ssfn_dst_pitch * (BGA_AMOUNT_OF_LINES - 1) * GLYPH_HEIGHT,
+                          0, ssfn_dst_pitch * GLYPH_HEIGHT);
 }
 
 void influx::bga_console::new_line() {

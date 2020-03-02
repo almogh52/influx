@@ -7,8 +7,16 @@
 influx::console *influx::console::set_console(influx::console *console) {
     influx::console *old_console = _console;
 
+    // Try to load the new console
+    if (!console->load()) {
+        return console;
+    }
+
     // Set the new console
     _console = console;
+
+    // Write the history to the new console
+    console->stdout_write(_history);
 
     return old_console;
 }
@@ -21,6 +29,9 @@ void influx::console::putchar(influx::output_stream stream, char c) {
 
     // Print by the stream type
     if (stream == output_stream::stdout) {
+        // Save the char to the history
+        _history += c;
+
         _console->stdout_putchar(c);
     } else if (stream == output_stream::stderr) {
         _console->stderr_putchar(c);
@@ -58,6 +69,9 @@ void influx::console::print(influx::output_stream stream, influx::structures::st
 
     // Print by the stream type
     if (stream == output_stream::stdout) {
+        // Save the string to the history
+        _history += str;
+
         _console->stdout_write(str);
     } else if (stream == output_stream::stderr) {
         _console->stderr_write(str);
