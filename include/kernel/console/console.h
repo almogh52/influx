@@ -29,6 +29,8 @@ class console {
     virtual void stderr_write(structures::string &str) = 0;
     virtual void stderr_clear() = 0;
 
+    virtual bool save_history() const = 0;
+
     // virtual char stdin_getchar() = 0;
 
    private:

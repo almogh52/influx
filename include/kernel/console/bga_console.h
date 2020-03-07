@@ -29,6 +29,8 @@ class bga_console : public console {
     inline virtual void stderr_write(structures::string &str) { stdout_write(str); }
     inline virtual void stderr_clear() { stderr_clear(); }
 
+    inline virtual bool save_history() const { return false; }
+
    private:
     logger _log;
     drivers::graphics::bga *_driver;

@@ -27,6 +27,8 @@ class early_console : public console {
     inline virtual void stderr_write(structures::string &str) { stdout_write(str); }
     inline virtual void stderr_clear() { stderr_clear(); }
 
+    inline virtual bool save_history() const { return true; }
+
     static vma_region get_vma_region();
 
    private:
