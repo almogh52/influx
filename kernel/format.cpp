@@ -13,11 +13,6 @@ influx::structures::string influx::to_string(int64_t d, influx::integer_base bas
         ud = (uint64_t)-d;
     }
 
-    // Add padding if needed
-    if (padding > 0) {
-        str += structures::string(padding, '0');
-    }
-
     do {
         // Get the remainder of the base
         remainder = (uint8_t)(ud % (uint8_t)base);
@@ -28,6 +23,11 @@ influx::structures::string influx::to_string(int64_t d, influx::integer_base bas
 
     // Reverse the string
     str.reverse();
+
+    // Add padding if needed
+    if (padding > 0 && (padding - str.length()) > 0) {
+        str = structures::string(padding - str.length(), '0') + str;
+    }
 
     // Add minus in the start if the number is negative
     if (sign && base == integer_base::dec && d < 0) {
@@ -57,7 +57,7 @@ influx::integer_base influx::get_integer_base_for_character(char c) {
 
 influx::structures::string influx::vformat(const char *fmt, va_list args) {
     structures::string str;
-    
+
     uint64_t specifier_len = 0;
     uint8_t padding = 0;
     bool pad_0 = false, long_int = false;
