@@ -49,12 +49,12 @@ void influx::logger::operator()(const char *fmt, ...) const {
 influx::structures::string influx::logger::format_time() const {
     // If the time manager wasn't loaded yet, return empty string
     if (kernel::time_manager() == nullptr) {
-        return "00:00:00.0000";
+        return "00:00:00.000";
     } else {
-        return format("%02d:%02d:%02d.%04d",
-                      (uint64_t)(kernel::time_manager()->seconds() / 60 * 60),
+        return format("%02d:%02d:%02d.%03d",
+                      (uint64_t)(kernel::time_manager()->seconds() / (60 * 60)),
                       (uint64_t)(kernel::time_manager()->seconds() / 60) % 60,
                       (uint64_t)kernel::time_manager()->seconds() % 60,
-                      (uint64_t)kernel::time_manager()->milliseconds());
+                      (uint64_t)kernel::time_manager()->milliseconds() % 1000);
     }
 }
