@@ -19,4 +19,4 @@ fi
 
 # Run qemu with the iso
 echo -e '\033[0;36mRunning QEMU..\033[0m'
-qemu-system-x86_64 -boot d -cdrom influx.iso -drive file=hdd.img,format=raw
+qemu-system-x86_64 -boot d -cdrom influx.iso -m 4G -drive file=hdd.img,format=raw
