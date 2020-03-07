@@ -3,8 +3,10 @@
 #include <kernel/drivers/pci.h>
 #include <kernel/drivers/ata/ata.h>
 #include <kernel/drivers/graphics/bga/bga.h>
+#include <kernel/drivers/time/pit.h>
 
 influx::drivers::driver_manager::driver_manager() : _log("Driver Manager", console_color::green) {
+    _drivers.push_back(new pit());
     _drivers.push_back(new pci());
     _drivers.push_back(new ata::ata());
     _drivers.push_back(new graphics::bga());

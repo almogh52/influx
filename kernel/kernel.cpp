@@ -37,6 +37,9 @@ void influx::kernel::kmain(const boot_info info) {
     _driver_manager = new drivers::driver_manager();
     _driver_manager->load_drivers();
 
+    // Init time manager
+    _time_manager = new time::time_manager();
+
     // Init BGA console
     log("Loading BGA console..\n");
     console::set_console(new bga_console());
