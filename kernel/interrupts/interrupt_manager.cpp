@@ -1,15 +1,16 @@
 #include <descriptor_table_register.h>
 
+#include <kernel/assert.h>
+#include <kernel/drivers/pic.h>
 #include <kernel/gdt.h>
 #include <kernel/interrupts/exception_interrupt_handler.h>
 #include <kernel/interrupts/interrupt_manager.h>
 #include <kernel/memory/utils.h>
 #include <kernel/memory/virtual_allocator.h>
-#include <kernel/drivers/pic.h>
 #include <kernel/ports.h>
-#include <kernel/assert.h>
 
-#define ADD_IRQ_HANDLER(number) set_interrupt_service_routine(PIC1_INTERRUPTS_OFFSET + number, \
+#define ADD_IRQ_HANDLER(number)                                                            \
+    set_interrupt_service_routine(PIC1_INTERRUPTS_OFFSET + number,                         \
                                   {.type = interrupt_service_routine_type::interrupt_gate, \
                                    .routine_address = (uint64_t)irq_interrupt_handler<number>})
 
@@ -17,6 +18,8 @@ influx::interrupts::interrupt_manager::interrupt_manager()
     : _log("Interrupt Manager", console_color::green),
       _idt((interrupt_descriptor_t *)memory::virtual_allocator::allocate(IDT_SIZE,
                                                                          PROT_READ | PROT_WRITE)) {
+    kassert(_idt != nullptr);
+
     // Init the IDT
     memory::utils::memset(_idt, 0, IDT_SIZE);
     _log("IDT initialized in the address %p.\n", _idt);
@@ -43,6 +46,8 @@ influx::interrupts::interrupt_manager::interrupt_manager()
 
 void influx::interrupts::interrupt_manager::set_interrupt_service_routine(
     uint8_t interrupt_index, influx::interrupts::interrupt_service_routine isr) {
+    kassert(isr.routine_address != 0);
+
     interrupt_descriptor_t descriptor{.offset_1 = (uint16_t)(isr.routine_address & 0xFFFF),
                                       .selector = (uint8_t)gdt_selector_types::code_descriptor,
                                       .interrupt_stack_table_index = 0,
@@ -60,8 +65,9 @@ void influx::interrupts::interrupt_manager::set_interrupt_service_routine(
     _log("ISR (%p) has been set for interrupt %x.\n", isr.routine_address, interrupt_index);
 }
 
-void influx::interrupts::interrupt_manager::set_irq_handler(uint8_t irq, uint64_t irq_handler_address, void *irq_handler_data)
-{
+void influx::interrupts::interrupt_manager::set_irq_handler(uint8_t irq,
+                                                            uint64_t irq_handler_address,
+                                                            void *irq_handler_data) {
     kassert(irq >= 0 && irq < PIC_INTERRUPT_COUNT);
     kassert(_irqs[irq].handler_address == 0);
 

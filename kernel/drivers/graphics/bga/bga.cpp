@@ -11,6 +11,7 @@ influx::drivers::graphics::bga::bga() : driver("BGA"), _video_memory(nullptr) {}
 
 void influx::drivers::graphics::bga::load() {
     drivers::pci *pci_drv = (drivers::pci *)kernel::driver_manager()->get_driver("PCI");
+    kassert(pci_drv != nullptr);
 
     pci_descriptor_t bga_pci_descriptor = {};
 
