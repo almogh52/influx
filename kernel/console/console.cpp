@@ -4,11 +4,19 @@
 #include <kernel/format.h>
 #include <stdarg.h>
 
+influx::console *influx::console::get_console() { return _console; }
+
 influx::console *influx::console::set_console(influx::console *console) {
     influx::console *old_console = _console;
 
     // Try to load the new console
+    if (_console) {
+        _log("Loading new console at address %p.\n", console);
+    }
     if (!console->load()) {
+        if (_console) {
+            _log("Console load failed!\n");
+        }
         return console;
     }
 
@@ -16,7 +24,10 @@ influx::console *influx::console::set_console(influx::console *console) {
     _console = console;
 
     // Write the history to the new console
-    console->stdout_write(_history);
+    if (_history.size() != 0) {
+        console->stdout_write(_history);
+        _log("Console history loaded into new console.\n");
+    }
 
     // If the new console didn't ask to save history, delete it
     if (console->save_history()) {

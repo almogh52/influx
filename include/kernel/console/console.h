@@ -1,5 +1,5 @@
 #pragma once
-
+#include <kernel/logger.h>
 #include <kernel/structures/string.h>
 #include <stdarg.h>
 
@@ -8,6 +8,7 @@ enum class output_stream { stdout, stderr };
 
 class console {
    public:
+    static console *get_console();
     static console *set_console(console *console);
 
     static void putchar(char c);
@@ -34,6 +35,7 @@ class console {
     // virtual char stdin_getchar() = 0;
 
    private:
+    inline static logger _log = logger("Console Manager", console_color::green);
     inline static console *_console = nullptr;
     inline static structures::string _history = "";
 };
