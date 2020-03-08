@@ -29,7 +29,8 @@ class physical_allocator {
     static void free_page(uint64_t page_index);
 
    private:
-    inline static structures::bitmap _bitmap;
+    inline static uint8_t _bitmap_obj[sizeof(influx::structures::bitmap)] = {0};
+    inline static structures::bitmap &_bitmap = reinterpret_cast<structures::bitmap&>(_bitmap_obj);
 
     static void parse_memory_map_to_bitmap(const boot_info_mem &mmap, structures::bitmap &bitmap);
 };
