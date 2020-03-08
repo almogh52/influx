@@ -53,8 +53,6 @@ void influx::kernel::kmain(const boot_info info) {
     console::set_console(new bga_console());
     log("BGA Console loaded.\n");
 
-    kassert(0 == 1);
-
     // Listen to interrupts and halt
     while (true) {
         __asm__ __volatile__("hlt");
