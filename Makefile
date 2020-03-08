@@ -38,6 +38,7 @@ CFLAGS                  += -mcmodel=large
 CFLAGS                  += -ffreestanding
 CFLAGS                  += -fshort-wchar
 CFLAGS                  += -mno-red-zone
+CFLAGS                  += -mno-avx
 
 # C Compiler -- Warnings 
 CFLAGS                  += -Wall
