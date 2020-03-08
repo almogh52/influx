@@ -27,7 +27,7 @@ class virtual_allocator {
     static void free(void *ptr, uint64_t size);
 
    private:
-    inline static vma_node_t *_vma_list_head;
+    inline static vma_node_t *_vma_list_head = nullptr;
     inline static buffer_t _current_vma_list_page = {.ptr = nullptr, .size = 0};
 
     static vma_node_t *alloc_vma_node(vma_region_t region);

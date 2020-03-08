@@ -389,18 +389,25 @@ void *influx::memory::virtual_allocator::allocate(vma_region_t region,
     if (region.size == 0) {
         return nullptr;
     } else {
-        // Insert the VMA region
-        insert_vma_region(region);
-
         // Map pages
         // TODO: Swap this with page-fault exception
         for (uint64_t i = 0; i < region.size / PAGE_SIZE; i++) {
-            paging_manager::map_page(
-                region.base_addr + i * PAGE_SIZE,
-                physical_page_index == -1 ? physical_page_index : physical_page_index + i);
+            if (!paging_manager::map_page(
+                    region.base_addr + i * PAGE_SIZE,
+                    physical_page_index == -1 ? physical_page_index : physical_page_index + i)) {
+                // Revert all page maps
+                for (uint64_t j = 0; j < i; i++) {
+                    paging_manager::unmap_page(region.base_addr + j * PAGE_SIZE);
+                }
+
+                return nullptr;
+            }
             paging_manager::set_pte_permissions(region.base_addr + i * PAGE_SIZE,
                                                 region.protection_flags);
         }
+
+        // Insert the VMA region
+        insert_vma_region(region);
 
         return (void *)region.base_addr;
     }
