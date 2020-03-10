@@ -1,7 +1,7 @@
 #pragma once
 #include <kernel/drivers/time/timer_driver.h>
 
-#include <kernel/interrupts/interrupt_service_routine.h>
+#include <kernel/interrupts/interrupt_regs.h>
 
 #define PIT_IRQ 0
 
@@ -26,12 +26,12 @@ class pit : public timer_driver {
 
     virtual uint64_t timer_frequency() const { return PIT_FREQUENCY; }
 
-	friend void pit_irq(influx::interrupts::interrupt_frame *frame, pit *pit);
+	friend void pit_irq(influx::interrupts::regs *context, pit *pit);
 
    private:
     uint64_t _count;
 };
 
-void pit_irq(influx::interrupts::interrupt_frame *frame, pit *pit);
+void pit_irq(influx::interrupts::regs *context, pit *pit);
 };  // namespace drivers
 };  // namespace influx

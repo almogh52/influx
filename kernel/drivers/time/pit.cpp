@@ -4,6 +4,12 @@
 #include <kernel/kernel.h>
 #include <kernel/ports.h>
 
+void influx::drivers::pit_irq(influx::interrupts::regs *context,
+                              influx::drivers::pit *pit) {
+    // Increase the counter
+    pit->_count++;
+}
+
 influx::drivers::pit::pit() : timer_driver("PIT"), _count(0) {}
 
 void influx::drivers::pit::load() {

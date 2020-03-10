@@ -6,6 +6,22 @@
 #include <kernel/memory/utils.h>
 #include <kernel/ports.h>
 
+void influx::drivers::ata::primary_irq(influx::interrupts::regs *context,
+                                       influx::drivers::ata::ata *ata) {
+    // Notify the ATA driver for primary irq
+    while (!__sync_bool_compare_and_swap(&ata->_primary_irq_called, 0, 1)) {
+        __sync_synchronize();
+    }
+}
+
+void influx::drivers::ata::secondary_irq(influx::interrupts::regs *context,
+                                         influx::drivers::ata::ata *ata) {
+    // Notify the ATA driver for secondary irq
+    while (!__sync_bool_compare_and_swap(&ata->_secondary_irq_called, 0, 1)) {
+        __sync_synchronize();
+    }
+}
+
 influx::drivers::ata::ata::ata()
     : driver("ATA"), _primary_irq_called(0), _secondary_irq_called(0) {}
 

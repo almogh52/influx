@@ -5,7 +5,7 @@
 #include <kernel/drivers/ata/bus.h>
 #include <kernel/drivers/ata/drive.h>
 #include <kernel/drivers/ata/status_register.h>
-#include <kernel/interrupts/interrupt_service_routine.h>
+#include <kernel/interrupts/interrupt_regs.h>
 #include <kernel/structures/string.h>
 #include <kernel/structures/vector.h>
 
@@ -27,8 +27,8 @@ class ata : public driver {
 
     const structures::vector<drive> drives() const { return _drives; };
 
-    friend void primary_irq(influx::interrupts::interrupt_frame *frame, ata *ata);
-    friend void secondary_irq(influx::interrupts::interrupt_frame *frame, ata *ata);
+    friend void primary_irq(influx::interrupts::regs *context, ata *ata);
+    friend void secondary_irq(influx::interrupts::regs *context, ata *ata);
 
    private:
     drive _selected_drive;
@@ -52,8 +52,8 @@ class ata : public driver {
                                                    uint8_t value, uint64_t amount_of_tries) const;
 };
 
-void primary_irq(influx::interrupts::interrupt_frame *frame, ata *ata);
-void secondary_irq(influx::interrupts::interrupt_frame *frame, ata *ata);
+void primary_irq(influx::interrupts::regs *context, ata *ata);
+void secondary_irq(influx::interrupts::regs *context, ata *ata);
 };  // namespace ata
 };  // namespace drivers
 };  // namespace influx
