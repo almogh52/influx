@@ -1,5 +1,6 @@
 #pragma once
 #include <kernel/structures/string.h>
+#include <kernel/structures/unique_vector.h>
 #include <stdint.h>
 
 #define MAX_PRIORITY_LEVEL 9
@@ -16,6 +17,8 @@ struct process {
 
     uint64_t cr3 __attribute__((packed));
     uint64_t kernel_stack;
+
+    structures::unique_vector threads;
 
     structures::string name;
 };

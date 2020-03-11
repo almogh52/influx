@@ -2,10 +2,22 @@
 
 #include <kernel/assert.h>
 #include <kernel/kernel.h>
+#include <kernel/memory/virtual_allocator.h>
 #include <kernel/threading/interrupts_lock.h>
 #include <kernel/threading/scheduler_utils.h>
 #include <kernel/time/time_manager.h>
 #include <kernel/utils.h>
+#include <memory/protection_flags.h>
+
+void influx::threading::new_thread_wrapper(void (*func)(void *), void *data) {
+    // Re-enable interrupts since they were disabled in the reschedule function
+    kernel::interrupt_manager()->enable_interrupts();
+
+    // Call the thread function
+    func(data);
+
+    // TODO: Kill the task
+}
 
 influx::threading::scheduler::scheduler()
     : _log("Scheduler", console_color::blue),
@@ -22,12 +34,17 @@ influx::threading::scheduler::scheduler()
                               .system = true,
                               .cr3 = scheduler_utils::get_cr3(),
                               .kernel_stack = 0,
+                              .threads = structures::unique_vector(),
                               .name = "kernel"});
 
     // Create kernel main thread
     _log("Creating kernel main thread..\n");
-    _priority_queues[MAX_PRIORITY_LEVEL].start = new tcb(thread{
-        .tid = 0, .pid = 0, .context = nullptr, .state = thread_state::running, .quantum = 0});
+    _priority_queues[MAX_PRIORITY_LEVEL].start =
+        new tcb(thread{.tid = _processes[0].threads.insert_unique(),
+                       .pid = 0,
+                       .context = nullptr,
+                       .state = thread_state::running,
+                       .quantum = 0});
     _priority_queues[MAX_PRIORITY_LEVEL].next_task = nullptr;
     _priority_queues[MAX_PRIORITY_LEVEL].start->prev() = _priority_queues[MAX_PRIORITY_LEVEL].start;
     _priority_queues[MAX_PRIORITY_LEVEL].start->next() = _priority_queues[MAX_PRIORITY_LEVEL].start;
@@ -39,6 +56,37 @@ influx::threading::scheduler::scheduler()
     _log("Registering tick handler..\n");
     kernel::time_manager()->register_tick_handler(
         utils::method_function_wrapper<scheduler, &scheduler::tick_handler>, this);
+}
+
+const influx::threading::thread &influx::threading::scheduler::create_kernel_thread(void (*func)(),
+                                                                                    void *data) {
+    void *stack =
+        memory::virtual_allocator::allocate(DEFAULT_KERNEL_STACK_SIZE, PROT_READ | PROT_WRITE);
+
+    regs *context = (regs *)((uint8_t *)stack + DEFAULT_KERNEL_STACK_SIZE - sizeof(regs) - 8);
+
+    tcb *new_task = new tcb(thread{.tid = _processes[0].threads.insert_unique(),
+                                   .pid = 0,
+                                   .context = context,
+                                   .state = thread_state::ready,
+                                   .quantum = 0});
+
+    // Set the RIP to return to when the thread is selected
+    *(uint64_t *)((uint8_t *)stack + DEFAULT_KERNEL_STACK_SIZE - 8) = (uint64_t)new_thread_wrapper;
+
+    // Send to the new thread wrapper the thread function and it's data
+    context->rdi = (uint64_t)func;
+    context->rsi = (uint64_t)data;
+
+    // Queue the task
+    queue_task(new_task);
+
+    return new_task->value();
+}
+
+const influx::threading::thread &influx::threading::scheduler::create_kernel_thread(
+    void (*func)(void *), void *data) {
+    return create_kernel_thread((void (*)())func, data);
 }
 
 void influx::threading::scheduler::reschedule() {
@@ -125,5 +173,22 @@ void influx::threading::scheduler::tick_handler() {
         reschedule();
     } else {
         _current_task->value().quantum++;
+    }
+}
+
+void influx::threading::scheduler::queue_task(influx::threading::tcb *task) {
+    interrupts_lock int_lk;
+
+    process &new_task_process = _processes[task->value().pid];
+
+    // Insert the task into the priority queue linked list
+    _priority_queues[new_task_process.priority].start->prev()->next() = task;
+    task->prev() = _priority_queues[new_task_process.priority].start->prev();
+    task->next() = _priority_queues[new_task_process.priority].start;
+    _priority_queues[new_task_process.priority].start->prev() = task;
+
+    // Check if there is no next task
+    if (_priority_queues[new_task_process.priority].next_task == nullptr) {
+        _priority_queues[new_task_process.priority].next_task = task;
     }
 }

@@ -5,7 +5,7 @@
 
 namespace influx {
 namespace threading {
-enum class thread_state { init, ready, running, blocked, sleeping, waiting_for_child, killed };
+enum class thread_state { ready, running, blocked, sleeping, waiting_for_child, killed };
 
 struct thread {
     uint64_t tid;
