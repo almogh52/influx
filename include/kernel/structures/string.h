@@ -34,12 +34,12 @@ class string {
     inline const_reference at(size_t pos) const { return at(pos); }
     inline const_reference front() const { return at(0); }
     inline reference front() { return at(0); }
-    inline const_reference back() const { return at(length() - 1); }
-    inline reference back() { return at(length() - 1); }
+    inline const_reference back() const { return at(_length - 1); }
+    inline reference back() { return at(_length - 1); }
 
     static size_t length(const_pointer s);
-    inline size_t length() const { return string::length(*this); }
-    inline size_t size() const { return length(); }
+    inline size_t length() const { return _length; }
+    inline size_t size() const { return _length; }
 
     string& append(const_pointer s, size_t len);
     string& append(size_t n, value_type c);
@@ -51,6 +51,7 @@ class string {
     inline string& assign(const_pointer s) { return assign(s, string::length(s)); }
     inline string& assign(const string& s) {
         _data = s._data;
+        _length = s._length;
         return *this;
     }
 
@@ -71,7 +72,7 @@ class string {
     inline const string& operator+=(value_type c) { return append(1, c); }
     inline bool operator==(const string& s) const { return compare(s) == 0; }
     inline bool operator==(const_pointer s) const { return compare(s) == 0; }
-    inline bool operator==(value_type c) const { return length() == 1 && c == at(0); }
+    inline bool operator==(value_type c) const { return _length == 1 && c == at(0); }
     inline bool operator!=(const string& s) const { return !operator==(s); }
     inline bool operator!=(const_pointer s) const { return !operator==(s); }
     inline bool operator!=(value_type c) const { return !operator==(c); }
@@ -81,6 +82,7 @@ class string {
 
    private:
     memblock _data;
+    size_t _length;
 
     inline static constexpr size_t capacity_for_string_size(size_t size) {
         return (size + 1) % capacity_alignment == 0
