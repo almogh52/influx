@@ -11,6 +11,13 @@ class node {
     node(T val, node<T> *prev) : _value(val), _prev(prev), _next(nullptr) {}
     node(T val, node<T> *prev, node<T> *next) : _value(val), _prev(prev), _next(next) {}
 
+    template <class... Args>
+    node(Args... args) : _value(args...), _prev(nullptr), _next(nullptr) {}
+    template <class... Args>
+    node(Args... args, node<T> *prev) : _value(args...), _prev(prev), _next(nullptr) {}
+    template <class... Args>
+    node(Args... args, node<T> *prev, node<T> *next) : _value(args...), _prev(prev), _next(next) {}
+
     node<T> *insert(node<T> *new_node) {
         node<T> *current_node = this;
 
