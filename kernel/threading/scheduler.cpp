@@ -5,6 +5,7 @@
 #include <kernel/threading/interrupts_lock.h>
 #include <kernel/threading/scheduler_utils.h>
 #include <kernel/time/time_manager.h>
+#include <kernel/utils.h>
 
 influx::threading::scheduler::scheduler()
     : _log("Scheduler", console_color::blue),
@@ -27,7 +28,7 @@ influx::threading::scheduler::scheduler()
     _log("Creating kernel main thread..\n");
     _priority_queues[MAX_PRIORITY_LEVEL].start = new tcb(thread{
         .tid = 0, .pid = 0, .context = nullptr, .state = thread_state::running, .quantum = 0});
-    _priority_queues[MAX_PRIORITY_LEVEL].next_task = _priority_queues[MAX_PRIORITY_LEVEL].start;
+    _priority_queues[MAX_PRIORITY_LEVEL].next_task = nullptr;
     _priority_queues[MAX_PRIORITY_LEVEL].start->prev() = _priority_queues[MAX_PRIORITY_LEVEL].start;
     _priority_queues[MAX_PRIORITY_LEVEL].start->next() = _priority_queues[MAX_PRIORITY_LEVEL].start;
 
@@ -36,8 +37,8 @@ influx::threading::scheduler::scheduler()
 
     // Register tick handler
     _log("Registering tick handler..\n");
-    kernel::time_manager()->register_tick_handler((void (*)(void *)) & scheduler::tick_handler,
-                                                  this);
+    kernel::time_manager()->register_tick_handler(
+        utils::method_function_wrapper<scheduler, &scheduler::tick_handler>, this);
 }
 
 void influx::threading::scheduler::reschedule() {
@@ -103,7 +104,8 @@ influx::threading::tcb *influx::threading::scheduler::update_priority_queue_next
     // While we didn't reach the current next task
     while (new_next_task != current_next_task) {
         // If the thread is ready to be executed, set it as the next task
-        if (new_next_task->value().state == thread_state::ready) {
+        if (new_next_task->value().state == thread_state::ready ||
+            new_next_task->value().state == thread_state::running) {
             _priority_queues[priority].next_task = new_next_task;
             break;
         }

@@ -36,12 +36,6 @@ void influx::interrupts::exception_interrupt_handler(influx::interrupts::regs *c
 void influx::interrupts::irq_interrupt_handler(influx::interrupts::regs *context) {
     uint8_t irq_number = (uint8_t)(context->isr_number - PIC1_INTERRUPTS_OFFSET);
 
-    // Check if there is a handler for this IRQ
-    if (kernel::interrupt_manager()->_irqs[irq_number].handler_address != 0) {
-        ((void (*)(regs *, void *))kernel::interrupt_manager()->_irqs[irq_number].handler_address)(
-            context, influx::kernel::interrupt_manager()->_irqs[irq_number].handler_data);
-    }
-
     // If the IRQ is on the slave PIC, send EOI to it
     if (irq_number >= 8) {
         influx::ports::out<uint8_t>(PIC_EOI, PIC2_COMMAND);
@@ -49,6 +43,12 @@ void influx::interrupts::irq_interrupt_handler(influx::interrupts::regs *context
 
     // Send EOI to the master PIC
     influx::ports::out<uint8_t>(PIC_EOI, PIC1_COMMAND);
+
+    // Check if there is a handler for this IRQ
+    if (kernel::interrupt_manager()->_irqs[irq_number].handler_address != 0) {
+        ((void (*)(regs *, void *))kernel::interrupt_manager()->_irqs[irq_number].handler_address)(
+            context, influx::kernel::interrupt_manager()->_irqs[irq_number].handler_data);
+    }
 }
 
 influx::interrupts::interrupt_manager::interrupt_manager()
