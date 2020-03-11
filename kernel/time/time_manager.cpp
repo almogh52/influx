@@ -21,6 +21,10 @@ double influx::time::time_manager::milliseconds() const {
            ((double)_timer_driver->count_frequency() / 1000.0);
 }
 
+uint64_t influx::time::time_manager::timer_frequency() const {
+    return _timer_driver->timer_frequency();
+}
+
 void influx::time::time_manager::tick() const {
     // Call all tick handlers
     for (auto handler : _tick_handlers) {

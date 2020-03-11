@@ -16,6 +16,7 @@ class time_manager {
 
     double seconds() const;
     double milliseconds() const;
+    uint64_t timer_frequency() const;
 
     void tick() const;
 
