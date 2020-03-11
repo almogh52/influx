@@ -128,7 +128,6 @@ $(OBJ_DIR)/$(BOOT_DIR)/%.o: $(BOOT_DIR)/%.c
 
 $(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-kernel.bin: ${KERNEL_OBJ_FILES} ${KERNEL_DIR}/linker.ld
 	@printf '%b' '$(LNK_COLOR)Linking kernel executable$(NO_COLOR)\n'
-	@echo ${LIBGCC_DIR}
 	@mkdir -p $(@D)
 	$(PREFIX)/$(LINK) -T${KERNEL_DIR}/linker.ld $(LDFLAGS) $(KERNEL_OBJ_FILES) -o $@
 
