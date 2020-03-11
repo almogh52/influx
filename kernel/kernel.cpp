@@ -53,6 +53,10 @@ void influx::kernel::kmain(const boot_info info) {
     console::set_console(new bga_console());
     log("BGA Console loaded.\n");
 
+    log("Loading scheduler..\n");
+    _scheduler = new threading::scheduler();
+    log("Scheduler loaded.\n");
+
     // Listen to interrupts and halt
     while (true) {
         __asm__ __volatile__("hlt");
