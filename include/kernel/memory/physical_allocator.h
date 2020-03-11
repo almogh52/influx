@@ -23,7 +23,7 @@ class physical_allocator {
 
     static vma_region_t get_bitmap_region();
 
-    static int64_t alloc_page();
+    static int64_t alloc_page(int64_t existing_page_index=-1);
     static int64_t alloc_consecutive_pages(uint64_t amount);
 
     static void free_page(uint64_t page_index);

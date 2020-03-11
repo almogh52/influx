@@ -53,11 +53,9 @@ bool influx::memory::paging_manager::map_page(uint64_t page_base_address, int64_
         get_physical_address((uint64_t)_structures_buffer.ptr);
 
     // If no physical page was given, allocate one
+    page_index = physical_allocator::alloc_page(page_index);
     if (page_index < 0) {
-        page_index = physical_allocator::alloc_page();
-        if (page_index < 0) {
-            return false;
-        }
+        return false;
     }
 
     // If the buffer for the structures is empty, allocate a new one

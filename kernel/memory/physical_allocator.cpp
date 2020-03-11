@@ -121,10 +121,10 @@ vma_region_t influx::memory::physical_allocator::get_bitmap_region() {
             .allocated = true};
 }
 
-int64_t influx::memory::physical_allocator::alloc_page() {
-    uint64_t page_index = 0;
+int64_t influx::memory::physical_allocator::alloc_page(int64_t existing_page_index) {
+    uint64_t page_index = existing_page_index >= 0 ? existing_page_index : 0;
 
-    bool found = _bitmap.search_bit(0, page_index);
+    bool found = existing_page_index < 0 ? _bitmap.search_bit(0, page_index) : true;
 
     // If found, allocate the page
     if (found) {
