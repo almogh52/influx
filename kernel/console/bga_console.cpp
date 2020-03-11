@@ -31,6 +31,8 @@ bool influx::bga_console::load() {
     ssfn_font = (ssfn_font_t *)&u_vga16_sfn;            // Set font
     ssfn_dst_ptr = (uint8_t *)_driver->video_memory();  // Set video memory
     ssfn_dst_pitch = SCREEN_WIDTH * sizeof(uint32_t);   // Set line size
+    ssfn_dst_h = SCREEN_HEIGHT;                         // Set screen height
+    ssfn_dst_w = SCREEN_WIDTH;                          // Set screen width
     ssfn_fg = DEFAULT_FOREGROUND_COLOR;                 // Set default color
     ssfn_x = 0;                                         // Set start X coordinate
     ssfn_y = 0;                                         // Set start Y coordinate
