@@ -28,6 +28,9 @@ class scheduler {
     void sleep(uint64_t ms);
     void kill_current_task();
 
+    uint64_t get_current_task_id() const;
+    uint64_t get_current_process_id() const;
+
    private:
     logger _log;
 

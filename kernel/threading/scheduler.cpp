@@ -268,6 +268,14 @@ void influx::threading::scheduler::kill_current_task() {
     reschedule();
 }
 
+uint64_t influx::threading::scheduler::get_current_task_id() const {
+    return _current_task->value().tid;
+}
+
+uint64_t influx::threading::scheduler::get_current_process_id() const {
+    return _current_task->value().pid;
+}
+
 void influx::threading::scheduler::tasks_clean_task() {
     interrupts_lock int_lk(false);
 
