@@ -16,6 +16,7 @@ struct thread {
 
     thread_state state;
     uint64_t quantum;
+    uint64_t sleep_quantum;
 };
 
 typedef structures::node<thread> tcb;

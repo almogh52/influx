@@ -25,6 +25,7 @@ class scheduler {
     const thread &create_kernel_thread(void (*func)(), void *data = nullptr);
     const thread &create_kernel_thread(void (*func)(void *), void *data);
 
+    void sleep(uint64_t ms);
     void kill_current_task();
 
    private:
@@ -43,6 +44,7 @@ class scheduler {
 
     void reschedule();
     void tick_handler();
+    void update_tasks_sleep_quantum();
 
     void tasks_clean_task();
 

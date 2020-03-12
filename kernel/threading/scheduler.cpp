@@ -46,7 +46,8 @@ influx::threading::scheduler::scheduler()
                        .context = nullptr,
                        .kernel_stack = (void *)get_stack_pointer(),
                        .state = thread_state::running,
-                       .quantum = 0});
+                       .quantum = 0,
+                       .sleep_quantum = 0});
     _priority_queues[MAX_PRIORITY_LEVEL].next_task = nullptr;
     _priority_queues[MAX_PRIORITY_LEVEL].start->prev() = _priority_queues[MAX_PRIORITY_LEVEL].start;
     _priority_queues[MAX_PRIORITY_LEVEL].start->next() = _priority_queues[MAX_PRIORITY_LEVEL].start;
@@ -56,7 +57,8 @@ influx::threading::scheduler::scheduler()
 
     // Create a thread for tasks clean
     _log("Creating thread for tasks clean..\n");
-    create_kernel_thread(utils::method_function_wrapper<scheduler, &scheduler::tasks_clean_task>, this);
+    create_kernel_thread(utils::method_function_wrapper<scheduler, &scheduler::tasks_clean_task>,
+                         this);
 
     // Register tick handler
     _log("Registering tick handler..\n");
@@ -69,19 +71,22 @@ const influx::threading::thread &influx::threading::scheduler::create_kernel_thr
     void *stack =
         memory::virtual_allocator::allocate(DEFAULT_KERNEL_STACK_SIZE, PROT_READ | PROT_WRITE);
 
-    regs *context = (regs *)((uint8_t *)stack + DEFAULT_KERNEL_STACK_SIZE - sizeof(regs) - sizeof(uint64_t));
+    regs *context =
+        (regs *)((uint8_t *)stack + DEFAULT_KERNEL_STACK_SIZE - sizeof(regs) - sizeof(uint64_t));
 
     tcb *new_task = new tcb(thread{.tid = _processes[0].threads.insert_unique(),
                                    .pid = 0,
                                    .context = context,
                                    .kernel_stack = stack,
                                    .state = thread_state::ready,
-                                   .quantum = 0});
+                                   .quantum = 0,
+                                   .sleep_quantum = 0});
 
     _log("Creating kernel thread with function %p and data %p..\n", func, data);
 
     // Set the RIP to return to when the thread is selected
-    *(uint64_t *)((uint8_t *)stack + DEFAULT_KERNEL_STACK_SIZE - sizeof(uint64_t)) = (uint64_t)new_thread_wrapper;
+    *(uint64_t *)((uint8_t *)stack + DEFAULT_KERNEL_STACK_SIZE - sizeof(uint64_t)) =
+        (uint64_t)new_thread_wrapper;
 
     // Send to the new thread wrapper the thread function and it's data
     context->rdi = (uint64_t)func;
@@ -164,6 +169,9 @@ influx::threading::tcb *influx::threading::scheduler::update_priority_queue_next
             _priority_queues[priority].next_task = new_next_task;
             break;
         }
+
+        // Move to the next node
+        new_next_task = new_next_task->next();
     }
 
     // If no new task was found, set the next task as null
@@ -175,12 +183,61 @@ influx::threading::tcb *influx::threading::scheduler::update_priority_queue_next
 }
 
 void influx::threading::scheduler::tick_handler() {
+    // Update sleeping tasks
+    update_tasks_sleep_quantum();
+
     // If the current task reached the max quantum, reschedule
     if (_current_task->value().quantum == _max_quantum) {
         reschedule();
     } else {
         _current_task->value().quantum++;
     }
+}
+
+void influx::threading::scheduler::update_tasks_sleep_quantum() {
+    interrupts_lock int_lk;
+
+    tcb *task = nullptr;
+
+    // For each priority queue
+    for (auto &priority_queue : _priority_queues) {
+        task = priority_queue.start;
+        if (task == nullptr) {
+            continue;
+        }
+
+        // For each sleeping task update sleep quantum
+        do {
+            // Update sleep quantum
+            if (task->value().state == thread_state::sleeping) {
+                task->value().sleep_quantum -= (kernel::time_manager()->timer_frequency() / 1000);
+
+                // Check if the task finished sleeping
+                if (task->value().sleep_quantum == 0) {
+                    task->value().state = thread_state::ready;
+
+                    // If there is no next task, set the new ready task as the next task
+                    if (priority_queue.next_task == nullptr) {
+                        priority_queue.next_task = task;
+                    }
+                }
+            }
+
+            // Move to the next task
+            task = task->next();
+        } while (task != priority_queue.start);
+    }
+}
+
+void influx::threading::scheduler::sleep(uint64_t ms) {
+    // Set the task's sleep quantum
+    _current_task->value().sleep_quantum = ms * (kernel::time_manager()->timer_frequency() / 1000);
+
+    // Set the task's state to sleeping
+    _current_task->value().state = thread_state::sleeping;
+
+    // Re-schedule to another task
+    reschedule();
 }
 
 void influx::threading::scheduler::kill_current_task() {
@@ -207,7 +264,7 @@ void influx::threading::scheduler::kill_current_task() {
     // Unlock the interrupts lock
     int_lk.unlock();
 
-    // Re-schedule to the another task
+    // Re-schedule to another task
     reschedule();
 }
 
@@ -240,7 +297,7 @@ void influx::threading::scheduler::tasks_clean_task() {
                 task_process.threads.begin(), task_process.threads.end(), task->value().tid));
 
             // Free the task kernel stack
-            delete[] (uint64_t *)task->value().kernel_stack;
+            delete[](uint64_t *) task->value().kernel_stack;
 
             // Free the task object
             delete task;
