@@ -18,12 +18,13 @@ class vector {
     typedef const_pointer const_iterator;
     typedef memblock::size_type size_type;
 
-    vector(void) {};
+    vector(void){};
     explicit vector(size_type n);
     vector(const vector& v);
     vector(const_iterator i1, const_iterator i2);
 
     void resize(size_type n);
+    iterator erase(const_iterator pos);
     inline const vector& operator=(const vector& v) {
         _data.assign(v._data);
         return *this;
@@ -71,7 +72,10 @@ class vector {
     inline void clear(void) { _data.clear(); }
     void push_back(const T& v);
     void pop_back(void);
-    inline const vector& operator+=(const T& v) { push_back(v); return *this; }
+    inline const vector& operator+=(const T& v) {
+        push_back(v);
+        return *this;
+    }
 
    private:
     memblock _data;
@@ -127,4 +131,24 @@ void influx::structures::vector<T>::pop_back() {
 
     // Resize the vector to remove the element
     resize(capacity() - 1);
+}
+
+template <class T>
+T* influx::structures::vector<T>::erase(const T* pos) {
+    kassert(pos >= begin() && pos <= end());
+
+    uint64_t element_index = pos - begin();
+
+    // If the pos isn't the end of the vector
+    if (pos != end()) {
+        // Move the following elements
+        memory::utils::memcpy((void *)pos, pos + 1, size() - element_index - 1);
+
+        // Resize the vector
+        resize(size() - 1);
+
+        return iat(element_index);
+    } else {
+        return end();
+    }
 }
