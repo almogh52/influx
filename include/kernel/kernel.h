@@ -16,6 +16,7 @@ class kernel {
     inline static interrupts::interrupt_manager *interrupt_manager() { return _interrupt_manager; }
     inline static drivers::driver_manager *driver_manager() { return _driver_manager; }
     inline static time::time_manager *time_manager() { return _time_manager; }
+    inline static threading::scheduler *scheduler() { return _scheduler; }
 
    private:
     inline static interrupts::interrupt_manager *_interrupt_manager = nullptr;

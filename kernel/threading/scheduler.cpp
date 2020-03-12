@@ -1,5 +1,6 @@
 #include <kernel/threading/scheduler.h>
 
+#include <kernel/algorithm.h>
 #include <kernel/assert.h>
 #include <kernel/kernel.h>
 #include <kernel/memory/virtual_allocator.h>
@@ -16,7 +17,8 @@ void influx::threading::new_thread_wrapper(void (*func)(void *), void *data) {
     // Call the thread function
     func(data);
 
-    // TODO: Kill the task
+    // Kill the task
+    kernel::scheduler()->kill_current_task();
 }
 
 influx::threading::scheduler::scheduler()
@@ -33,7 +35,6 @@ influx::threading::scheduler::scheduler()
                               .priority = MAX_PRIORITY_LEVEL,
                               .system = true,
                               .cr3 = scheduler_utils::get_cr3(),
-                              .kernel_stack = 0,
                               .threads = structures::unique_vector(),
                               .name = "kernel"});
 
@@ -43,6 +44,7 @@ influx::threading::scheduler::scheduler()
         new tcb(thread{.tid = _processes[0].threads.insert_unique(),
                        .pid = 0,
                        .context = nullptr,
+                       .kernel_stack = (void *)get_stack_pointer(),
                        .state = thread_state::running,
                        .quantum = 0});
     _priority_queues[MAX_PRIORITY_LEVEL].next_task = nullptr;
@@ -51,6 +53,10 @@ influx::threading::scheduler::scheduler()
 
     // Set the current task as the kernel main thread
     _current_task = _priority_queues[MAX_PRIORITY_LEVEL].start;
+
+    // Create a thread for tasks clean
+    _log("Creating thread for tasks clean..\n");
+    create_kernel_thread(utils::method_function_wrapper<scheduler, &scheduler::tasks_clean_task>, this);
 
     // Register tick handler
     _log("Registering tick handler..\n");
@@ -63,16 +69,19 @@ const influx::threading::thread &influx::threading::scheduler::create_kernel_thr
     void *stack =
         memory::virtual_allocator::allocate(DEFAULT_KERNEL_STACK_SIZE, PROT_READ | PROT_WRITE);
 
-    regs *context = (regs *)((uint8_t *)stack + DEFAULT_KERNEL_STACK_SIZE - sizeof(regs) - 8);
+    regs *context = (regs *)((uint8_t *)stack + DEFAULT_KERNEL_STACK_SIZE - sizeof(regs) - sizeof(uint64_t));
 
     tcb *new_task = new tcb(thread{.tid = _processes[0].threads.insert_unique(),
                                    .pid = 0,
                                    .context = context,
+                                   .kernel_stack = stack,
                                    .state = thread_state::ready,
                                    .quantum = 0});
 
+    _log("Creating kernel thread with function %p and data %p..\n", func, data);
+
     // Set the RIP to return to when the thread is selected
-    *(uint64_t *)((uint8_t *)stack + DEFAULT_KERNEL_STACK_SIZE - 8) = (uint64_t)new_thread_wrapper;
+    *(uint64_t *)((uint8_t *)stack + DEFAULT_KERNEL_STACK_SIZE - sizeof(uint64_t)) = (uint64_t)new_thread_wrapper;
 
     // Send to the new thread wrapper the thread function and it's data
     context->rdi = (uint64_t)func;
@@ -128,8 +137,6 @@ void influx::threading::scheduler::reschedule() {
 }
 
 influx::threading::tcb *influx::threading::scheduler::get_next_task() {
-    process current_process = _processes[_current_task->value().pid];
-
     // Search for new task starting in the highest priority level
     for (int16_t i = MAX_PRIORITY_LEVEL; i >= 0; i--) {
         if (_priority_queues[i].next_task != nullptr) {
@@ -176,19 +183,113 @@ void influx::threading::scheduler::tick_handler() {
     }
 }
 
+void influx::threading::scheduler::kill_current_task() {
+    interrupts_lock int_lk;
+
+    process &current_process = _processes[_current_task->value().pid];
+    priority_tcb_queue &task_priority_queue = _priority_queues[current_process.priority];
+
+    // If the current task is the first task in the priority queue, set the start as the next task
+    if (task_priority_queue.start == _current_task) {
+        task_priority_queue.start = _current_task->next();
+    }
+
+    // Remove the task from the priority queue
+    _current_task->prev()->next() = _current_task->next();
+    _current_task->next()->prev() = _current_task->prev();
+
+    // Add the task to the killed tasks queue
+    _killed_tasks_queue.push_back(_current_task);
+
+    // Set the task as killed
+    _current_task->value().state = thread_state::killed;
+
+    // Unlock the interrupts lock
+    int_lk.unlock();
+
+    // Re-schedule to the another task
+    reschedule();
+}
+
+void influx::threading::scheduler::tasks_clean_task() {
+    interrupts_lock int_lk(false);
+
+    while (true) {
+        structures::vector<tcb *> killed_tasks_queue;
+
+        // Create a copy of the current killed tasks queue
+        int_lk.lock();
+        killed_tasks_queue = _killed_tasks_queue;
+        _killed_tasks_queue.clear();
+        int_lk.unlock();
+
+        // For each task to be killed
+        for (tcb *&task : killed_tasks_queue) {
+            // Create a copy of the process struct of the task
+            int_lk.lock();
+            process task_process = _processes[task->value().pid];
+            int_lk.unlock();
+
+            // If the process is a user process
+            if (!task_process.system) {
+                // TODO: Handle user tasks kill
+            }
+
+            // Remove the thread from the threads list of the process
+            task_process.threads.erase(algorithm::find(
+                task_process.threads.begin(), task_process.threads.end(), task->value().tid));
+
+            // Free the task kernel stack
+            delete[] (uint64_t *)task->value().kernel_stack;
+
+            // Free the task object
+            delete task;
+
+            // If the process has no threads left, kill the process
+            if (task_process.threads.empty()) {
+                if (!task_process.system) {
+                    // TODO: Handle user process kill
+                }
+
+                // Delete the process object
+                int_lk.lock();
+                _processes.erase(task_process.pid);
+                int_lk.unlock();
+            } else {
+                // Update the process object
+                _processes[task_process.pid] = task_process;
+            }
+        }
+
+        // Reschedule the task
+        reschedule();
+    }
+}
+
 void influx::threading::scheduler::queue_task(influx::threading::tcb *task) {
     interrupts_lock int_lk;
 
     process &new_task_process = _processes[task->value().pid];
+    priority_tcb_queue &new_task_priority_queue = _priority_queues[new_task_process.priority];
+
+    _log("Queuing task %p..\n", task);
 
     // Insert the task into the priority queue linked list
-    _priority_queues[new_task_process.priority].start->prev()->next() = task;
-    task->prev() = _priority_queues[new_task_process.priority].start->prev();
-    task->next() = _priority_queues[new_task_process.priority].start;
-    _priority_queues[new_task_process.priority].start->prev() = task;
+    new_task_priority_queue.start->prev()->next() = task;
+    task->prev() = new_task_priority_queue.start->prev();
+    task->next() = new_task_priority_queue.start;
+    new_task_priority_queue.start->prev() = task;
 
     // Check if there is no next task
-    if (_priority_queues[new_task_process.priority].next_task == nullptr) {
-        _priority_queues[new_task_process.priority].next_task = task;
+    if (new_task_priority_queue.next_task == nullptr) {
+        new_task_priority_queue.next_task = task;
     }
+}
+
+uint64_t influx::threading::scheduler::get_stack_pointer() const {
+    uint64_t rsp;
+
+    __asm__ __volatile__("mov %0, rsp" : "=r"(rsp));
+
+    return rsp;
 }

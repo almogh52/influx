@@ -16,7 +16,6 @@ struct process {
     bool system;
 
     uint64_t cr3 __attribute__((packed));
-    uint64_t kernel_stack;
 
     structures::unique_vector threads;
 

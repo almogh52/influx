@@ -25,11 +25,14 @@ class scheduler {
     const thread &create_kernel_thread(void (*func)(), void *data = nullptr);
     const thread &create_kernel_thread(void (*func)(void *), void *data);
 
+    void kill_current_task();
+
    private:
     logger _log;
 
     structures::unique_hash_map<process> _processes;
     structures::vector<priority_tcb_queue> _priority_queues;
+    structures::vector<tcb *> _killed_tasks_queue;
 
     tcb *_current_task;
 
@@ -41,7 +44,11 @@ class scheduler {
     void reschedule();
     void tick_handler();
 
+    void tasks_clean_task();
+
     void queue_task(tcb *task);
+
+    uint64_t get_stack_pointer() const;
 };
 };  // namespace threading
 };  // namespace influx
