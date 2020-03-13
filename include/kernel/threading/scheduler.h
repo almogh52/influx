@@ -38,6 +38,7 @@ class scheduler {
     structures::vector<priority_tcb_queue> _priority_queues;
     structures::vector<tcb *> _killed_tasks_queue;
 
+    tcb *_idle_task;
     tcb *_current_task;
 
     uint64_t _max_quantum;
@@ -50,6 +51,7 @@ class scheduler {
     void update_tasks_sleep_quantum();
 
     void tasks_clean_task();
+    void idle_task();
 
     void queue_task(tcb *task);
 

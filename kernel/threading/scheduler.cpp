@@ -52,6 +52,25 @@ influx::threading::scheduler::scheduler()
     _priority_queues[MAX_PRIORITY_LEVEL].start->prev() = _priority_queues[MAX_PRIORITY_LEVEL].start;
     _priority_queues[MAX_PRIORITY_LEVEL].start->next() = _priority_queues[MAX_PRIORITY_LEVEL].start;
 
+    // Create kernel idle thread
+    _log("Creating kernel idle thread..\n");
+    _idle_task = new tcb(thread({.tid = _processes[0].threads.insert_unique(),
+                                 .pid = 0,
+                                 .context = nullptr,
+                                 .kernel_stack = memory::virtual_allocator::allocate(
+                                     DEFAULT_KERNEL_STACK_SIZE, PROT_READ | PROT_WRITE),
+                                 .state = thread_state::running,
+                                 .quantum = 0,
+                                 .sleep_quantum = 0}));
+    _idle_task->value().context =
+        (regs *)((uint8_t *)_idle_task->value().kernel_stack + DEFAULT_KERNEL_STACK_SIZE -
+                 sizeof(regs) - sizeof(uint64_t));  // Set context pointer
+    *(uint64_t *)((uint8_t *)_idle_task->value().kernel_stack + DEFAULT_KERNEL_STACK_SIZE -
+                  sizeof(uint64_t)) = (uint64_t)
+        utils::method_function_wrapper<scheduler, &scheduler::idle_task>;  // Set idle task function
+    _idle_task->value().context->rdi =
+        (uint64_t)this;  // Send this object to the idle task function
+
     // Set the current task as the kernel main thread
     _current_task = _priority_queues[MAX_PRIORITY_LEVEL].start;
 
@@ -112,32 +131,30 @@ void influx::threading::scheduler::reschedule() {
     // If there isn't a next task and the current task isn't blocked, keep running it
     if (next_task == nullptr && current_task->value().state == thread_state::running) {
         next_task = current_task;
+    } else if (next_task == nullptr)  // If there isn't no ready task, jump to the idle task
+    {
+        next_task = _idle_task;
     }
 
     // Set the current task as the new task
     _current_task = next_task;
 
-    // Check that there is a next task to be executed
-    if (next_task != nullptr) {
-        // Reset the quantum of the current task
-        current_task->value().quantum = 0;
+    // Reset the quantum of the current task
+    current_task->value().quantum = 0;
 
-        // Reset the state of the current task if it's not blocked
-        if (current_task->value().state == thread_state::running) {
-            current_task->value().state = thread_state::ready;
-        }
+    // Reset the state of the current task if it's not blocked
+    if (current_task->value().state == thread_state::running) {
+        current_task->value().state = thread_state::ready;
+    }
 
-        // Set the new state of the new task
-        next_task->value().state = thread_state::running;
+    // Set the new state of the new task
+    next_task->value().state = thread_state::running;
 
-        // Don't switch tasks if the new task is the current task
-        if (next_task != current_task) {
-            // Switch to the new task
-            scheduler_utils::switch_task(&current_task->value(), &next_task->value(),
-                                         &_processes[next_task->value().pid]);
-        }
-    } else {
-        // TODO: Switch to idle thread
+    // Don't switch tasks if the new task is the current task
+    if (next_task != current_task) {
+        // Switch to the new task
+        scheduler_utils::switch_task(&current_task->value(), &next_task->value(),
+                                     &_processes[next_task->value().pid]);
     }
 }
 
@@ -327,6 +344,18 @@ void influx::threading::scheduler::tasks_clean_task() {
         }
 
         // Reschedule the task
+        reschedule();
+    }
+}
+
+void influx::threading::scheduler::idle_task() {
+    // Enable interrupts
+    kernel::interrupt_manager()->enable_interrupts();
+
+    while (true) {
+        __asm__ __volatile__("hlt");  // Wait for interrupt
+
+        // Try to reschedule to another task since probably some task is available
         reschedule();
     }
 }
