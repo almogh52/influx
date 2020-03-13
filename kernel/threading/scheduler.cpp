@@ -53,7 +53,7 @@ influx::threading::scheduler::scheduler()
     _priority_queues[MAX_PRIORITY_LEVEL].start->next() = _priority_queues[MAX_PRIORITY_LEVEL].start;
 
     // Create kernel idle thread
-    _log("Creating kernel idle thread..\n");
+    _log("Creating scheduler idle thread..\n");
     _idle_task = new tcb(thread({.tid = _processes[0].threads.insert_unique(),
                                  .pid = 0,
                                  .context = nullptr,
@@ -75,9 +75,9 @@ influx::threading::scheduler::scheduler()
     _current_task = _priority_queues[MAX_PRIORITY_LEVEL].start;
 
     // Create a thread for tasks clean
-    _log("Creating thread for tasks clean..\n");
-    create_kernel_thread(utils::method_function_wrapper<scheduler, &scheduler::tasks_clean_task>,
-                         this);
+    _log("Creating scheduler tasks clean thread..\n");
+    _tasks_clean_task = create_kernel_thread(
+        utils::method_function_wrapper<scheduler, &scheduler::tasks_clean_task>, this, true);
 
     // Register tick handler
     _log("Registering tick handler..\n");
@@ -85,8 +85,9 @@ influx::threading::scheduler::scheduler()
         utils::method_function_wrapper<scheduler, &scheduler::tick_handler>, this);
 }
 
-const influx::threading::thread &influx::threading::scheduler::create_kernel_thread(void (*func)(),
-                                                                                    void *data) {
+influx::threading::tcb *influx::threading::scheduler::create_kernel_thread(void (*func)(),
+                                                                           void *data,
+                                                                           bool blocked) {
     void *stack =
         memory::virtual_allocator::allocate(DEFAULT_KERNEL_STACK_SIZE, PROT_READ | PROT_WRITE);
 
@@ -97,7 +98,7 @@ const influx::threading::thread &influx::threading::scheduler::create_kernel_thr
                                    .pid = 0,
                                    .context = context,
                                    .kernel_stack = stack,
-                                   .state = thread_state::ready,
+                                   .state = blocked ? thread_state::blocked : thread_state::ready,
                                    .quantum = 0,
                                    .sleep_quantum = 0});
 
@@ -114,12 +115,13 @@ const influx::threading::thread &influx::threading::scheduler::create_kernel_thr
     // Queue the task
     queue_task(new_task);
 
-    return new_task->value();
+    return new_task;
 }
 
-const influx::threading::thread &influx::threading::scheduler::create_kernel_thread(
-    void (*func)(void *), void *data) {
-    return create_kernel_thread((void (*)())func, data);
+influx::threading::tcb *influx::threading::scheduler::create_kernel_thread(void (*func)(void *),
+                                                                           void *data,
+                                                                           bool blocked) {
+    return create_kernel_thread((void (*)())func, data, blocked);
 }
 
 void influx::threading::scheduler::reschedule() {
@@ -247,6 +249,8 @@ void influx::threading::scheduler::update_tasks_sleep_quantum() {
 }
 
 void influx::threading::scheduler::sleep(uint64_t ms) {
+    kassert(ms != 0);
+
     // Set the task's sleep quantum
     _current_task->value().sleep_quantum = ms * (kernel::time_manager()->timer_frequency() / 1000);
 
@@ -281,8 +285,53 @@ void influx::threading::scheduler::kill_current_task() {
     // Unlock the interrupts lock
     int_lk.unlock();
 
+    // Unblock the tasks clean task
+    unblock_task(_tasks_clean_task);
+
     // Re-schedule to another task
     reschedule();
+}
+
+void influx::threading::scheduler::block_task(influx::threading::tcb *task) {
+    interrupts_lock int_lk;
+
+    process &task_process = _processes[task->value().pid];
+    priority_tcb_queue &task_priority_queue = _priority_queues[task_process.priority];
+
+    // If the task isn't already blocked
+    if (task->value().state != thread_state::blocked) {
+        if (task_priority_queue.next_task == task) {
+            // Remove the task as the next task and update the priority queue
+            update_priority_queue_next_task(task_process.priority);
+        }
+
+        // Set the task state as blocked
+        task->value().state = thread_state::blocked;
+    }
+}
+
+void influx::threading::scheduler::block_current_task() {
+    // Block this task and reschedule to another task
+    block_task(_current_task);
+    reschedule();
+}
+
+void influx::threading::scheduler::unblock_task(influx::threading::tcb *task) {
+    interrupts_lock int_lk;
+
+    process &task_process = _processes[task->value().pid];
+    priority_tcb_queue &task_priority_queue = _priority_queues[task_process.priority];
+
+    // If the task is blocked
+    if (task->value().state == thread_state::blocked) {
+        // Update the state of the task to ready
+        task->value().state = thread_state::ready;
+
+        // Check if the task's priority queue doesn't have a next task
+        if (task_priority_queue.next_task == nullptr) {
+            task_priority_queue.next_task = task;
+        }
+    }
 }
 
 uint64_t influx::threading::scheduler::get_current_task_id() const {
@@ -343,8 +392,8 @@ void influx::threading::scheduler::tasks_clean_task() {
             }
         }
 
-        // Reschedule the task
-        reschedule();
+        // Block this task
+        block_current_task();
     }
 }
 
@@ -374,8 +423,9 @@ void influx::threading::scheduler::queue_task(influx::threading::tcb *task) {
     task->next() = new_task_priority_queue.start;
     new_task_priority_queue.start->prev() = task;
 
-    // Check if there is no next task
-    if (new_task_priority_queue.next_task == nullptr) {
+    // Check if there is no next task and the new task is ready
+    if (new_task_priority_queue.next_task == nullptr &&
+        task->value().state == thread_state::ready) {
         new_task_priority_queue.next_task = task;
     }
 }

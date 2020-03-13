@@ -22,11 +22,15 @@ class scheduler {
    public:
     scheduler();
 
-    const thread &create_kernel_thread(void (*func)(), void *data = nullptr);
-    const thread &create_kernel_thread(void (*func)(void *), void *data);
+    tcb *create_kernel_thread(void (*func)(), void *data = nullptr, bool blocked = false);
+    tcb *create_kernel_thread(void (*func)(void *), void *data, bool blocked = false);
 
     void sleep(uint64_t ms);
     void kill_current_task();
+
+    void block_task(tcb *task);
+    void block_current_task();
+    void unblock_task(tcb *task);
 
     uint64_t get_current_task_id() const;
     uint64_t get_current_process_id() const;
@@ -38,6 +42,7 @@ class scheduler {
     structures::vector<priority_tcb_queue> _priority_queues;
     structures::vector<tcb *> _killed_tasks_queue;
 
+    tcb *_tasks_clean_task;
     tcb *_idle_task;
     tcb *_current_task;
 
