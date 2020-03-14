@@ -334,6 +334,10 @@ void influx::threading::scheduler::unblock_task(influx::threading::tcb *task) {
     }
 }
 
+influx::threading::tcb *influx::threading::scheduler::get_current_task() const {
+    return _current_task;
+}
+
 uint64_t influx::threading::scheduler::get_current_task_id() const {
     return _current_task->value().tid;
 }

@@ -60,7 +60,11 @@ class scheduler {
 
     void queue_task(tcb *task);
 
+    tcb *get_current_task() const;
+
     uint64_t get_stack_pointer() const;
+
+    friend class mutex;
 };
 };  // namespace threading
 };  // namespace influx
