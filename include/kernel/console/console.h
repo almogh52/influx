@@ -1,6 +1,7 @@
 #pragma once
 #include <kernel/logger.h>
 #include <kernel/structures/string.h>
+#include <kernel/threading/mutex.h>
 #include <stdarg.h>
 
 namespace influx {
@@ -36,6 +37,7 @@ class console {
 
    private:
     inline static logger _log = logger("Console Manager", console_color::green);
+    inline static threading::mutex _mutex;
     inline static console *_console = nullptr;
     inline static structures::string _history = "";
 };

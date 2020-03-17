@@ -5,6 +5,7 @@
 #include <kernel/drivers/graphics/bga/bga.h>
 #include <kernel/logger.h>
 #include <stdint.h>
+#include <kernel/threading/mutex.h>
 
 #define GLYPH_WIDTH 8
 #define GLYPH_HEIGHT 16
@@ -33,7 +34,9 @@ class bga_console : public console {
 
    private:
     logger _log;
+
     drivers::graphics::bga *_driver;
+    threading::mutex _mutex;
 
     void scroll();
     void new_line();

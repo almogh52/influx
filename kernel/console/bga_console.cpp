@@ -3,6 +3,7 @@
 #include <kernel/console/bga_u_vga16_font.h>
 #include <kernel/kernel.h>
 #include <kernel/memory/utils.h>
+#include <kernel/threading/unique_lock.h>
 
 // Ignore warnings
 #pragma GCC diagnostic push
@@ -41,6 +42,13 @@ bool influx::bga_console::load() {
 }
 
 void influx::bga_console::stdout_putchar(char c) {
+    threading::unique_lock lk(_mutex, threading::defer_lock);
+
+    // If the scheduler has started, lock the mutex
+    if (kernel::scheduler() != nullptr && kernel::scheduler()->started()) {
+        lk.lock();
+    }
+
     // If the character is for a new line
     if (c == '\n' || c == '\r') {
         new_line();

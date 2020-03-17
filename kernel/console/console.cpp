@@ -2,6 +2,8 @@
 
 #include <kernel/assert.h>
 #include <kernel/format.h>
+#include <kernel/kernel.h>
+#include <kernel/threading/unique_lock.h>
 #include <stdarg.h>
 
 influx::console *influx::console::get_console() { return _console; }
@@ -42,6 +44,13 @@ void influx::console::putchar(char c) { influx::console::putchar(output_stream::
 void influx::console::putchar(influx::output_stream stream, char c) {
     // Check for valid console
     kassert(_console != nullptr);
+
+    threading::unique_lock lk(_mutex, threading::defer_lock);
+
+    // If the scheduler is initialized, lock the mutex
+    if (kernel::scheduler() != nullptr && kernel::scheduler()->started()) {
+        lk.lock();
+    }
 
     // Print by the stream type
     if (stream == output_stream::stdout) {
@@ -84,6 +93,13 @@ void influx::console::print(const char *fmt, ...) {
 void influx::console::print(influx::output_stream stream, influx::structures::string str) {
     // Check for valid console
     kassert(_console != nullptr);
+
+    threading::unique_lock lk(_mutex, threading::defer_lock);
+
+    // If the scheduler is initialized, lock the mutex
+    if (kernel::scheduler() != nullptr && kernel::scheduler()->started()) {
+        lk.lock();
+    }
 
     // Print by the stream type
     if (stream == output_stream::stdout) {
