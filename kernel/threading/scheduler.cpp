@@ -268,8 +268,10 @@ void influx::threading::scheduler::kill_current_task() {
     priority_tcb_queue &task_priority_queue = _priority_queues[current_process.priority];
 
     // If the current task is the first task in the priority queue, set the start as the next task
-    if (task_priority_queue.start == _current_task) {
+    if (task_priority_queue.start == _current_task && _current_task->next() != _current_task) {
         task_priority_queue.start = _current_task->next();
+    } else if (task_priority_queue.start == _current_task) {
+        task_priority_queue.start = nullptr;
     }
 
     // Remove the task from the priority queue
