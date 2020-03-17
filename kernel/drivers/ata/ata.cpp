@@ -8,17 +8,27 @@
 
 void influx::drivers::ata::primary_irq(influx::interrupts::regs *context,
                                        influx::drivers::ata::ata *ata) {
-    // Notify the ATA driver for primary irq
-    while (!__sync_bool_compare_and_swap(&ata->_primary_irq_called, 0, 1)) {
-        __sync_synchronize();
+    // If the scheduler is loaded
+    if (kernel::scheduler() != nullptr) {
+        ata->_primary_irq_notifier.notify();
+    } else {
+        // Notify the ATA driver for primary irq
+        while (!__sync_bool_compare_and_swap(&ata->_primary_irq_called, 0, 1)) {
+            __sync_synchronize();
+        }
     }
 }
 
 void influx::drivers::ata::secondary_irq(influx::interrupts::regs *context,
                                          influx::drivers::ata::ata *ata) {
-    // Notify the ATA driver for secondary irq
-    while (!__sync_bool_compare_and_swap(&ata->_secondary_irq_called, 0, 1)) {
-        __sync_synchronize();
+    // If the scheduler is loaded
+    if (kernel::scheduler() != nullptr) {
+        ata->_secondary_irq_notifier.notify();
+    } else {
+        // Notify the ATA driver for secondary irq
+        while (!__sync_bool_compare_and_swap(&ata->_secondary_irq_called, 0, 1)) {
+            __sync_synchronize();
+        }
     }
 }
 
@@ -58,16 +68,26 @@ void influx::drivers::ata::ata::load() {
 }
 
 void influx::drivers::ata::ata::wait_for_primary_irq() {
-    // Wait for the IRQ notifiction and reset the variable
-    while (!__sync_bool_compare_and_swap(&_primary_irq_called, 1, 0)) {
-        __sync_synchronize();
+    // If the scheduler is loaded
+    if (kernel::scheduler() != nullptr) {
+        _primary_irq_notifier.wait();
+    } else {
+        // Wait for the IRQ notifiction and reset the variable
+        while (!__sync_bool_compare_and_swap(&_primary_irq_called, 1, 0)) {
+            __sync_synchronize();
+        }
     }
 }
 
 void influx::drivers::ata::ata::wait_for_secondary_irq() {
-    // Wait for the IRQ notifiction and reset the variable
-    while (!__sync_bool_compare_and_swap(&_secondary_irq_called, 1, 0)) {
-        __sync_synchronize();
+    // If the scheduler is loaded
+    if (kernel::scheduler() != nullptr) {
+        _secondary_irq_notifier.wait();
+    } else {
+        // Wait for the IRQ notifiction and reset the variable
+        while (!__sync_bool_compare_and_swap(&_secondary_irq_called, 1, 0)) {
+            __sync_synchronize();
+        }
     }
 }
 

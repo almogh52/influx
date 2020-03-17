@@ -8,6 +8,7 @@
 #include <kernel/interrupts/interrupt_regs.h>
 #include <kernel/structures/string.h>
 #include <kernel/structures/vector.h>
+#include <kernel/threading/irq_notifier.h>
 
 #define MAX_ATA_STRING_LENGTH 100
 
@@ -35,6 +36,8 @@ class ata : public driver {
     structures::vector<drive> _drives;
 
     uint32_t _primary_irq_called, _secondary_irq_called;
+
+    threading::irq_notifier _primary_irq_notifier, _secondary_irq_notifier;
 
     void wait_for_primary_irq();
     void wait_for_secondary_irq();
