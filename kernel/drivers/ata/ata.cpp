@@ -9,7 +9,7 @@
 void influx::drivers::ata::primary_irq(influx::interrupts::regs *context,
                                        influx::drivers::ata::ata *ata) {
     // If the scheduler is loaded
-    if (kernel::scheduler() != nullptr) {
+    if (kernel::scheduler() != nullptr && kernel::scheduler()->started()) {
         ata->_primary_irq_notifier.notify();
     } else {
         // Notify the ATA driver for primary irq
@@ -22,7 +22,7 @@ void influx::drivers::ata::primary_irq(influx::interrupts::regs *context,
 void influx::drivers::ata::secondary_irq(influx::interrupts::regs *context,
                                          influx::drivers::ata::ata *ata) {
     // If the scheduler is loaded
-    if (kernel::scheduler() != nullptr) {
+    if (kernel::scheduler() != nullptr && kernel::scheduler()->started()) {
         ata->_secondary_irq_notifier.notify();
     } else {
         // Notify the ATA driver for secondary irq
@@ -69,7 +69,7 @@ void influx::drivers::ata::ata::load() {
 
 void influx::drivers::ata::ata::wait_for_primary_irq() {
     // If the scheduler is loaded
-    if (kernel::scheduler() != nullptr) {
+    if (kernel::scheduler() != nullptr && kernel::scheduler()->started()) {
         _primary_irq_notifier.wait();
     } else {
         // Wait for the IRQ notifiction and reset the variable
@@ -81,7 +81,7 @@ void influx::drivers::ata::ata::wait_for_primary_irq() {
 
 void influx::drivers::ata::ata::wait_for_secondary_irq() {
     // If the scheduler is loaded
-    if (kernel::scheduler() != nullptr) {
+    if (kernel::scheduler() != nullptr && kernel::scheduler()->started()) {
         _secondary_irq_notifier.wait();
     } else {
         // Wait for the IRQ notifiction and reset the variable

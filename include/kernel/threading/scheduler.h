@@ -22,6 +22,8 @@ class scheduler {
    public:
     scheduler();
 
+    bool started() const;
+
     tcb *create_kernel_thread(void (*func)(), void *data = nullptr, bool blocked = false);
     tcb *create_kernel_thread(void (*func)(void *), void *data, bool blocked = false);
 
@@ -37,6 +39,8 @@ class scheduler {
 
    private:
     logger _log;
+
+    bool _started;
 
     structures::unique_hash_map<process> _processes;
     structures::vector<priority_tcb_queue> _priority_queues;

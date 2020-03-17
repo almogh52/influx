@@ -23,6 +23,7 @@ void influx::threading::new_thread_wrapper(void (*func)(void *), void *data) {
 
 influx::threading::scheduler::scheduler()
     : _log("Scheduler", console_color::blue),
+      _started(false),
       _priority_queues(MAX_PRIORITY_LEVEL + 1),
       _current_task(nullptr),
       _max_quantum((kernel::time_manager()->timer_frequency() / 1000) * TASK_MAX_TIME_SLICE) {
@@ -83,7 +84,12 @@ influx::threading::scheduler::scheduler()
     _log("Registering tick handler..\n");
     kernel::time_manager()->register_tick_handler(
         utils::method_function_wrapper<scheduler, &scheduler::tick_handler>, this);
+
+    // Set the scheduler as started
+    _started = true;
 }
+
+bool influx::threading::scheduler::started() const { return _started; }
 
 influx::threading::tcb *influx::threading::scheduler::create_kernel_thread(void (*func)(),
                                                                            void *data,
