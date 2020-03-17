@@ -44,4 +44,38 @@ influx::threading::tcb *influx::threading::task_wait_queue::dequeue() {
     return task;
 }
 
-bool influx::threading::task_wait_queue::empty() const { return _queue_head == nullptr; }
+influx::structures::vector<influx::threading::tcb *>
+influx::threading::task_wait_queue::dequeue_all() {
+    lock_guard<spinlock> lk(_queue_lock);
+    kassert(_queue_head != nullptr);
+
+    structures::vector<tcb *> tasks;
+    structures::node<tcb *> *current_task;
+
+    // Make the list a flat list
+    _queue_head->prev()->next() = nullptr;
+
+    // While we didn't reach the end of the list
+    while (_queue_head != nullptr) {
+        // Add the task to the vector of tasks
+        tasks += _queue_head->value();
+
+        // Unblock the task
+        kernel::scheduler()->unblock_task(_queue_head->value());
+
+        // Move to the next task
+        current_task = _queue_head;
+        _queue_head = _queue_head->next();
+
+        // Free the current task node
+        delete current_task;
+    }
+
+    return tasks;
+}
+
+bool influx::threading::task_wait_queue::empty() {
+    lock_guard<spinlock> lk(_queue_lock);
+
+    return _queue_head == nullptr;
+}

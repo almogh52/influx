@@ -65,6 +65,7 @@ class scheduler {
     uint64_t get_stack_pointer() const;
 
     friend class mutex;
+    friend class condition_variable;
 };
 };  // namespace threading
 };  // namespace influx
