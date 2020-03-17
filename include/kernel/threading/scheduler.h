@@ -66,6 +66,7 @@ class scheduler {
 
     friend class mutex;
     friend class condition_variable;
+    friend class irq_notifier;
 };
 };  // namespace threading
 };  // namespace influx
