@@ -1,5 +1,6 @@
 #pragma once
 #include <kernel/drivers/ata/bus.h>
+#include <kernel/format.h>
 #include <kernel/structures/string.h>
 #include <stdint.h>
 
@@ -14,6 +15,10 @@ struct drive {
     structures::string serial_number;
     structures::string model_number;
     structures::string firmware_revision;
+
+    inline const structures::string to_string() const {
+        return format("ATA-%d:%d", !(controller == ata_primary_bus), slave);
+    };
 };
 
 inline bool operator==(const drive& a, const drive& b) {

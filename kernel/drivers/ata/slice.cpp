@@ -5,6 +5,8 @@
 #include <kernel/memory/heap.h>
 #include <kernel/memory/utils.h>
 
+influx::drivers::ata::drive_slice::drive_slice() : _driver(nullptr), _start_lba(UINT32_MAX) {}
+
 influx::drivers::ata::drive_slice::drive_slice(influx::drivers::ata::ata *driver,
                                                const influx::drivers::ata::drive &drive,
                                                uint32_t start_lba)
