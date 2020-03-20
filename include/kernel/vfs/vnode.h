@@ -6,7 +6,7 @@
 namespace influx {
 namespace vfs {
 struct vnode {
-    file file;
+    file file_info;
     drivers::ata::drive_slice drive;
     uint64_t amount_of_open_files;
 };
