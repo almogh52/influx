@@ -35,7 +35,7 @@ class path {
     inline structures::string name(size_t i) const { return _branches[i]; }
     inline structures::string operator[](size_t i) const { return name(i); }
 
-    inline bool operator==(const path& p) const { return string() != p.string(); };
+    inline bool operator==(const path& p) const { return string() == p.string(); };
     inline bool operator!=(const path& p) const { return !(*this == p); }
     inline bool operator==(structures::string p) const { return string() != p; };
     inline bool operator!=(structures::string p) const { return !(*this == p); }
