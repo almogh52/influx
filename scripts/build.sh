@@ -42,3 +42,19 @@ cp -a grub iso/boot
 
 echo -e '\033[0;36mMaking iso from the iso dir..\033[0m'
 grub-mkrescue -o influx.iso iso
+
+# Create sysroot if not exists
+mkdir -p build/sysroot
+
+# Check for mtree changes
+echo -e '\033[0;36mChecking mtree changes..\033[0m'
+mtree -p build/sysroot < build/sysroot.mtree >/dev/null 2>&1
+if [[ $? -ne 0 ]]; then
+    # Regenerate mtree
+    mtree -c -K sha256digest -p build/sysroot > build/sysroot.mtree
+
+    # Create hard drive image
+    echo -e '\033[0;36mMaking drive image from sysroot..\033[0m'
+    rm -f hdd.img
+    $(brew --prefix e2fsprogs)/sbin/mke2fs -d build/sysroot -t ext2 hdd.img 512M
+fi
