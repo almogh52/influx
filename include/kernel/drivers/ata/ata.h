@@ -9,6 +9,7 @@
 #include <kernel/structures/string.h>
 #include <kernel/structures/vector.h>
 #include <kernel/threading/irq_notifier.h>
+#include <kernel/threading/mutex.h>
 
 #define MAX_ATA_STRING_LENGTH 100
 
@@ -32,6 +33,8 @@ class ata : public driver {
     friend void secondary_irq(influx::interrupts::regs *context, ata *ata);
 
    private:
+    threading::mutex _mutex;
+
     drive _selected_drive;
     structures::vector<drive> _drives;
 

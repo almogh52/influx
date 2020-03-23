@@ -5,6 +5,7 @@
 #include <kernel/kernel.h>
 #include <kernel/memory/utils.h>
 #include <kernel/ports.h>
+#include <kernel/threading/lock_guard.h>
 
 void influx::drivers::ata::primary_irq(influx::interrupts::regs *context,
                                        influx::drivers::ata::ata *ata) {
@@ -36,6 +37,8 @@ influx::drivers::ata::ata::ata()
     : driver("ATA"), _primary_irq_called(0), _secondary_irq_called(0) {}
 
 void influx::drivers::ata::ata::load() {
+    threading::lock_guard lk(_mutex);
+
     // Register IRQ handlers
     _log("Registering IRQs handlers..\n");
     kernel::interrupt_manager()->set_irq_handler(ATA_PRIMARY_IRQ,
@@ -123,6 +126,8 @@ bool influx::drivers::ata::ata::access_drive_sectors(const influx::drivers::ata:
                                                      influx::drivers::ata::access_type access_type,
                                                      uint32_t lba, uint16_t amount_of_sectors,
                                                      uint16_t *data) {
+    threading::lock_guard lk(_mutex);
+
     status_register status_reg;
 
     // Select the drive
