@@ -7,7 +7,7 @@ influx::vfs::vfs::vfs()
     : _log("VFS", console_color::green),
       _vnodes(vnode{.file_info = file{.inode = UINT64_MAX,
                                       .file_name = "",
-                                      .directory = false,
+                                      .type = file_type::unknown,
                                       .size = 0,
                                       .created = 0,
                                       .modified = 0,
