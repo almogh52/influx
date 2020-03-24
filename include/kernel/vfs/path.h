@@ -8,6 +8,7 @@ class path {
    public:
     path() = default;
     path(const structures::string& path_str);
+    inline path(const char* str) : path(structures::string(str)){};
 
     path& operator=(structures::string path);
 
