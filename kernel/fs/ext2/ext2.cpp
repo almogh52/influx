@@ -1,6 +1,7 @@
 #include <kernel/fs/ext2/ext2.h>
 
 #include <kernel/memory/utils.h>
+#include <kernel/threading/lock_guard.h>
 #include <kernel/threading/unique_lock.h>
 
 #define EXT2_IND_N_BLOCKS (_block_size / sizeof(uint32_t))
@@ -40,8 +41,9 @@ bool influx::fs::ext2::mount() {
     // Read the block group descriptor table
     _log("Reading block group descriptor table..\n");
     _block_groups.resize(number_of_groups);
-    if (!_drive.read(_block_size * 1, sizeof(ext2_block_group_desc) * number_of_groups,
-                     _block_groups.data())) {
+    _block_groups_mutexes.resize(number_of_groups);
+    if (!_drive.read(_block_size * EXT2_BGDT_BLOCK,
+                     sizeof(ext2_block_group_desc) * number_of_groups, _block_groups.data())) {
         _log("Unable to read block group descriptor table from drive!\n");
         return false;
     }
@@ -83,8 +85,11 @@ influx::fs::ext2_inode *influx::fs::ext2::get_inode(uint64_t inode) {
 
     structures::dynamic_buffer buf;
 
+    threading::unique_lock lk(_block_groups_mutexes[block_group]);
+
     // Read the inode table block
     buf = read_block(_block_groups[block_group].inode_table_start_block + block_index);
+    lk.unlock();
 
     // Copy the inode data from the inode table
     memory::utils::memcpy(inode_obj, buf.data() + _sb.inode_size * inode_block_index,
@@ -95,7 +100,7 @@ influx::fs::ext2_inode *influx::fs::ext2::get_inode(uint64_t inode) {
 
 uint64_t influx::fs::ext2::find_inode(const influx::vfs::path &file_path) {
     uint64_t inode = EXT2_INVALID_INODE, current_inode = EXT2_INVALID_INODE;
-    ext2_inode *prev_inode_obj = nullptr, *current_inode_obj = nullptr;
+    ext2_inode *current_inode_obj = nullptr;
 
     structures::vector<vfs::dir_entry> dir_entries;
 
@@ -156,12 +161,12 @@ uint64_t influx::fs::ext2::get_block_for_offset(influx::fs::ext2_inode *inode, u
 
     // Check for valid offset
     if (offset >= inode->size) {
-        return EXT2_INVALID_FILE_BLOCK;
+        return EXT2_INVALID_BLOCK;
     }
 
     uint64_t block_index = offset / _block_size;
-    uint64_t doubly_indirect_block = EXT2_INVALID_FILE_BLOCK, doubly_index = 0,
-             singly_indirect_block = EXT2_INVALID_FILE_BLOCK, singly_index = 0;
+    uint64_t doubly_indirect_block = EXT2_INVALID_BLOCK, doubly_index = 0,
+             singly_indirect_block = EXT2_INVALID_BLOCK, singly_index = 0;
 
     if (block_index < EXT2_NDIR_BLOCKS) {  // Direct block
         return inode->block_pointers[block_index];
@@ -188,31 +193,31 @@ uint64_t influx::fs::ext2::get_block_for_offset(influx::fs::ext2_inode *inode, u
                 (block_index - (EXT2_NDIR_BLOCKS + EXT2_IND_N_BLOCKS + EXT2_DIND_N_BLOCKS)) %
                 EXT2_IND_N_BLOCKS;
         } else {
-            return EXT2_INVALID_FILE_BLOCK;
+            return EXT2_INVALID_BLOCK;
         }
     }
 
     // Handle block in doubly indirect block
-    if (doubly_indirect_block != EXT2_INVALID_FILE_BLOCK) {
+    if (doubly_indirect_block != EXT2_INVALID_BLOCK) {
         buf = read_block(doubly_indirect_block, doubly_index * sizeof(uint32_t), sizeof(uint32_t));
         if (buf.size() == sizeof(uint32_t)) {
             singly_indirect_block = *(uint32_t *)buf.data();
         } else {
-            return EXT2_INVALID_FILE_BLOCK;
+            return EXT2_INVALID_BLOCK;
         }
     }
 
     // Handle block in signly indirect block
-    if (singly_indirect_block != EXT2_INVALID_FILE_BLOCK) {
+    if (singly_indirect_block != EXT2_INVALID_BLOCK) {
         buf = read_block(singly_indirect_block, singly_index * sizeof(uint32_t), sizeof(uint32_t));
         if (buf.size() == sizeof(uint32_t)) {
             return *(uint32_t *)buf.data();
         } else {
-            return EXT2_INVALID_FILE_BLOCK;
+            return EXT2_INVALID_BLOCK;
         }
     }
 
-    return EXT2_INVALID_FILE_BLOCK;
+    return EXT2_INVALID_BLOCK;
 }
 
 influx::structures::dynamic_buffer influx::fs::ext2::read_file(influx::fs::ext2_inode *inode,
@@ -232,8 +237,8 @@ influx::structures::dynamic_buffer influx::fs::ext2::read_file(influx::fs::ext2_
              last_block_read_amount = (amount + offset) % _block_size;
 
     // Verify valid file blocks
-    if (first_block == EXT2_INVALID_FILE_BLOCK ||
-        (last_block_read_amount > 0 && last_block == EXT2_INVALID_FILE_BLOCK)) {
+    if (first_block == EXT2_INVALID_BLOCK ||
+        (last_block_read_amount > 0 && last_block == EXT2_INVALID_BLOCK)) {
         return structures::dynamic_buffer();
     }
 
@@ -253,7 +258,7 @@ influx::structures::dynamic_buffer influx::fs::ext2::read_file(influx::fs::ext2_
         // Get the next block
         current_offset += _block_size;
         current_block = get_block_for_offset(inode, current_offset);
-        if (current_offset == EXT2_INVALID_FILE_BLOCK) {
+        if (current_offset == EXT2_INVALID_BLOCK) {
             return structures::dynamic_buffer();
         }
     }
@@ -348,4 +353,278 @@ influx::vfs::file_type influx::fs::ext2::file_type_for_inode(influx::fs::ext2_in
         default:
             return vfs::file_type::unknown;
     }
+}
+
+uint64_t influx::fs::ext2::alloc_block() {
+    uint64_t block_group = _block_groups.size();
+    uint64_t block_index = EXT2_INVALID_BLOCK;
+
+    structures::dynamic_buffer bitmap_buf;
+    structures::bitmap<uint8_t> block_bitmap;
+
+    {
+        threading::lock_guard sb_lk(_sb_mutex);
+
+        // Check if there are any free blocks
+        if (_sb.free_blocks_count > 0) {
+            _sb.free_blocks_count--;
+            if (!_drive.write(EXT2_SUPERBLOCK_OFFSET, sizeof(_sb), &_sb)) {
+                return EXT2_INVALID_BLOCK;
+            }
+        } else {
+            return EXT2_INVALID_BLOCK;
+        }
+    }
+
+    // Search for a block group with free blocks
+    for (uint64_t i = 0; i < _block_groups.size(); i++) {
+        threading::lock_guard lk(_block_groups_mutexes[i]);
+
+        // If the block group has free blocks, set it as the block group
+        if (_block_groups[i].free_blocks_count > 0) {
+            block_group = i;
+            break;
+        }
+    }
+
+    // If no block group found
+    if (block_group == _block_groups.size()) {
+        return EXT2_INVALID_BLOCK;
+    }
+
+    threading::lock_guard lk(_block_groups_mutexes[block_group]);
+
+    // Get block bitmap
+    bitmap_buf = read_block(_block_groups[block_group].block_bitmap_block);
+    block_bitmap = structures::bitmap<uint8_t>(bitmap_buf.data(), _sb.blocks_per_group, false);
+    if (bitmap_buf.empty()) {
+        return EXT2_INVALID_BLOCK;
+    }
+
+    // Get a free block
+    if (!block_bitmap.search_bit(0, block_index)) {
+        // We shouldn't get here
+        _log("No free blocks found in block group %d where it should have %d free blocks!\n",
+             block_group, _block_groups[block_group].free_blocks_count);
+
+        // Update the block group free blocks count to 0
+        _block_groups[block_group].free_blocks_count = 0;
+        save_block_group(block_group);
+
+        return EXT2_INVALID_BLOCK;
+    }
+
+    // Set the block as allocated
+    block_bitmap[block_index] = true;
+
+    // Write the bitmap to the block bitmap block
+    if (!write_block(_block_groups[block_group].block_bitmap_block, bitmap_buf)) {
+        return EXT2_INVALID_BLOCK;
+    }
+
+    // Decrease the amount of free blocks in the block group and update it
+    _block_groups[block_group].free_blocks_count--;
+    if (!save_block_group(block_group)) {
+        return EXT2_INVALID_BLOCK;
+    }
+
+    return block_group * _sb.blocks_per_group + block_index;
+}
+
+uint64_t influx::fs::ext2::alloc_inode() {
+    uint64_t block_group = _block_groups.size();
+    uint64_t inode_index = EXT2_INVALID_INODE;
+
+    structures::dynamic_buffer bitmap_buf;
+    structures::bitmap<uint8_t> inode_bitmap;
+
+    {
+        threading::lock_guard sb_lk(_sb_mutex);
+
+        // Check if there are any free inodes
+        if (_sb.free_inodes_count > 0) {
+            _sb.free_inodes_count--;
+            if (!_drive.write(EXT2_SUPERBLOCK_OFFSET, sizeof(_sb), &_sb)) {
+                return EXT2_INVALID_INODE;
+            }
+        } else {
+            return EXT2_INVALID_INODE;
+        }
+    }
+
+    // Search for a block group with free inodes
+    for (uint64_t i = 0; i < _block_groups.size(); i++) {
+        threading::lock_guard lk(_block_groups_mutexes[i]);
+
+        // If the block group has free inodes, set it as the block group
+        if (_block_groups[i].free_inodes_count > 0) {
+            block_group = i;
+            break;
+        }
+    }
+
+    // If no block group found
+    if (block_group == _block_groups.size()) {
+        return EXT2_INVALID_INODE;
+    }
+
+    threading::lock_guard lk(_block_groups_mutexes[block_group]);
+
+    // Get block bitmap
+    bitmap_buf = read_block(_block_groups[block_group].inode_bitmap_block);
+    inode_bitmap = structures::bitmap<uint8_t>(bitmap_buf.data(), _sb.inodes_per_group, false);
+    if (bitmap_buf.empty()) {
+        return EXT2_INVALID_INODE;
+    }
+
+    // Get a free inode
+    if (!inode_bitmap.search_bit(0, inode_index)) {
+        // We shouldn't get here
+        _log("No free inodes found in block group %d where it should have %d free inodes!\n",
+             block_group, _block_groups[block_group].free_inodes_count);
+
+        // Update the block group free inodes count to 0
+        _block_groups[block_group].free_inodes_count = 0;
+        save_block_group(block_group);
+
+        return EXT2_INVALID_INODE;
+    }
+
+    // Set the inode as allocated
+    inode_bitmap[inode_index] = true;
+
+    // Write the bitmap to the inode bitmap block
+    if (!write_block(_block_groups[block_group].inode_bitmap_block, bitmap_buf)) {
+        return EXT2_INVALID_INODE;
+    }
+
+    // Decrease the amount of free inodes in the block group and update it
+    _block_groups[block_group].free_inodes_count--;
+    if (!save_block_group(block_group)) {
+        return EXT2_INVALID_INODE;
+    }
+
+    return block_group * _sb.inodes_per_group + inode_index + 1;
+}
+
+bool influx::fs::ext2::free_block(uint64_t block) {
+    uint64_t block_group = block / _sb.blocks_per_group;
+    uint64_t block_index = block % _sb.blocks_per_group;
+
+    structures::dynamic_buffer bitmap_buf;
+    structures::bitmap<uint8_t> block_bitmap;
+
+    threading::lock_guard lk(_block_groups_mutexes[block_group]);
+
+    // Read block bitmap
+    bitmap_buf = read_block(_block_groups[block_group].block_bitmap_block);
+    block_bitmap = structures::bitmap<uint8_t>(bitmap_buf.data(), _sb.blocks_per_group, false);
+    if (bitmap_buf.empty()) {
+        return false;
+    }
+
+    // If the block is already free
+    if (block_bitmap[block_index] == false) {
+        return true;
+    }
+
+    // Free the block
+    block_bitmap[block_index] = false;
+
+    // Write the bitmap to the block bitmap block
+    if (!write_block(_block_groups[block_group].block_bitmap_block, bitmap_buf)) {
+        return false;
+    }
+
+    // Increase the amount of free blocks in the block group and update it
+    _block_groups[block_group].free_blocks_count++;
+    if (!save_block_group(block_group)) {
+        return false;
+    }
+
+    {
+        threading::lock_guard sb_lk(_sb_mutex);
+
+        // Increase the amount of free blocks
+        _sb.free_blocks_count++;
+        if (!_drive.write(EXT2_SUPERBLOCK_OFFSET, sizeof(_sb), &_sb)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool influx::fs::ext2::free_inode(uint64_t inode) {
+    uint64_t block_group = (inode - 1) / _sb.inodes_per_group;
+    uint64_t inode_index = (inode - 1) % _sb.inodes_per_group;
+    uint64_t block_index = inode_index / (_block_size / _sb.inode_size);
+    uint64_t inode_block_index = (inode - 1) % (_block_size / _sb.inode_size);
+
+    structures::dynamic_buffer bitmap_buf, inode_table_buf;
+    structures::bitmap<uint8_t> inode_bitmap;
+
+    threading::lock_guard lk(_block_groups_mutexes[block_group]);
+
+    // Read inode bitmap
+    bitmap_buf = read_block(_block_groups[block_group].inode_bitmap_block);
+    inode_bitmap = structures::bitmap<uint8_t>(bitmap_buf.data(), _sb.inodes_per_group, false);
+    if (bitmap_buf.empty()) {
+        return false;
+    }
+
+    // If the inode is already free
+    if (inode_bitmap[inode_index] == false) {
+        return true;
+    }
+
+    // Free the inode
+    inode_bitmap[inode_index] = false;
+
+    // Write the bitmap to the inode bitmap block
+    if (!write_block(_block_groups[block_group].inode_bitmap_block, bitmap_buf)) {
+        return false;
+    }
+
+    // Increase the amount of free inodes in the block group and update it
+    _block_groups[block_group].free_inodes_count++;
+    if (!save_block_group(block_group)) {
+        return false;
+    }
+
+    // Read the inode table block
+    inode_table_buf = read_block(_block_groups[block_group].inode_table_start_block + block_index);
+    if (inode_table_buf.empty()) {
+        return false;
+    }
+
+    // Clear the inode
+    memory::utils::memset(inode_table_buf.data() + _sb.inode_size * inode_block_index, 0,
+                          sizeof(ext2_inode));
+
+    // Write the inode table block back
+    if (!write_block(_block_groups[block_group].inode_table_start_block + block_index,
+                     inode_table_buf)) {
+        return false;
+    }
+
+    {
+        threading::lock_guard sb_lk(_sb_mutex);
+
+        // Increase the amount of free inode
+        _sb.free_inodes_count++;
+        if (!_drive.write(EXT2_SUPERBLOCK_OFFSET, sizeof(_sb), &_sb)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool influx::fs::ext2::save_block_group(uint64_t block_group) {
+    // Mutex for block group should be taken already
+
+    return _drive.write(
+        _block_size * EXT2_BGDT_BLOCK + (block_group * sizeof(ext2_block_group_desc)),
+        sizeof(ext2_block_group_desc), &_block_groups[block_group]);
 }
