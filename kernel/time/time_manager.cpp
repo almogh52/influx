@@ -2,10 +2,17 @@
 
 #include <kernel/assert.h>
 #include <kernel/kernel.h>
+#include <kernel/threading/interrupts_lock.h>
 
 influx::time::time_manager::time_manager()
-    : _timer_driver((drivers::timer_driver *)kernel::driver_manager()->get_driver("PIT")) {
+    : _timer_driver((drivers::timer_driver *)kernel::driver_manager()->get_driver("PIT")),
+      _cmos_driver((drivers::cmos *)kernel::driver_manager()->get_driver("CMOS")),
+      _unix_timestamp(0) {
     kassert(_timer_driver != nullptr);
+    kassert(_cmos_driver != nullptr);
+
+    // Get unix timestamp
+    _unix_timestamp = (double)_cmos_driver->get_unix_timestamp();
 }
 
 double influx::time::time_manager::seconds() const {
@@ -21,11 +28,20 @@ double influx::time::time_manager::milliseconds() const {
            ((double)_timer_driver->count_frequency() / 1000.0);
 }
 
+uint64_t influx::time::time_manager::unix_timestamp() const { return (uint64_t)_unix_timestamp; }
+
+uint64_t influx::time::time_manager::unix_timestamp_ms() const {
+    return (uint64_t)(_unix_timestamp * 1000);
+}
+
 uint64_t influx::time::time_manager::timer_frequency() const {
     return _timer_driver->timer_frequency();
 }
 
-void influx::time::time_manager::tick() const {
+void influx::time::time_manager::tick() {
+    // Update unix timestamp
+    _unix_timestamp += 0.001;
+
     // Call all tick handlers
     for (auto handler : _tick_handlers) {
         handler.function(handler.data);
@@ -33,5 +49,7 @@ void influx::time::time_manager::tick() const {
 }
 
 void influx::time::time_manager::register_tick_handler(void (*handler)(void *), void *data) {
+    threading::interrupts_lock int_lk;
+
     _tick_handlers.push_back(tick_handler{.function = handler, .data = data});
 }
