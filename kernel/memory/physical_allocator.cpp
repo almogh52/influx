@@ -154,7 +154,7 @@ void influx::memory::physical_allocator::free_page(uint64_t page_index) {
 }
 
 void influx::memory::physical_allocator::parse_memory_map_to_bitmap(const boot_info_mem &mmap,
-                                                                    structures::bitmap &bitmap) {
+                                                                    structures::bitmap<> &bitmap) {
     // Set all pages as used
     bitmap.set(0, bitmap.size(), true);
 
