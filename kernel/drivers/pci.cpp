@@ -4,9 +4,11 @@
 
 influx::drivers::pci::pci() : driver("PCI") {}
 
-void influx::drivers::pci::load() {
+bool influx::drivers::pci::load() {
     // Detect the PCI devices
     detect_devices();
+
+    return true;
 }
 
 void influx::drivers::pci::detect_devices() {

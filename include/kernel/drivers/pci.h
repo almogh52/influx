@@ -32,7 +32,7 @@ class pci : public driver {
    public:
     pci();
 
-    virtual void load();
+    virtual bool load();
 
     uint8_t read_config_byte(uint16_t bus, uint8_t device, uint8_t function, uint8_t offset);
     uint16_t read_config_word(uint16_t bus, uint8_t device, uint8_t function, uint8_t offset);

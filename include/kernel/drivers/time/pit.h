@@ -19,7 +19,7 @@ class pit : public timer_driver {
    public:
     pit();
 
-    virtual void load();
+    virtual bool load();
 
     virtual uint64_t current_count() const { return _count; };
     virtual uint64_t count_frequency() const { return PIT_FREQUENCY; };

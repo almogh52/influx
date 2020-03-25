@@ -10,8 +10,10 @@ const unsigned short int mon_yday[2][13] = {
 
 influx::drivers::cmos::cmos() : driver("CMOS") {}
 
-void influx::drivers::cmos::load() {
+bool influx::drivers::cmos::load() {
     // TODO: Check if CMOS has century register using ACPICA
+
+    return true;
 }
 
 uint64_t influx::drivers::cmos::get_unix_timestamp() const {

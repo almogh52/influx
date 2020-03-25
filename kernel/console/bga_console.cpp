@@ -3,6 +3,7 @@
 #include <kernel/console/bga_u_vga16_font.h>
 #include <kernel/kernel.h>
 #include <kernel/memory/utils.h>
+#include <kernel/assert.h>
 #include <kernel/threading/unique_lock.h>
 
 // Ignore warnings
@@ -16,7 +17,9 @@
 
 influx::bga_console::bga_console()
     : _log("BGA Console"),
-      _driver((drivers::graphics::bga *)kernel::driver_manager()->get_driver("BGA")) {}
+      _driver((drivers::graphics::bga *)kernel::driver_manager()->get_driver("BGA")) {
+          kassert(_driver != nullptr);
+      }
 
 bool influx::bga_console::load() {
     // Check that the drive is found

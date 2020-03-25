@@ -9,7 +9,7 @@
 
 influx::drivers::graphics::bga::bga() : driver("BGA"), _video_memory(nullptr) {}
 
-void influx::drivers::graphics::bga::load() {
+bool influx::drivers::graphics::bga::load() {
     drivers::pci *pci_drv = (drivers::pci *)kernel::driver_manager()->get_driver("PCI");
     kassert(pci_drv != nullptr);
 
@@ -18,7 +18,7 @@ void influx::drivers::graphics::bga::load() {
     // Verify BGA available
     if(read_register(VBE_DISPI_INDEX_ID) != VBE_DISPI_ID0) {
         _log("BGA isn't available!\n");
-        return;
+        return false;
     }
 
     // Search for the BGA PCI descriptor
@@ -32,7 +32,7 @@ void influx::drivers::graphics::bga::load() {
     // If the BGA PCI descriptor wasn't found
     if (bga_pci_descriptor.device_id != BGA_PCI_DEVICE_ID) {
         _log("BGA PCI device wasn't found!\n");
-        return;
+        return false;
     }
     _log("BGA PCI descriptor found - %d:%d:%d.\n", bga_pci_descriptor.bus, bga_pci_descriptor.device,
          bga_pci_descriptor.function);
@@ -43,6 +43,8 @@ void influx::drivers::graphics::bga::load() {
         bga_pci_descriptor.bar0 / PAGE_SIZE);
     _log("BGA video memory (%lx) mapped to %lx.\n", bga_pci_descriptor.bar0,
          _video_memory);
+
+    return true;
 }
 
 void influx::drivers::graphics::bga::enable(bool clear_screen) const {

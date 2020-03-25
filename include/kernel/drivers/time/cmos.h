@@ -36,7 +36,7 @@ class cmos : public driver {
    public:
     cmos();
 
-    virtual void load();
+    virtual bool load();
 
     uint64_t get_unix_timestamp() const;
 

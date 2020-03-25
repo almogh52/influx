@@ -14,7 +14,7 @@ class bga : public driver {
    public:
     bga();
 
-    virtual void load();
+    virtual bool load();
 
     void enable(bool clear_screen) const;
     void disable() const;

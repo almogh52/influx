@@ -16,7 +16,7 @@ void influx::drivers::pit_irq(influx::interrupts::regs *context, influx::drivers
 
 influx::drivers::pit::pit() : timer_driver("PIT"), _count(0) {}
 
-void influx::drivers::pit::load() {
+bool influx::drivers::pit::load() {
     uint64_t frequency_divisor = PIT_REAL_FREQUENCY / PIT_FREQUENCY;
 
     // Register IRQ handler
@@ -30,4 +30,6 @@ void influx::drivers::pit::load() {
     // Send the frequency divisor to the PIT
     ports::out<uint8_t>((uint8_t)frequency_divisor, PIT_CHANNEL_0_PORT);
     ports::out<uint8_t>((uint8_t)(frequency_divisor >> 8), PIT_CHANNEL_0_PORT);
+
+    return true;
 }

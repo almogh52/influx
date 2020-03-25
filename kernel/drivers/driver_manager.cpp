@@ -1,10 +1,11 @@
 #include <kernel/drivers/driver_manager.h>
 
-#include <kernel/drivers/pci.h>
+#include <kernel/algorithm.h>
 #include <kernel/drivers/ata/ata.h>
 #include <kernel/drivers/graphics/bga/bga.h>
-#include <kernel/drivers/time/pit.h>
+#include <kernel/drivers/pci.h>
 #include <kernel/drivers/time/cmos.h>
+#include <kernel/drivers/time/pit.h>
 
 influx::drivers::driver_manager::driver_manager() : _log("Driver Manager", console_color::green) {
     _drivers.push_back(new pit());
@@ -15,11 +16,27 @@ influx::drivers::driver_manager::driver_manager() : _log("Driver Manager", conso
 }
 
 void influx::drivers::driver_manager::load_drivers() {
+    structures::vector<driver *> failed_drivers;
+
+    _log("Loading drivers..\n");
+
+    // Try to load all drivers
     for (driver *drv : _drivers) {
         // Load the driver
         _log("Loading %S driver..\n", drv->driver_name());
-        drv->load();
+        if (!drv->load()) {
+            _log("Failed to load %S driver.. Unloading..\n", drv->driver_name());
+            failed_drivers.push_back(drv);
+        }
     }
+
+    // Unload all failed drivers
+    for (driver *drv : failed_drivers) {
+        _drivers.erase(algorithm::find(_drivers.begin(), _drivers.end(), drv));
+        delete drv;
+    }
+
+    _log("Finished loading drivers..\n");
 }
 
 influx::drivers::driver *influx::drivers::driver_manager::get_driver(

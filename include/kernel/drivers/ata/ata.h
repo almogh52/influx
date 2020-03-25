@@ -22,7 +22,7 @@ class ata : public driver {
    public:
     ata();
 
-    virtual void load();
+    virtual bool load();
 
     bool access_drive_sectors(const drive &drive, access_type access_type, uint32_t lba,
                               uint16_t amount_of_sectors, uint16_t *data);

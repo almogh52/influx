@@ -36,7 +36,7 @@ void influx::drivers::ata::secondary_irq(influx::interrupts::regs *context,
 influx::drivers::ata::ata::ata()
     : driver("ATA"), _primary_irq_called(0), _secondary_irq_called(0) {}
 
-void influx::drivers::ata::ata::load() {
+bool influx::drivers::ata::ata::load() {
     threading::lock_guard lk(_mutex);
 
     // Register IRQ handlers
@@ -68,6 +68,8 @@ void influx::drivers::ata::ata::load() {
                         ata_primary_bus.control_base + ATA_CONTROL_DEVICE_REGISTER);
     ports::out<uint8_t>(ATA_ENABLE_INTERRUTPS,
                         ata_secondary_bus.control_base + ATA_CONTROL_DEVICE_REGISTER);
+
+    return true;
 }
 
 void influx::drivers::ata::ata::wait_for_primary_irq() {
