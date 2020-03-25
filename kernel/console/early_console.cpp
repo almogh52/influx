@@ -1,5 +1,8 @@
 #include <kernel/console/early_console.h>
 
+#include <kernel/threading/unique_lock.h>
+#include <kernel/kernel.h>
+
 influx::early_console::early_console()
     : _video((unsigned char *)EARLY_VIDEO_MEMORY_ADDRESS),
       _attribute(DEFAULT_ATTRIBUTE),
@@ -27,6 +30,13 @@ bool influx::early_console::load() {
 }
 
 void influx::early_console::stdout_putchar(char c) {
+    threading::unique_lock lk(_mutex, threading::defer_lock);
+
+    // If the scheduler has started, lock the mutex
+    if (kernel::scheduler() != nullptr && kernel::scheduler()->started()) {
+        lk.lock();
+    }
+
     // If the character is for a new line
     if (c == '\n' || c == '\r') {
         new_line();

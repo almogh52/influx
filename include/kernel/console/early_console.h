@@ -3,6 +3,7 @@
 
 #include <kernel/console/color.h>
 #include <kernel/memory/memory.h>
+#include <kernel/threading/mutex.h>
 #include <memory/vma_region.h>
 #include <stdint.h>
 
@@ -33,6 +34,7 @@ class early_console : public console {
 
    private:
     unsigned char *_video;
+    threading::mutex _mutex;
 
     uint8_t _attribute;
     uint8_t _x_pos;
