@@ -45,6 +45,7 @@ bool influx::vfs::vfs::mount(influx::vfs::fs_type type, influx::vfs::path mount_
     if (!fs->mount(mount_path)) {
         _log("Failed to mount %s filesystem in drive %s.\n", fs->name().c_str(),
              drive.drive_info().to_string().c_str());
+        return false;
     }
 
     // Add the new mount

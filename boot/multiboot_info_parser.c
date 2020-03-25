@@ -57,8 +57,8 @@ boot_info parse_multiboot_info(uint32_t *multiboot_info_ptr) {
                 info.kernel_module.size = end_addr - start_addr;
             }
 
-            printf("Multiboot2 module: mod_start = 0x%x, mod_end = 0x%x, name = %s\n",
-                   start_addr, end_addr, module_tag->cmdline);
+            printf("Multiboot2 module: mod_start = 0x%x, mod_end = 0x%x, name = %s\n", start_addr,
+                   end_addr, module_tag->cmdline);
         } else if (tag->type == MULTIBOOT_TAG_TYPE_CMDLINE)  // If the tag is a cmdline tag
         {
             struct multiboot_tag_string *cmdline_tag = (struct multiboot_tag_string *)tag;
@@ -67,6 +67,21 @@ boot_info parse_multiboot_info(uint32_t *multiboot_info_ptr) {
             info.cmdline = cmdline_tag->string;
 
             printf("Multiboot2 cmdline: %s\n", cmdline_tag->string);
+        } else if (tag->type == MULTIBOOT_TAG_TYPE_FRAMEBUFFER)  // If the tag is a framebuffer tag
+        {
+            struct multiboot_tag_framebuffer_common *framebuffer_tag =
+                (struct multiboot_tag_framebuffer_common *)tag;
+
+            // Save the framebuffer details
+            info.framebuffer.framebuffer_addr = framebuffer_tag->framebuffer_addr;
+            info.framebuffer.framebuffer_pitch = framebuffer_tag->framebuffer_pitch;
+            info.framebuffer.framebuffer_height = framebuffer_tag->framebuffer_height;
+            info.framebuffer.framebuffer_width = framebuffer_tag->framebuffer_width;
+            info.framebuffer.framebuffer_bpp = framebuffer_tag->framebuffer_bpp;
+
+            printf("Multiboot2 framebuffer addr: %x%x, size: %dx%dx%d\n",
+                   framebuffer_tag->framebuffer_addr, framebuffer_tag->framebuffer_height,
+                   framebuffer_tag->framebuffer_width, framebuffer_tag->framebuffer_bpp);
         }
     }
 

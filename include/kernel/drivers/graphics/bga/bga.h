@@ -4,8 +4,9 @@
 #define BGA_PCI_DEVICE_ID 0x1111
 #define BGA_PCI_VENDOR_ID 0x1234
 
-#define SCREEN_HEIGHT 960
-#define SCREEN_WIDTH 960
+#define BGA_SCREEN_HEIGHT 960
+#define BGA_SCREEN_WIDTH 960
+#define BGA_BPP 32
 
 namespace influx {
 namespace drivers {

@@ -16,7 +16,7 @@ bool influx::drivers::graphics::bga::load() {
     pci_descriptor_t bga_pci_descriptor = {};
 
     // Verify BGA available
-    if(read_register(VBE_DISPI_INDEX_ID) != VBE_DISPI_ID0) {
+    if (read_register(VBE_DISPI_INDEX_ID) != VBE_DISPI_ID0) {
         _log("BGA isn't available!\n");
         return false;
     }
@@ -34,15 +34,14 @@ bool influx::drivers::graphics::bga::load() {
         _log("BGA PCI device wasn't found!\n");
         return false;
     }
-    _log("BGA PCI descriptor found - %d:%d:%d.\n", bga_pci_descriptor.bus, bga_pci_descriptor.device,
-         bga_pci_descriptor.function);
+    _log("BGA PCI descriptor found - %d:%d:%d.\n", bga_pci_descriptor.bus,
+         bga_pci_descriptor.device, bga_pci_descriptor.function);
 
     // Map the video memory to virtual memory
     _video_memory = memory::virtual_allocator::allocate(
-        SCREEN_WIDTH * SCREEN_HEIGHT * sizeof(uint32_t), PROT_WRITE | PROT_READ,
+        BGA_SCREEN_WIDTH * BGA_SCREEN_HEIGHT * sizeof(uint32_t), PROT_WRITE | PROT_READ,
         bga_pci_descriptor.bar0 / PAGE_SIZE);
-    _log("BGA video memory (%lx) mapped to %lx.\n", bga_pci_descriptor.bar0,
-         _video_memory);
+    _log("BGA video memory (%lx) mapped to %lx.\n", bga_pci_descriptor.bar0, _video_memory);
 
     return true;
 }
@@ -52,8 +51,8 @@ void influx::drivers::graphics::bga::enable(bool clear_screen) const {
     write_register(VBE_DISPI_INDEX_ENABLE, VBE_DISPI_DISABLED);
 
     // Set screen resolution
-    write_register(VBE_DISPI_INDEX_XRES, SCREEN_WIDTH);
-    write_register(VBE_DISPI_INDEX_YRES, SCREEN_HEIGHT);
+    write_register(VBE_DISPI_INDEX_XRES, BGA_SCREEN_WIDTH);
+    write_register(VBE_DISPI_INDEX_YRES, BGA_SCREEN_HEIGHT);
 
     // Set bit depth
     write_register(VBE_DISPI_INDEX_BPP, VBE_DISPI_BPP_32);

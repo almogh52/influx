@@ -1,9 +1,9 @@
 #include <kernel/kernel.h>
 
 #include <kernel/assert.h>
-#include <kernel/console/bga_console.h>
 #include <kernel/console/console.h>
 #include <kernel/console/early_console.h>
+#include <kernel/console/gfx_console.h>
 #include <kernel/icxxabi.h>
 #include <kernel/logger.h>
 #include <kernel/memory/physical_allocator.h>
@@ -48,10 +48,10 @@ void influx::kernel::kmain(const boot_info info) {
     // Init time manager
     _time_manager = new time::time_manager();
 
-    // Init BGA console
-    log("Loading BGA console..\n");
-    console::set_console(new bga_console());
-    log("BGA Console loaded.\n");
+    // Init GFX console
+    log("Loading GFX console..\n");
+    console::set_console(new gfx_console(info.framebuffer));
+    log("GFX Console loaded.\n");
 
     // Init scheduler
     log("Loading scheduler..\n");

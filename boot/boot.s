@@ -14,7 +14,17 @@ multiboot_header_start:
     dd multiboot_header_end - multiboot_header_start
     dd MULTIBOOT_HEADER_LENGTH
 
+;   Framebuffer tag - Request any resolution with 32 BPP
+    align 8
+    dw 5
+    dw 0
+    dd 20
+    dd 0
+    dd 0
+    dd 0
+
 ;   A closing tag
+    align 8
     dw 0
     dw 0
     dd 8

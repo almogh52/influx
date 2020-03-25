@@ -2,23 +2,23 @@
 #include <kernel/console/console.h>
 
 #include <kernel/console/color.h>
-#include <kernel/drivers/graphics/bga/bga.h>
 #include <kernel/logger.h>
-#include <stdint.h>
 #include <kernel/threading/mutex.h>
+#include <stdint.h>
+#include <sys/boot_info.h>
 
 #define GLYPH_WIDTH 8
 #define GLYPH_HEIGHT 16
 
-#define BGA_AMOUNT_OF_COLUMNS (SCREEN_WIDTH / GLYPH_WIDTH)
-#define BGA_AMOUNT_OF_LINES (SCREEN_HEIGHT / GLYPH_HEIGHT)
+#define GFX_AMOUNT_OF_COLUMNS (_framebuffer_width / GLYPH_WIDTH)
+#define GFX_AMOUNT_OF_LINES (_framebuffer_height / GLYPH_HEIGHT)
 
 #define DEFAULT_FOREGROUND_COLOR 0xFFFFFF
 
 namespace influx {
-class bga_console : public console {
+class gfx_console : public console {
    public:
-    bga_console();
+    gfx_console(const boot_info_framebuffer &multiboot_framebuffer);
 
     virtual bool load();
 
@@ -35,7 +35,13 @@ class bga_console : public console {
    private:
     logger _log;
 
-    drivers::graphics::bga *_driver;
+    boot_info_framebuffer _multiboot_framebuffer;
+
+    void *_framebuffer;
+    uint32_t _framebuffer_height;
+    uint32_t _framebuffer_width;
+    uint8_t _framebuffer_bpp;
+
     threading::mutex _mutex;
 
     void scroll();
