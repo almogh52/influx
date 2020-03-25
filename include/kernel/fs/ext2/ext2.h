@@ -33,7 +33,7 @@ class ext2 : public vfs::filesystem {
    public:
     ext2(const drivers::ata::drive_slice& drive);
 
-    virtual bool mount();
+    virtual bool mount(const vfs::path& mount_path);
     inline virtual size_t read(void* fs_file_info, char* buffer, size_t count, size_t offset,
                                size_t& amount_read){};
     inline virtual size_t write(void* fs_file_info, const char* buffer, size_t count, size_t offset,

@@ -58,6 +58,12 @@ void influx::kernel::kmain(const boot_info info) {
     _scheduler = new threading::scheduler();
     log("Scheduler loaded.\n");
 
+    // Init VFS
+    drivers::ata::ata *ata = (drivers::ata::ata *)_driver_manager->get_driver("ATA");
+    _vfs = new vfs::vfs();
+    _vfs->mount(vfs::fs_type::ext2, vfs::path("/"),
+                drivers::ata::drive_slice(ata, ata->drives()[0], 0));
+
     // Kill this task since it's no necessary
     log("Kernel initialization complete.\n");
     _scheduler->kill_current_task();

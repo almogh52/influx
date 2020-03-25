@@ -1,8 +1,11 @@
 #include <kernel/fs/ext2/ext2.h>
 
+#include <kernel/algorithm.h>
+#include <kernel/kernel.h>
 #include <kernel/memory/utils.h>
 #include <kernel/threading/lock_guard.h>
 #include <kernel/threading/unique_lock.h>
+#include <kernel/time/time_manager.h>
 
 #define EXT2_IND_N_BLOCKS (_block_size / sizeof(uint32_t))
 #define EXT2_DIND_N_BLOCKS (EXT2_IND_N_BLOCKS * EXT2_IND_N_BLOCKS)
@@ -10,8 +13,10 @@
 influx::fs::ext2::ext2(const influx::drivers::ata::drive_slice &drive)
     : vfs::filesystem("EXT2", drive), _block_size(0) {}
 
-bool influx::fs::ext2::mount() {
+bool influx::fs::ext2::mount(const influx::vfs::path &mount_path) {
     uint64_t number_of_groups = 0;
+
+    structures::string mount_path_str = mount_path.string();
 
     // Try to read the superblock
     if (!_drive.read(EXT2_SUPERBLOCK_OFFSET, sizeof(ext2_superblock), &_sb)) {
@@ -36,7 +41,7 @@ bool influx::fs::ext2::mount() {
     if (_sb.blocks_per_group * number_of_groups < _sb.blocks_count) {
         number_of_groups++;
     }
-    _log("Total of %d groups.\n", number_of_groups);
+    _log("Total of %d block groups.\n", number_of_groups);
 
     // Read the block group descriptor table
     _log("Reading block group descriptor table..\n");
@@ -45,6 +50,15 @@ bool influx::fs::ext2::mount() {
     if (!_drive.read(_block_size * EXT2_BGDT_BLOCK,
                      sizeof(ext2_block_group_desc) * number_of_groups, _block_groups.data())) {
         _log("Unable to read block group descriptor table from drive!\n");
+        return false;
+    }
+
+    // Set last mount time and last mount path
+    _log("Setting last mount time and last mount path..\n");
+    _sb.mount_time = (uint32_t)kernel::time_manager()->unix_timestamp();
+    memory::utils::memcpy(_sb.last_mounted_path, mount_path_str.c_str(),
+                          algorithm::min<uint64_t>(mount_path_str.size() + 1, 64));
+    if (!_drive.write(EXT2_SUPERBLOCK_OFFSET, sizeof(_sb), &_sb)) {
         return false;
     }
 

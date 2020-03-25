@@ -13,7 +13,7 @@ class filesystem {
     filesystem(const structures::string& fs_name, const drivers::ata::drive_slice& drive)
         : _log(fs_name + " Filesystem", console_color::pink), _name(fs_name), _drive(drive){};
     virtual ~filesystem(){};
-    virtual bool mount() = 0;
+    virtual bool mount(const path& mount_path) = 0;
     virtual size_t read(void* fs_file_info, char* buffer, size_t count, size_t offset,
                         size_t& amount_read) = 0;
     virtual size_t write(void* fs_file_info, const char* buffer, size_t count, size_t offset,
