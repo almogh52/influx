@@ -65,6 +65,90 @@ bool influx::fs::ext2::mount(const influx::vfs::path &mount_path) {
     return true;
 }
 
+influx::vfs::error influx::fs::ext2::read(void *fs_file_info, char *buffer, size_t count,
+                                          size_t offset, size_t &amount_read) {
+    kassert(fs_file_info != nullptr);
+
+    structures::dynamic_buffer buf;
+
+    // Get the inode of the file
+    ext2_inode *inode = get_inode(*(uint64_t *)fs_file_info);
+    if (!inode) {
+        return vfs::error::invalid_file;
+    }
+
+    // Check if the file is a directory
+    if (file_type_for_inode(inode) == vfs::file_type::directory) {
+        return vfs::error::file_is_directory;
+    }
+
+    // If the offset + the amount of bytes surpasses the size of the file, reduce the count
+    if (offset + count > inode->size) {
+        count = inode->size - offset;
+    }
+
+    // Try to read the file
+    buf = read_file(inode, offset, count);
+    if (buf.empty()) {
+        return vfs::error::io_error;
+    }
+
+    // Set the amount read variable
+    amount_read = buf.size();
+
+    // Copy to the buffer
+    memory::utils::memcpy(buffer, buf.data(), buf.size());
+
+    return vfs::error::success;
+}
+
+influx::vfs::error influx::fs::ext2::get_file_info(void *fs_file_info, influx::vfs::file &file) {
+    kassert(fs_file_info != nullptr);
+
+    // Get the inode of the file
+    ext2_inode *inode = get_inode(*(uint64_t *)fs_file_info);
+    if (!inode) {
+        return vfs::error::invalid_file;
+    }
+
+    // Set the properties of the file
+    file.type = file_type_for_inode(inode);
+    file.size = inode->size;
+    file.modified = inode->last_modification_time;
+    file.modified = inode->last_access_time;
+    file.inode = *(uint64_t *)fs_file_info;
+    file.created = inode->creation_time;
+
+    return vfs::error::success;
+}
+
+influx::vfs::error influx::fs::ext2::entries(
+    void *fs_file_info, influx::structures::vector<influx::vfs::dir_entry> &entries) {
+    kassert(fs_file_info != nullptr);
+
+    // Get the inode of the file
+    ext2_inode *inode = get_inode(*(uint64_t *)fs_file_info);
+    if (!inode) {
+        return vfs::error::invalid_file;
+    }
+
+    // Check if the file is a directory
+    if (file_type_for_inode(inode) == vfs::file_type::directory) {
+        return vfs::error::file_is_not_directory;
+    }
+
+    // Set the properties of the file
+    entries = read_dir(inode);
+
+    return vfs::error::success;
+}
+
+void *influx::fs::ext2::get_fs_file_info(const influx::vfs::path &file_path) {
+    uint64_t inode = find_inode(file_path);
+
+    return inode == EXT2_INVALID_INODE ? nullptr : new uint64_t(inode);
+}
+
 influx::structures::dynamic_buffer influx::fs::ext2::read_block(uint64_t block, uint64_t offset,
                                                                 int64_t amount) {
     amount = amount == -1 ? _block_size - offset : amount;

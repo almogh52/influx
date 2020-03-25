@@ -34,17 +34,20 @@ class ext2 : public vfs::filesystem {
     ext2(const drivers::ata::drive_slice& drive);
 
     virtual bool mount(const vfs::path& mount_path);
-    inline virtual size_t read(void* fs_file_info, char* buffer, size_t count, size_t offset,
-                               size_t& amount_read){};
-    inline virtual size_t write(void* fs_file_info, const char* buffer, size_t count, size_t offset,
-                                size_t& amount_written){};
-    inline virtual size_t get_file_info(void* fs_file_info, vfs::file& file){};
-    inline virtual size_t entries(void* fs_file_info,
-                                  structures::vector<vfs::dir_entry>& entries){};
-    inline virtual size_t create_file(const vfs::path& file_path){};
-    inline virtual size_t create_dir(const vfs::path& dir_path){};
-    inline virtual size_t remove(void* fs_file_info){};
-    inline virtual void* get_fs_file_info(const vfs::path& file_path){};
+    virtual vfs::error read(void* fs_file_info, char* buffer, size_t count, size_t offset,
+                            size_t& amount_read);
+    inline virtual vfs::error write(void* fs_file_info, const char* buffer, size_t count,
+                                    size_t offset, size_t& amount_written) {
+        return vfs::error::success;
+    };
+    virtual vfs::error get_file_info(void* fs_file_info, vfs::file& file);
+    virtual vfs::error entries(void* fs_file_info, structures::vector<vfs::dir_entry>& entries);
+    inline virtual vfs::error create_file(const vfs::path& file_path) {
+        return vfs::error::success;
+    };
+    inline virtual vfs::error create_dir(const vfs::path& dir_path) { return vfs::error::success; };
+    inline virtual vfs::error remove(void* fs_file_info) { return vfs::error::success; };
+    virtual void* get_fs_file_info(const vfs::path& file_path);
 
    private:
     ext2_superblock _sb;
