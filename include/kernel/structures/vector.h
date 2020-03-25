@@ -142,7 +142,7 @@ T* influx::structures::vector<T>::erase(const T* pos) {
     // If the pos isn't the end of the vector
     if (pos != end()) {
         // Move the following elements
-        memory::utils::memcpy((void *)pos, pos + 1, size() - element_index - 1);
+        memory::utils::memcpy((void*)pos, pos + 1, (size() - element_index - 1) * sizeof(T*));
 
         // Resize the vector
         resize(size() - 1);
