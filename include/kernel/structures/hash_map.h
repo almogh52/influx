@@ -22,6 +22,21 @@ struct hash_map_iterator {
     typedef pair<const Key, T> value_type;
     typedef memblock::size_type size_type;
 
+    inline hash_map_iterator(const hash_map_iterator<Key, T, Hash>& other)
+        : _bucket_count(other._bucket_count),
+          _buckets(other._buckets),
+          _bucket_index(other._bucket_index),
+          _element(other._element) {}
+
+    inline hash_map_iterator<Key, T, Hash>& operator=(hash_map_iterator<Key, T, Hash> other) {
+        _bucket_count = other._bucket_count;
+        _buckets = other._buckets;
+        _bucket_index = other._bucket_index;
+        _element = other._element;
+
+        return *this;
+    }
+
     inline value_type& operator*() {
         kassert(_element != nullptr);
 
@@ -127,6 +142,9 @@ class hash_map {
     inline size_type size(void) const { return _size; }
     inline bool empty(void) const { return _size == 0; }
     inline size_type count(const key_type& key) const { return at(key) != _empty_item ? 1 : 0; };
+
+    // Note: Non-standard function
+    inline T& empty_item() { return _empty_item; };
 
     mapped_type& at(const key_type& key);
     const mapped_type& at(const key_type& key) const;
