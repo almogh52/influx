@@ -11,6 +11,88 @@
 
 namespace influx {
 namespace structures {
+template <typename Key, typename T, typename Hash>
+class hash_map;
+
+template <typename Key, typename T, typename Hash>
+struct hash_map_iterator {
+   public:
+    typedef Key key_type;
+    typedef T mapped_type;
+    typedef pair<const Key, T> value_type;
+    typedef memblock::size_type size_type;
+
+    inline value_type& operator*() {
+        kassert(_element != nullptr);
+
+        return _element->value();
+    }
+
+    inline value_type* operator->() {
+        kassert(_element != nullptr);
+
+        return &_element->value();
+    }
+
+    inline hash_map_iterator<Key, T, Hash>& operator++() {
+        // Move to the next element
+        _element = _element->next();
+
+        // If we reached the next element, search a new bucket
+        if (_element == nullptr) {
+            update_next_element(_bucket_index + 1);
+        }
+
+        return *this;
+    }
+
+    inline hash_map_iterator<Key, T, Hash>& operator++(int) { return ++(*this); }
+
+    inline bool operator!=(hash_map_iterator<Key, T, Hash> other) {
+        return _element != other._element;
+    }
+    inline bool operator==(hash_map_iterator<Key, T, Hash> other) {
+        return _element == other._element;
+    }
+
+   private:
+    typedef node<value_type> bucket_element_type;
+    typedef bucket_element_type* bucket_type;
+
+    size_type _bucket_count;
+    memblock& _buckets;
+    size_type _bucket_index;
+    bucket_element_type* _element;
+
+    inline hash_map_iterator(memblock& buckets)
+        : _bucket_count(0), _buckets(buckets), _bucket_index(0), _element(nullptr) {}
+    inline hash_map_iterator(uint64_t bucket_count, memblock& buckets, uint64_t bucket_index)
+        : _bucket_count(bucket_count),
+          _buckets(buckets),
+          _bucket_index(bucket_index),
+          _element(nullptr) {
+        update_next_element(bucket_index);
+    }
+    inline hash_map_iterator(uint64_t bucket_count, memblock& buckets, uint64_t bucket_index,
+                             bucket_element_type* element)
+        : _bucket_count(bucket_count),
+          _buckets(buckets),
+          _bucket_index(bucket_index),
+          _element(element) {}
+
+    inline void update_next_element(uint64_t start_bucket_search) {
+        for (size_type i = start_bucket_search; i < _bucket_count; i++) {
+            if (*((bucket_type*)_buckets.data() + i) != nullptr) {
+                _bucket_index = i;
+                _element = *((bucket_type*)_buckets.data() + i);
+                break;
+            }
+        }
+    }
+
+    friend class hash_map<Key, T, Hash>;
+};
+
 template <typename Key, typename T, typename Hash = hash<Key>>
 class hash_map {
    public:
@@ -23,8 +105,8 @@ class hash_map {
     typedef const value_type& const_reference;
     typedef value_type* pointer;
     typedef const value_type* const_pointer;
-    typedef pointer iterator;
-    typedef const_pointer const_iterator;
+    typedef hash_map_iterator<Key, T, Hash> iterator;
+    typedef hash_map_iterator<Key, T, Hash> const_iterator;
 
     inline hash_map(T empty_item = T()) : hash_map(DEFAULT_BUCKET_COUNT, empty_item) {}
     inline hash_map(size_type bucket_count, T empty_item = T())
@@ -36,10 +118,10 @@ class hash_map {
         memory::utils::memset(_buckets.data(), 0, _buckets.capacity());
     }
 
-    inline iterator begin(void) { return iterator(_buckets.begin()); }
-    inline const_iterator begin(void) const { return const_iterator(_buckets.begin()); }
-    inline iterator end(void) { return iterator(_buckets.end()); }
-    inline const_iterator end(void) const { return const_iterator(_buckets.end()); }
+    inline iterator begin(void) { return iterator(_bucket_count, _buckets, 0); }
+    inline const_iterator begin(void) const { return const_iterator(_bucket_count, _buckets, 0); }
+    inline iterator end(void) { return iterator(_buckets); }
+    inline const_iterator end(void) const { return const_iterator(_buckets); }
     inline const_iterator cbegin(void) const { return begin(); }
     inline const_iterator cend(void) const { return end(); }
     inline size_type size(void) const { return _size; }
@@ -225,7 +307,7 @@ influx::structures::memblock::size_type influx::structures::hash_map<Key, T, Has
 }
 
 template <class Key, class T, class Hash>
-influx::structures::pair<influx::structures::pair<const Key, T>*, bool>
+influx::structures::pair<influx::structures::hash_map_iterator<Key, T, Hash>, bool>
 influx::structures::hash_map<Key, T, Hash>::insert(bucket_element_type* element) {
     size_type bucket_index = bucket(element->value().first);
     bucket_type b = ((bucket_type*)_buckets.data())[bucket_index];
@@ -267,7 +349,8 @@ influx::structures::hash_map<Key, T, Hash>::insert(bucket_element_type* element)
         }
     }
 
-    return pair<iterator, bool>(&new_item->value(), inserted);
+    return pair<iterator, bool>(iterator(_bucket_count, _buckets, bucket_index, new_item),
+                                inserted);
 }
 
 template <class Key, class T, class Hash>
