@@ -9,10 +9,11 @@
 #define EXT2_N_BLOCKS (EXT2_TIND_BLOCK + 1)
 
 #define EXT2_INODE_TYPES_MASK 0xF000
+#define EXT2_INODE_PERMISSIONS_MASK 0x0FFF
 
 namespace influx {
 namespace fs {
-enum class ext2_types_permissions : uint16_t {
+enum ext2_types_permissions : uint16_t {
     other_execute = 0x1,
     other_write = 0x2,
     other_read = 0x4,
@@ -34,11 +35,7 @@ enum class ext2_types_permissions : uint16_t {
     unix_socket = 0xC000
 };
 
-inline bool operator&(ext2_types_permissions a, ext2_types_permissions b) {
-    return static_cast<uint16_t>(a) & static_cast<uint16_t>(b);
-}
-
-enum class ext2_inode_flags : uint32_t {
+enum ext2_inode_flags : uint32_t {
     secure_deletion = 0x1,
     keep_copy = 0x2,
     file_compression = 0x4,

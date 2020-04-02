@@ -1,13 +1,16 @@
 #pragma once
+#include <stdint.h>
 
 namespace influx {
 namespace vfs {
-enum class error {
-	success,
-	io_error,
-	file_is_directory,
-	file_is_not_directory,
-	invalid_file
+enum error : int64_t {
+    success,
+    io_error = -1,
+    file_is_directory = -2,
+    file_is_not_directory = -3,
+    invalid_file = -4,
+    file_not_found = -5,
+    vnode_not_found = -6
 };
 };
-};
+};  // namespace influx
