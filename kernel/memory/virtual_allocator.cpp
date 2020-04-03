@@ -365,9 +365,10 @@ bool influx::memory::virtual_allocator::free_vma_region(vma_region_t region) {
 
     // If there is a new pending VMA list page, insert it
     if (_vma_list_pending_new_region.size > 0) {
-        insert_vma_region(_vma_list_pending_new_region);
+        vma_list_pending_new_region_copy = _vma_list_pending_new_region;
         _vma_list_pending_new_region = {
             .base_addr = 0, .size = 0, .protection_flags = 0, .allocated = false};
+        insert_vma_region(vma_list_pending_new_region_copy);
     }
 
     return false;
