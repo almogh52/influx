@@ -61,7 +61,7 @@ int64_t influx::vfs::vfs::open(const influx::vfs::path& file_path,
     error err = error::success;
     file_info file;
 
-    structures::pair<uint64_t, structures::reference_wrapper<vnode>> vn(5, _vnodes.empty_item());
+    structures::pair<uint64_t, structures::reference_wrapper<vnode>> vn(0, _vnodes.empty_item());
 
     // If no filesystem contains this file path
     if (fs == nullptr) {
