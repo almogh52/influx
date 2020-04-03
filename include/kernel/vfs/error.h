@@ -4,13 +4,16 @@
 namespace influx {
 namespace vfs {
 enum error : int64_t {
-    success,
-    io_error = -1,
-    file_is_directory = -2,
-    file_is_not_directory = -3,
-    invalid_file = -4,
-    file_not_found = -5,
-    vnode_not_found = -6
+    success = 0,
+    unknown_error = -1,
+    io_error = -2,
+    file_is_directory = -3,
+    file_is_not_directory = -4,
+    invalid_file = -5,
+    file_not_found = -6,
+    vnode_not_found = -7,
+    insufficient_permissions = -8,
+    invalid_file_access = -9
 };
 };
 };  // namespace influx
