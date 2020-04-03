@@ -102,7 +102,8 @@ influx::vfs::error influx::fs::ext2::read(void *fs_file_info, char *buffer, size
     return vfs::error::success;
 }
 
-influx::vfs::error influx::fs::ext2::get_file_info(void *fs_file_info, influx::vfs::file &file) {
+influx::vfs::error influx::fs::ext2::get_file_info(void *fs_file_info,
+                                                   influx::vfs::file_info &file) {
     kassert(fs_file_info != nullptr);
 
     // Get the inode of the file
@@ -114,9 +115,9 @@ influx::vfs::error influx::fs::ext2::get_file_info(void *fs_file_info, influx::v
     // Set the properties of the file
     file.type = file_type_for_inode(inode);
     file.size = inode->size;
+    file.permissions = file_permissions_for_inode(inode);
     file.modified = inode->last_modification_time;
     file.modified = inode->last_access_time;
-    file.inode = *(uint64_t *)fs_file_info;
     file.created = inode->creation_time;
 
     return vfs::error::success;
@@ -143,10 +144,14 @@ influx::vfs::error influx::fs::ext2::entries(
     return vfs::error::success;
 }
 
-void *influx::fs::ext2::get_fs_file_info(const influx::vfs::path &file_path) {
+void *influx::fs::ext2::get_fs_file_data(const influx::vfs::path &file_path) {
     uint64_t inode = find_inode(file_path);
 
     return inode == EXT2_INVALID_INODE ? nullptr : new uint64_t(inode);
+}
+
+bool influx::fs::ext2::compare_fs_file_data(void *fs_file_data_1, void *fs_file_data_2) {
+    return *(uint64_t *)fs_file_data_1 == *(uint64_t *)fs_file_data_2;
 }
 
 influx::structures::dynamic_buffer influx::fs::ext2::read_block(uint64_t block, uint64_t offset,
@@ -433,7 +438,7 @@ influx::vfs::file_type influx::fs::ext2::file_type_for_dir_entry(
 
 influx::vfs::file_type influx::fs::ext2::file_type_for_inode(influx::fs::ext2_inode *inode) {
     // Get type from inode
-    switch ((ext2_types_permissions)((uint8_t)inode->types_permissions & EXT2_INODE_TYPES_MASK)) {
+    switch (inode->types_permissions & EXT2_INODE_TYPES_MASK) {
         case ext2_types_permissions::fifo:
             return vfs::file_type::fifo;
         case ext2_types_permissions::character_device:
@@ -451,6 +456,28 @@ influx::vfs::file_type influx::fs::ext2::file_type_for_inode(influx::fs::ext2_in
         default:
             return vfs::file_type::unknown;
     }
+}
+
+influx::vfs::file_permissions influx::fs::ext2::file_permissions_for_inode(
+    influx::fs::ext2_inode *inode) {
+    vfs::file_permissions permissions;
+
+    // Read permission
+    if (inode->types_permissions & ext2_types_permissions::user_read) {
+        permissions.read = true;
+    }
+
+    // Write permission
+    if (inode->types_permissions & ext2_types_permissions::user_write) {
+        permissions.write = true;
+    }
+
+    // Execute permission
+    if (inode->types_permissions & ext2_types_permissions::user_execute) {
+        permissions.execute = true;
+    }
+
+    return permissions;
 }
 
 uint64_t influx::fs::ext2::alloc_block() {

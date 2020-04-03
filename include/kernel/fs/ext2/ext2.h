@@ -9,6 +9,8 @@
 #include <kernel/structures/dynamic_buffer.h>
 #include <kernel/structures/vector.h>
 #include <kernel/threading/mutex.h>
+#include <kernel/vfs/file_permissions.h>
+#include <kernel/vfs/file_type.h>
 
 #define EXT2_MAGIC 0xEF53
 #define EXT2_SUPERBLOCK_OFFSET 1024
@@ -40,14 +42,15 @@ class ext2 : public vfs::filesystem {
                                     size_t offset, size_t& amount_written) {
         return vfs::error::success;
     };
-    virtual vfs::error get_file_info(void* fs_file_info, vfs::file& file);
+    virtual vfs::error get_file_info(void* fs_file_info, vfs::file_info& file);
     virtual vfs::error entries(void* fs_file_info, structures::vector<vfs::dir_entry>& entries);
     inline virtual vfs::error create_file(const vfs::path& file_path) {
         return vfs::error::success;
     };
     inline virtual vfs::error create_dir(const vfs::path& dir_path) { return vfs::error::success; };
     inline virtual vfs::error remove(void* fs_file_info) { return vfs::error::success; };
-    virtual void* get_fs_file_info(const vfs::path& file_path);
+    virtual void* get_fs_file_data(const vfs::path& file_path);
+    virtual bool compare_fs_file_data(void* fs_file_data_1, void* fs_file_data_2);
 
    private:
     ext2_superblock _sb;
@@ -75,6 +78,8 @@ class ext2 : public vfs::filesystem {
     structures::vector<vfs::dir_entry> read_dir(ext2_inode* dir_inode);
     vfs::file_type file_type_for_dir_entry(ext2_dir_entry* dir_entry);
     vfs::file_type file_type_for_inode(ext2_inode* inode);
+
+    vfs::file_permissions file_permissions_for_inode(ext2_inode* inode);
 
     bool save_block_group(uint64_t block_group);
 };
