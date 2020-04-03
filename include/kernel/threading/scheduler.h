@@ -4,6 +4,8 @@
 #include <kernel/structures/vector.h>
 #include <kernel/threading/process.h>
 #include <kernel/threading/thread.h>
+#include <kernel/vfs/error.h>
+#include <kernel/vfs/open_file.h>
 
 #define TASK_MAX_TIME_SLICE 25
 
@@ -36,6 +38,10 @@ class scheduler {
 
     uint64_t get_current_task_id() const;
     uint64_t get_current_process_id() const;
+
+    uint64_t add_file_descriptor(const vfs::open_file &file);
+    vfs::error get_file_descriptor(uint64_t fd, vfs::open_file &file);
+    void update_file_descriptor(uint64_t fd, vfs::open_file &file);
 
    private:
     logger _log;

@@ -37,6 +37,7 @@ influx::threading::scheduler::scheduler()
                               .system = true,
                               .cr3 = scheduler_utils::get_cr3(),
                               .threads = structures::unique_vector(),
+                              .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
                               .name = "kernel"});
 
     // Create kernel main thread
@@ -352,6 +353,34 @@ uint64_t influx::threading::scheduler::get_current_task_id() const {
 
 uint64_t influx::threading::scheduler::get_current_process_id() const {
     return _current_task->value().pid;
+}
+
+uint64_t influx::threading::scheduler::add_file_descriptor(const influx::vfs::open_file &file) {
+    process &process = _processes[_current_task->value().pid];
+
+    return process.file_descriptors.insert_unique(file);
+}
+
+influx::vfs::error influx::threading::scheduler::get_file_descriptor(uint64_t fd,
+                                                                     influx::vfs::open_file &file) {
+    process &process = _processes[_current_task->value().pid];
+
+    // If the file descriptor isn't found return error
+    if (process.file_descriptors.count(fd) == 0) {
+        return vfs::error::invalid_file;
+    }
+
+    // Get the file
+    file = process.file_descriptors[fd];
+
+    return vfs::error::success;
+}
+
+void influx::threading::scheduler::update_file_descriptor(uint64_t fd,
+                                                          influx::vfs::open_file &file) {
+    process &process = _processes[_current_task->value().pid];
+
+    process.file_descriptors[fd] = file;
 }
 
 void influx::threading::scheduler::tasks_clean_task() {

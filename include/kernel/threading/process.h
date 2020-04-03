@@ -1,6 +1,8 @@
 #pragma once
 #include <kernel/structures/string.h>
+#include <kernel/structures/unique_hash_map.h>
 #include <kernel/structures/unique_vector.h>
+#include <kernel/vfs/open_file.h>
 #include <stdint.h>
 
 #define MAX_PRIORITY_LEVEL 9
@@ -18,6 +20,8 @@ struct process {
     uint64_t cr3 __attribute__((packed));
 
     structures::unique_vector threads;
+
+    structures::unique_hash_map<vfs::open_file> file_descriptors;
 
     structures::string name;
 };
