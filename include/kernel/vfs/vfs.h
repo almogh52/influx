@@ -5,11 +5,11 @@
 #include <kernel/structures/unique_hash_map.h>
 #include <kernel/structures/vector.h>
 #include <kernel/threading/mutex.h>
-#include <kernel/vfs/access_type.h>
 #include <kernel/vfs/error.h>
 #include <kernel/vfs/fs_mount.h>
 #include <kernel/vfs/fs_type.h>
 #include <kernel/vfs/open_file.h>
+#include <kernel/vfs/open_flags.h>
 #include <kernel/vfs/vnode.h>
 
 namespace influx {
@@ -20,7 +20,7 @@ class vfs {
 
     bool mount(fs_type type, path mount_path, drivers::ata::drive_slice drive);
 
-    int64_t open(const path& file_path, access_type access);
+    int64_t open(const path& file_path, open_flags flags);
     int64_t read(int64_t fd, void* buf, size_t count);
 
    private:
@@ -37,7 +37,7 @@ class vfs {
     error get_vnode_for_file(filesystem* fs, void* fs_file_data,
                              structures::pair<uint64_t, structures::reference_wrapper<vnode>>& vn);
     error create_vnode_for_file(
-        filesystem *fs, void* fs_file_data, file_info file,
+        filesystem* fs, void* fs_file_data, file_info file,
         structures::pair<uint64_t, structures::reference_wrapper<vnode>>& vn);
 
     filesystem* get_fs_for_file(const path& file_path);

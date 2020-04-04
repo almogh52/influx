@@ -53,8 +53,7 @@ bool influx::vfs::vfs::mount(influx::vfs::fs_type type, influx::vfs::path mount_
     return true;
 }
 
-int64_t influx::vfs::vfs::open(const influx::vfs::path& file_path,
-                               influx::vfs::access_type access) {
+int64_t influx::vfs::vfs::open(const influx::vfs::path& file_path, influx::vfs::open_flags flags) {
     filesystem* fs = get_fs_for_file(file_path);
     void* fs_file_data = nullptr;
 
@@ -63,9 +62,20 @@ int64_t influx::vfs::vfs::open(const influx::vfs::path& file_path,
 
     structures::pair<uint64_t, structures::reference_wrapper<vnode>> vn(0, _vnodes.empty_item());
 
+    // Verify flags
+    if ((!(flags & open_flags::read) && !(flags & open_flags::write))) {
+        return error::invalid_flags;
+    } else if ((flags & open_flags::directory) && (flags & open_flags::write)) {
+        return error::file_is_directory;
+    }
+
     // If no filesystem contains this file path
     if (fs == nullptr) {
-        return error::file_not_found;
+        if (flags & open_flags::create) {
+            // TODO: Implement file creating
+        } else {
+            return error::file_not_found;
+        }
     }
 
     // If the file wasn't found in the filesystem
@@ -80,11 +90,19 @@ int64_t influx::vfs::vfs::open(const influx::vfs::path& file_path,
     }
 
     // Verify file and access permissions
-    if (((access & access_type::read) && !file.permissions.read) ||
-        ((access & access_type::write || access & access_type::append) &&
-         !file.permissions.write)) {
+    if (((flags & open_flags::read) && !file.permissions.read) ||
+        ((flags & open_flags::write || flags & open_flags::append) && !file.permissions.write)) {
         delete (uint32_t*)fs_file_data;
         return error::insufficient_permissions;
+    }
+
+    // Verify file type
+    if (file.type == file_type::regular && (flags & open_flags::directory)) {
+        delete (uint32_t*)fs_file_data;
+        return error::file_not_found;
+    } else if (file.type == file_type::directory && (flags & open_flags::write)) {
+        delete (uint32_t*)fs_file_data;
+        return error::file_is_directory;
     }
 
     // Try to find the vnode for the file
@@ -104,10 +122,12 @@ int64_t influx::vfs::vfs::open(const influx::vfs::path& file_path,
 
     // Create the file descriptor and return it
     return kernel::scheduler()->add_file_descriptor(
-        open_file{.vnode_index = vn.first, .position = 0, .access = access});
+        open_file{.vnode_index = vn.first, .position = 0, .flags = flags});
 }
 
 int64_t influx::vfs::vfs::read(int64_t fd, void* buf, size_t count) {
+    kassert(fd >= 0);
+
     open_file file;
     size_t amount_read = 0;
 
@@ -124,7 +144,7 @@ int64_t influx::vfs::vfs::read(int64_t fd, void* buf, size_t count) {
     vnode& vn = _vnodes[file.vnode_index];
 
     // Check access for the file
-    if (!(file.access & access_type::read)) {
+    if (!(file.flags & open_flags::read)) {
         return error::invalid_file_access;
     }
 
