@@ -101,6 +101,7 @@ influx::threading::tcb *influx::threading::scheduler::create_kernel_thread(void 
     regs *context =
         (regs *)((uint8_t *)stack + DEFAULT_KERNEL_STACK_SIZE - sizeof(regs) - sizeof(uint64_t));
 
+    interrupts_lock int_lk;
     tcb *new_task = new tcb(thread{.tid = _processes[0].threads.insert_unique(),
                                    .pid = 0,
                                    .context = context,
@@ -108,6 +109,7 @@ influx::threading::tcb *influx::threading::scheduler::create_kernel_thread(void 
                                    .state = blocked ? thread_state::blocked : thread_state::ready,
                                    .quantum = 0,
                                    .sleep_quantum = 0});
+    int_lk.unlock();
 
     _log("Creating kernel thread with function %p and data %p..\n", func, data);
 
@@ -356,6 +358,7 @@ uint64_t influx::threading::scheduler::get_current_process_id() const {
 }
 
 uint64_t influx::threading::scheduler::add_file_descriptor(const influx::vfs::open_file &file) {
+    interrupts_lock int_lk;
     process &process = _processes[_current_task->value().pid];
 
     return process.file_descriptors.insert_unique(file);
@@ -363,6 +366,7 @@ uint64_t influx::threading::scheduler::add_file_descriptor(const influx::vfs::op
 
 influx::vfs::error influx::threading::scheduler::get_file_descriptor(uint64_t fd,
                                                                      influx::vfs::open_file &file) {
+    interrupts_lock int_lk;
     process &process = _processes[_current_task->value().pid];
 
     // If the file descriptor isn't found return error
@@ -378,6 +382,7 @@ influx::vfs::error influx::threading::scheduler::get_file_descriptor(uint64_t fd
 
 void influx::threading::scheduler::update_file_descriptor(uint64_t fd,
                                                           influx::vfs::open_file &file) {
+    interrupts_lock int_lk;
     process &process = _processes[_current_task->value().pid];
 
     process.file_descriptors[fd] = file;
@@ -429,7 +434,9 @@ void influx::threading::scheduler::tasks_clean_task() {
                 int_lk.unlock();
             } else {
                 // Update the process object
+                int_lk.lock();
                 _processes[task_process.pid] = task_process;
+                int_lk.unlock();
             }
         }
 
@@ -458,11 +465,18 @@ void influx::threading::scheduler::queue_task(influx::threading::tcb *task) {
 
     _log("Queuing task %p..\n", task);
 
-    // Insert the task into the priority queue linked list
-    new_task_priority_queue.start->prev()->next() = task;
-    task->prev() = new_task_priority_queue.start->prev();
-    task->next() = new_task_priority_queue.start;
-    new_task_priority_queue.start->prev() = task;
+    // If the queue linked list is empty
+    if (new_task_priority_queue.start == nullptr) {
+        new_task_priority_queue.start = task;
+        task->prev() = task;
+        task->next() = task;
+    } else {
+        // Insert the task into the priority queue linked list
+        new_task_priority_queue.start->prev()->next() = task;
+        task->prev() = new_task_priority_queue.start->prev();
+        task->next() = new_task_priority_queue.start;
+        new_task_priority_queue.start->prev() = task;
+    }
 
     // Check if there is no next task and the new task is ready
     if (new_task_priority_queue.next_task == nullptr &&
