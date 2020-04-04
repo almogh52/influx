@@ -38,6 +38,11 @@ influx::threading::tcb *influx::threading::task_wait_queue::dequeue() {
     _queue_head = current_head->next();
     delete current_head;
 
+    // If the new queue head is the old queue head, set the queue head as null
+    if (_queue_head == current_head) {
+        _queue_head = nullptr;
+    }
+
     // Unblock the task
     kernel::scheduler()->unblock_task(task);
 
