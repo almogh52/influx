@@ -25,6 +25,9 @@ void influx::interrupts::isr_handler(influx::interrupts::regs *context) {
 }
 
 void influx::interrupts::exception_interrupt_handler(influx::interrupts::regs *context) {
+    // Disable interrupts
+    __asm__ __volatile__ ("cli");
+
     logger log("Exception Interrupt");
     log("CPU Exception (%x) occurred with code %x in address %p.\n", context->isr_number,
         context->error_code, context->rip);
