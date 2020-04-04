@@ -88,6 +88,7 @@ int64_t influx::vfs::vfs::open(const influx::vfs::path& file_path,
     }
 
     // Try to find the vnode for the file
+    threading::unique_lock vnodes_lk(_vnodes_mutex);
     if (((err = get_vnode_for_file(fs, fs_file_data, vn)) == error::vnode_not_found &&
          (err = create_vnode_for_file(fs, fs_file_data, file, vn)) != error::success) ||
         err != error::success) {
@@ -96,7 +97,7 @@ int64_t influx::vfs::vfs::open(const influx::vfs::path& file_path,
     }
 
     // Lock the file mutex
-    threading::lock_guard lk(vn.second->file_mutex);
+    threading::lock_guard file_lk(vn.second->file_mutex);
 
     // Increase the amount of open files
     vn.second->amount_of_open_files++;
@@ -108,7 +109,6 @@ int64_t influx::vfs::vfs::open(const influx::vfs::path& file_path,
 
 int64_t influx::vfs::vfs::read(int64_t fd, void* buf, size_t count) {
     open_file file;
-    vnode vn_cpy;
     size_t amount_read = 0;
 
     error err;
@@ -121,7 +121,7 @@ int64_t influx::vfs::vfs::read(int64_t fd, void* buf, size_t count) {
     }
 
     // Create a copy of the vnode
-    vn_cpy = _vnodes[file.vnode_index];
+    vnode& vn = _vnodes[file.vnode_index];
 
     // Check access for the file
     if (!(file.access & access_type::read)) {
@@ -129,13 +129,13 @@ int64_t influx::vfs::vfs::read(int64_t fd, void* buf, size_t count) {
     }
 
     // Lock the file mutex
-    threading::lock_guard file_lk(_vnodes[file.vnode_index].file_mutex);
     vnodes_lk.unlock();
+    threading::lock_guard file_lk(vn.file_mutex);
 
     // Read the file
-    if ((err = vn_cpy.fs->read(vn_cpy.fs_data, (char*)buf,
-                               algorithm::min<size_t>(count, vn_cpy.file.size - file.position),
-                               file.position, amount_read)) != error::success) {
+    if ((err = vn.fs->read(vn.fs_data, (char*)buf,
+                           algorithm::min<size_t>(count, vn.file.size - file.position),
+                           file.position, amount_read)) != error::success) {
         return err;
     }
 
@@ -144,8 +144,7 @@ int64_t influx::vfs::vfs::read(int64_t fd, void* buf, size_t count) {
     kernel::scheduler()->update_file_descriptor(fd, file);
 
     // Update last accessed time
-    vnodes_lk.lock();
-    _vnodes[file.vnode_index].file.accessed = kernel::time_manager()->unix_timestamp();
+    vn.file.accessed = kernel::time_manager()->unix_timestamp();
 
     return amount_read;
 }
@@ -159,7 +158,7 @@ influx::vfs::error influx::vfs::vfs::get_vnode_for_file(
     influx::vfs::filesystem* fs, void* fs_file_data,
     influx::structures::pair<uint64_t, influx::structures::reference_wrapper<influx::vfs::vnode>>&
         vn) {
-    threading::lock_guard lk(_vnodes_mutex);
+    // vnodes mutex must be locked here
 
     // For each vnode pair, check if it
     for (auto& vnode_pair : _vnodes) {
@@ -178,7 +177,7 @@ influx::vfs::error influx::vfs::vfs::create_vnode_for_file(
     influx::vfs::filesystem* fs, void* fs_file_data, influx::vfs::file_info file,
     influx::structures::pair<uint64_t, influx::structures::reference_wrapper<influx::vfs::vnode>>&
         vn) {
-    threading::lock_guard lk(_vnodes_mutex);
+    // vnodes mutex must be locked here
 
     structures::pair<structures::unique_hash_map<vnode>::iterator, bool> vnode_pair(_vnodes.end(),
                                                                                     false);
