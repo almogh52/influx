@@ -14,7 +14,9 @@ enum error : int64_t {
     vnode_not_found = -7,
     insufficient_permissions = -8,
     invalid_file_access = -9,
-    invalid_flags = -10
+    invalid_flags = -10,
+    quota_exhausted = -11,
+    file_already_exists = -12
 };
 };
 };  // namespace influx

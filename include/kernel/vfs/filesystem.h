@@ -21,8 +21,8 @@ class filesystem {
                         size_t& amount_written) = 0;
     virtual error get_file_info(void* fs_file_info, file_info& file) = 0;
     virtual error entries(void* fs_file_info, structures::vector<dir_entry>& entries) = 0;
-    virtual error create_file(const path& file_path) = 0;
-    virtual error create_dir(const path& dir_path) = 0;
+    virtual error create_file(const path& file_path, file_permissions permissions, void **fs_file_info_ptr) = 0;
+    virtual error create_dir(const path& dir_path, file_permissions permissions, void **fs_file_info_ptr) = 0;
     virtual error remove(void* fs_file_info) = 0;
     virtual void* get_fs_file_data(const path& file_path) = 0;
     virtual bool compare_fs_file_data(void* fs_file_data_1, void* fs_file_data_2) = 0;

@@ -42,10 +42,13 @@ class ext2 : public vfs::filesystem {
                              size_t& amount_written);
     virtual vfs::error get_file_info(void* fs_file_info, vfs::file_info& file);
     virtual vfs::error entries(void* fs_file_info, structures::vector<vfs::dir_entry>& entries);
-    inline virtual vfs::error create_file(const vfs::path& file_path) {
+    virtual vfs::error create_file(const vfs::path& file_path, vfs::file_permissions permissions,
+                                   void** fs_file_info_ptr);
+    inline virtual vfs::error create_dir(const vfs::path& dir_path,
+                                         vfs::file_permissions permissions,
+                                         void** fs_file_info_ptr) {
         return vfs::error::success;
-    };
-    inline virtual vfs::error create_dir(const vfs::path& dir_path) { return vfs::error::success; };
+    }
     inline virtual vfs::error remove(void* fs_file_info) { return vfs::error::success; };
     virtual void* get_fs_file_data(const vfs::path& file_path);
     virtual bool compare_fs_file_data(void* fs_file_data_1, void* fs_file_data_2);
@@ -70,6 +73,11 @@ class ext2 : public vfs::filesystem {
     structures::dynamic_buffer read_file(ext2_inode* inode, uint64_t offset, uint64_t amount);
     uint64_t write_file(ext2_inode* inode, uint64_t offset, structures::dynamic_buffer buf);
 
+    uint32_t create_inode(vfs::file_type type, vfs::file_permissions permissions);
+    influx::vfs::error create_dir_entry(ext2_inode* dir_inode, uint32_t file_inode,
+                                        ext2_dir_entry_type entry_type,
+                                        structures::string file_name);
+
     uint32_t alloc_block();
     uint32_t alloc_inode();
     bool free_block(uint32_t block);
@@ -78,8 +86,11 @@ class ext2 : public vfs::filesystem {
     structures::vector<vfs::dir_entry> read_dir(ext2_inode* dir_inode);
     vfs::file_type file_type_for_dir_entry(ext2_dir_entry* dir_entry);
     vfs::file_type file_type_for_inode(ext2_inode* inode);
-
     vfs::file_permissions file_permissions_for_inode(ext2_inode* inode);
+
+    ext2_types_permissions ext2_file_types_permissions(vfs::file_type type,
+                                                       vfs::file_permissions permissions);
+    ext2_dir_entry_type ext2_dir_entry_type_for_file_type(vfs::file_type type);
 
     bool save_block_group(uint32_t block_group);
     bool save_inode(uint32_t inode, ext2_inode* inode_obj);
