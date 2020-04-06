@@ -44,11 +44,8 @@ class ext2 : public vfs::filesystem {
     virtual vfs::error entries(void* fs_file_info, structures::vector<vfs::dir_entry>& entries);
     virtual vfs::error create_file(const vfs::path& file_path, vfs::file_permissions permissions,
                                    void** fs_file_info_ptr);
-    inline virtual vfs::error create_dir(const vfs::path& dir_path,
-                                         vfs::file_permissions permissions,
-                                         void** fs_file_info_ptr) {
-        return vfs::error::success;
-    }
+    virtual vfs::error create_dir(const vfs::path& dir_path, vfs::file_permissions permissions,
+                                  void** fs_file_info_ptr);
     inline virtual vfs::error remove(void* fs_file_info) { return vfs::error::success; };
     virtual void* get_fs_file_data(const vfs::path& file_path);
     virtual bool compare_fs_file_data(void* fs_file_data_1, void* fs_file_data_2);

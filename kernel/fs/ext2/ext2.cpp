@@ -57,8 +57,9 @@ bool influx::fs::ext2::mount(const influx::vfs::path &mount_path) {
     // Set last mount time and last mount path
     _log("Setting last mount time and last mount path..\n");
     _sb.mount_time = (uint32_t)kernel::time_manager()->unix_timestamp();
-    memory::utils::memcpy(_sb.last_mounted_path, mount_path_str.c_str(),
-                          algorithm::min<uint64_t>(mount_path_str.size() + 1, 64));
+    memory::utils::memcpy(
+        _sb.last_mounted_path, mount_path_str.c_str(),
+        algorithm::min<uint64_t>(mount_path_str.size() + 1, sizeof(_sb.last_mounted_path)));
     if (!_drive.write(EXT2_SUPERBLOCK_OFFSET, sizeof(_sb), &_sb)) {
         return false;
     }
@@ -68,7 +69,7 @@ bool influx::fs::ext2::mount(const influx::vfs::path &mount_path) {
 
 influx::vfs::error influx::fs::ext2::read(void *fs_file_info, char *buffer, size_t count,
                                           size_t offset, size_t &amount_read) {
-    kassert(fs_file_info != nullptr && buffer != nullptr && offset > 0 && count > 0);
+    kassert(fs_file_info != nullptr && buffer != nullptr && count > 0);
 
     structures::dynamic_buffer buf;
 
@@ -110,7 +111,7 @@ influx::vfs::error influx::fs::ext2::read(void *fs_file_info, char *buffer, size
 
 influx::vfs::error influx::fs::ext2::write(void *fs_file_info, const char *buffer, size_t count,
                                            size_t offset, size_t &amount_written) {
-    kassert(fs_file_info != nullptr && buffer != nullptr && offset > 0 && count > 0);
+    kassert(fs_file_info != nullptr && buffer != nullptr && count > 0);
 
     structures::dynamic_buffer buf(count);
 
@@ -208,6 +209,18 @@ influx::vfs::error influx::fs::ext2::create_file(const influx::vfs::path &file_p
         return vfs::error::io_error;
     }
 
+    // Check if the user can write to the directory
+    if (!(dir_inode_obj->types_permissions & ext2_types_permissions::user_write)) {
+        delete dir_inode_obj;
+        return vfs::error::insufficient_permissions;
+    }
+
+    // Verify that the parent dir is a directory
+    if (!(dir_inode_obj->types_permissions & ext2_types_permissions::directory)) {
+        delete dir_inode_obj;
+        return vfs::error::file_not_found;
+    }
+
     // Get dir entries and check that the name isn't taken
     dir_entries = read_dir(dir_inode_obj);
     for (const auto &dir_entry : dir_entries) {
@@ -235,11 +248,99 @@ influx::vfs::error influx::fs::ext2::create_file(const influx::vfs::path &file_p
     // Free dir inode object
     delete dir_inode_obj;
 
-    // Get the inode object
-    *fs_file_info_ptr = get_inode(file_inode);
-    if (*fs_file_info_ptr == nullptr) {
+    // Get the fs file info for the new file
+    *fs_file_info_ptr = new uint32_t(file_inode);
+
+    return vfs::error::success;
+}
+
+influx::vfs::error influx::fs::ext2::create_dir(const influx::vfs::path &dir_path,
+                                                influx::vfs::file_permissions permissions,
+                                                void **fs_file_info_ptr) {
+    uint32_t dir_inode = find_inode(dir_path.parent_path());
+    ext2_inode *dir_inode_obj = nullptr;
+    structures::vector<vfs::dir_entry> dir_entries;
+
+    uint32_t new_dir_inode = EXT2_INVALID_INODE;
+    ext2_inode *new_dir_inode_obj = nullptr;
+
+    vfs::error err = vfs::error::success;
+
+    // Base dir not found
+    if (dir_inode == EXT2_INVALID_INODE) {
+        return vfs::error::file_not_found;
+    }
+
+    // Get the inode of the dir
+    dir_inode_obj = get_inode(dir_inode);
+    if (dir_inode_obj == nullptr) {
         return vfs::error::io_error;
     }
+
+    // Check if the user can write to the directory
+    if (!(dir_inode_obj->types_permissions & ext2_types_permissions::user_write)) {
+        delete dir_inode_obj;
+        return vfs::error::insufficient_permissions;
+    }
+
+    // Verify that the parent dir is a directory
+    if (!(dir_inode_obj->types_permissions & ext2_types_permissions::directory)) {
+        delete dir_inode_obj;
+        return vfs::error::file_not_found;
+    }
+
+    // Get dir entries and check that the name isn't taken
+    dir_entries = read_dir(dir_inode_obj);
+    for (const auto &dir_entry : dir_entries) {
+        // If the name is taken
+        if (dir_entry.name == dir_path.base_name()) {
+            return vfs::error::file_already_exists;
+        }
+    }
+
+    // Create the new dir
+    new_dir_inode = create_inode(vfs::file_type::directory, permissions);
+    if (new_dir_inode == EXT2_INVALID_INODE) {
+        delete dir_inode_obj;
+        return vfs::error::quota_exhausted;
+    }
+
+    // Create the dir entry for the new dir
+    if ((err = create_dir_entry(dir_inode_obj, new_dir_inode, ext2_dir_entry_type::directory,
+                                dir_path.base_name())) != vfs::error::success) {
+        delete dir_inode_obj;
+        free_inode(new_dir_inode);
+        return err;
+    }
+
+    // Free dir inode object
+    delete dir_inode_obj;
+
+    // Get the new dir inode object
+    new_dir_inode_obj = get_inode(new_dir_inode);
+    if (new_dir_inode_obj == nullptr) {
+        return vfs::error::io_error;
+    }
+
+    // Create 2 base dirs entries in the new dir (current dir and previous dir)
+    if ((err = create_dir_entry(new_dir_inode_obj, new_dir_inode, ext2_dir_entry_type::directory,
+                                ".")) != vfs::error::success ||
+        (err = create_dir_entry(new_dir_inode_obj, dir_inode, ext2_dir_entry_type::directory,
+                                "..")) != vfs::error::success) {
+        delete new_dir_inode_obj;
+        free_inode(new_dir_inode);
+        return err;
+    }
+
+    // Save the new dir inode and free it
+    if (!save_inode(new_dir_inode, new_dir_inode_obj)) {
+        delete new_dir_inode_obj;
+        return vfs::error::io_error;
+    }
+    delete new_dir_inode_obj;
+
+    // Get the fs file info for the new dir
+    *fs_file_info_ptr = new uint32_t(new_dir_inode);
 
     return vfs::error::success;
 }
@@ -577,7 +678,8 @@ uint64_t influx::fs::ext2::write_file(influx::fs::ext2_inode *inode, uint64_t of
     uint64_t current_offset = 0, current_write_amount = 0;
 
     uint32_t current_block = EXT2_INVALID_BLOCK;
-    uint32_t size_change = (uint32_t)(buf.size() - (inode->size - offset));
+    uint32_t size_change = (uint32_t)(
+        (buf.size() - (inode->size - offset)) > 0 ? (buf.size() - (inode->size - offset)) : 0);
 
     // Verify file offset
     if ((offset + buf.size() >=
@@ -846,7 +948,11 @@ uint32_t influx::fs::ext2::create_inode(influx::vfs::file_type type,
     // TODO: Set here user and group id
 
     // Save the new inode
-    save_inode(inode, inode_obj);
+    if (!save_inode(inode, inode_obj)) {
+        delete inode_obj;
+        free_inode(inode);
+        return EXT2_INVALID_INODE;
+    }
 
     // Delete the inode object
     delete inode_obj;
@@ -860,6 +966,7 @@ influx::vfs::error influx::fs::ext2::create_dir_entry(ext2_inode *dir_inode, uin
     kassert(file_name.size() <= UINT8_MAX);
 
     // ** This assumes there is no other file in the directory with the same name **
+    // ** This also assumes that the dir has write permission **
 
     uint64_t dir_file_offset = 0, new_dir_entry_offset = dir_inode->size;
     ext2_dir_entry *dir_entry = nullptr;
@@ -902,15 +1009,14 @@ influx::vfs::error influx::fs::ext2::create_dir_entry(ext2_inode *dir_inode, uin
             // Increase buf offset
             dir_file_offset += dir_entry->size;
         }
-    } else {
-        return vfs::error::unknown_error;
     }
 
     // If no empty space was found
     if (dir_file_offset == dir_inode->size) {
-        new_dir_entry_offset = dir_inode->size + (_block_size - (dir_inode->size % _block_size));
-        ((ext2_dir_entry *)new_dir_entry_buf.data())->size =
-            (uint16_t)(_block_size - new_dir_entry_size);
+        new_dir_entry_offset =
+            dir_inode->size +
+            (dir_inode->size % _block_size ? (_block_size - (dir_inode->size % _block_size)) : 0);
+        ((ext2_dir_entry *)new_dir_entry_buf.data())->size = (uint16_t)_block_size;
     } else {
         // Set the size of the new dir entry
         ((ext2_dir_entry *)new_dir_entry_buf.data())->size =
@@ -935,6 +1041,10 @@ influx::vfs::error influx::fs::ext2::create_dir_entry(ext2_inode *dir_inode, uin
     if (!write_file(dir_inode, new_dir_entry_offset, new_dir_entry_buf)) {
         return vfs::error::io_error;
     }
+
+    // Align the size of the directory
+    dir_inode->size +=
+        (dir_inode->size % _block_size ? (_block_size - (dir_inode->size % _block_size)) : 0);
 
     return vfs::error::success;
 }
