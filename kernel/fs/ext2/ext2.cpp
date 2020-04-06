@@ -9,12 +9,13 @@
 
 #define EXT2_IND_N_BLOCKS (_block_size / sizeof(uint32_t))
 #define EXT2_DIND_N_BLOCKS (EXT2_IND_N_BLOCKS * EXT2_IND_N_BLOCKS)
+#define EXT2_TIND_N_BLOCKS (EXT2_IND_N_BLOCKS * EXT2_DIND_N_BLOCKS)
 
 influx::fs::ext2::ext2(const influx::drivers::ata::drive_slice &drive)
     : vfs::filesystem("EXT2", drive), _block_size(0) {}
 
 bool influx::fs::ext2::mount(const influx::vfs::path &mount_path) {
-    uint64_t number_of_groups = 0;
+    uint32_t number_of_groups = 0;
 
     structures::string mount_path_str = mount_path.string();
 
@@ -67,12 +68,12 @@ bool influx::fs::ext2::mount(const influx::vfs::path &mount_path) {
 
 influx::vfs::error influx::fs::ext2::read(void *fs_file_info, char *buffer, size_t count,
                                           size_t offset, size_t &amount_read) {
-    kassert(fs_file_info != nullptr);
+    kassert(fs_file_info != nullptr && buffer != nullptr && offset > 0 && count > 0);
 
     structures::dynamic_buffer buf;
 
     // Get the inode of the file
-    ext2_inode *inode = get_inode(*(uint64_t *)fs_file_info);
+    ext2_inode *inode = get_inode(*(uint32_t *)fs_file_info);
     if (!inode) {
         return vfs::error::invalid_file;
     }
@@ -99,6 +100,42 @@ influx::vfs::error influx::fs::ext2::read(void *fs_file_info, char *buffer, size
     // Copy to the buffer
     memory::utils::memcpy(buffer, buf.data(), buf.size());
 
+    // Save the inode
+    if (!save_inode(*(uint32_t *)fs_file_info, inode)) {
+        return vfs::error::io_error;
+    }
+
+    return vfs::error::success;
+}
+
+influx::vfs::error influx::fs::ext2::write(void *fs_file_info, const char *buffer, size_t count,
+                                           size_t offset, size_t &amount_written) {
+    kassert(fs_file_info != nullptr && buffer != nullptr && offset > 0 && count > 0);
+
+    structures::dynamic_buffer buf(count);
+
+    // Get the inode of the file
+    ext2_inode *inode = get_inode(*(uint32_t *)fs_file_info);
+    if (!inode) {
+        return vfs::error::invalid_file;
+    }
+
+    // Check if the file is a directory
+    if (file_type_for_inode(inode) == vfs::file_type::directory) {
+        return vfs::error::file_is_directory;
+    }
+
+    // Copy to the buffer
+    memory::utils::memcpy(buf.data(), buffer, buf.size());
+
+    // Try to write to the file
+    amount_written = write_file(inode, offset, buf);
+
+    // Save the inode
+    if (!save_inode(*(uint32_t *)fs_file_info, inode)) {
+        return vfs::error::io_error;
+    }
+
     return vfs::error::success;
 }
 
@@ -107,7 +144,7 @@ influx::vfs::error influx::fs::ext2::get_file_info(void *fs_file_info,
     kassert(fs_file_info != nullptr);
 
     // Get the inode of the file
-    ext2_inode *inode = get_inode(*(uint64_t *)fs_file_info);
+    ext2_inode *inode = get_inode(*(uint32_t *)fs_file_info);
     if (!inode) {
         return vfs::error::invalid_file;
     }
@@ -128,7 +165,7 @@ influx::vfs::error influx::fs::ext2::entries(
     kassert(fs_file_info != nullptr);
 
     // Get the inode of the file
-    ext2_inode *inode = get_inode(*(uint64_t *)fs_file_info);
+    ext2_inode *inode = get_inode(*(uint32_t *)fs_file_info);
     if (!inode) {
         return vfs::error::invalid_file;
     }
@@ -141,20 +178,25 @@ influx::vfs::error influx::fs::ext2::entries(
     // Set the properties of the file
     entries = read_dir(inode);
 
+    // Save the inode of the dir
+    if (!save_inode(*(uint32_t *)fs_file_info, inode)) {
+        return vfs::error::io_error;
+    }
+
     return vfs::error::success;
 }
 
 void *influx::fs::ext2::get_fs_file_data(const influx::vfs::path &file_path) {
-    uint64_t inode = find_inode(file_path);
+    uint32_t inode = find_inode(file_path);
 
-    return inode == EXT2_INVALID_INODE ? nullptr : new uint64_t(inode);
+    return inode == EXT2_INVALID_INODE ? nullptr : new uint32_t(inode);
 }
 
 bool influx::fs::ext2::compare_fs_file_data(void *fs_file_data_1, void *fs_file_data_2) {
-    return *(uint64_t *)fs_file_data_1 == *(uint64_t *)fs_file_data_2;
+    return *(uint32_t *)fs_file_data_1 == *(uint32_t *)fs_file_data_2;
 }
 
-influx::structures::dynamic_buffer influx::fs::ext2::read_block(uint64_t block, uint64_t offset,
+influx::structures::dynamic_buffer influx::fs::ext2::read_block(uint32_t block, uint64_t offset,
                                                                 int64_t amount) {
     amount = amount == -1 ? _block_size - offset : amount;
     kassert(offset + amount <= _block_size);
@@ -169,7 +211,7 @@ influx::structures::dynamic_buffer influx::fs::ext2::read_block(uint64_t block, 
     return buf;
 }
 
-bool influx::fs::ext2::write_block(uint64_t block, influx::structures::dynamic_buffer &buf,
+bool influx::fs::ext2::write_block(uint32_t block, influx::structures::dynamic_buffer &buf,
                                    uint64_t offset) {
     kassert(buf.size() <= _block_size - offset);
 
@@ -177,32 +219,41 @@ bool influx::fs::ext2::write_block(uint64_t block, influx::structures::dynamic_b
     return _drive.write((block * _block_size) + offset, buf.size(), buf.data());
 }
 
-influx::fs::ext2_inode *influx::fs::ext2::get_inode(uint64_t inode) {
-    kassert(inode <= _sb.inodes_count);
+bool influx::fs::ext2::clear_block(uint32_t block) {
+    structures::dynamic_buffer buf(_block_size);
 
-    uint64_t block_group = (inode - 1) / _sb.inodes_per_group;
-    uint64_t inode_index = (inode - 1) % _sb.inodes_per_group;
-    uint64_t block_index = inode_index / (_block_size / _sb.inode_size);
-    uint64_t inode_block_index = (inode - 1) % (_block_size / _sb.inode_size);
+    // Set the buf as zeros
+    memory::utils::memset(buf.data(), 0, _block_size);
+
+    // Write the data to the drive
+    return write_block(block, buf);
+}
+
+influx::fs::ext2_inode *influx::fs::ext2::get_inode(uint32_t inode) {
+    kassert(inode <= _sb.inodes_count && inode > 0);
+
+    uint32_t block_group = (inode - 1) / _sb.inodes_per_group;
+    uint32_t inode_index = (inode - 1) % _sb.inodes_per_group;
+    uint32_t block_index = inode_index / (_block_size / _sb.inode_size);
+    uint32_t inode_block_index = (inode - 1) % (_block_size / _sb.inode_size);
     ext2_inode *inode_obj = new ext2_inode();
 
-    structures::dynamic_buffer buf;
+    threading::lock_guard lk(_block_groups_mutexes[block_group]);
 
-    threading::unique_lock lk(_block_groups_mutexes[block_group]);
-
-    // Read the inode table block
-    buf = read_block(_block_groups[block_group].inode_table_start_block + block_index);
-    lk.unlock();
-
-    // Copy the inode data from the inode table
-    memory::utils::memcpy(inode_obj, buf.data() + _sb.inode_size * inode_block_index,
-                          sizeof(ext2_inode));
+    // Read the inode
+    if (!_drive.read(
+            (_block_groups[block_group].inode_table_start_block + block_index) * _block_size +
+                inode_block_index * _sb.inode_size,
+            sizeof(ext2_inode), inode_obj)) {
+        delete inode_obj;
+        return nullptr;
+    }
 
     return inode_obj;
 }
 
-uint64_t influx::fs::ext2::find_inode(const influx::vfs::path &file_path) {
-    uint64_t inode = EXT2_INVALID_INODE, current_inode = EXT2_INVALID_INODE;
+uint32_t influx::fs::ext2::find_inode(const influx::vfs::path &file_path) {
+    uint32_t inode = EXT2_INVALID_INODE, current_inode = EXT2_INVALID_INODE;
     ext2_inode *current_inode_obj = nullptr;
 
     structures::vector<vfs::dir_entry> dir_entries;
@@ -231,7 +282,7 @@ uint64_t influx::fs::ext2::find_inode(const influx::vfs::path &file_path) {
             // Search for the wanted entry
             for (const auto &entry : dir_entries) {
                 if (entry.name == branch) {
-                    inode = entry.inode;
+                    inode = (uint32_t)entry.inode;
                     break;
                 }
             }
@@ -259,42 +310,102 @@ uint64_t influx::fs::ext2::find_inode(const influx::vfs::path &file_path) {
     return inode;
 }
 
-uint64_t influx::fs::ext2::get_block_for_offset(influx::fs::ext2_inode *inode, uint64_t offset) {
+uint32_t influx::fs::ext2::get_block_for_offset(influx::fs::ext2_inode *inode, uint64_t offset,
+                                                bool allocate) {
     structures::dynamic_buffer buf;
 
+    uint32_t block_index = (uint32_t)(offset / _block_size);
+    uint32_t doubly_indirect_block = EXT2_INVALID_BLOCK, doubly_index = 0,
+             singly_indirect_block = EXT2_INVALID_BLOCK, singly_index = 0;
+
     // Check for valid offset
-    if (offset >= inode->size) {
+    if ((!allocate && offset >= inode->size) ||
+        (allocate && offset >= ((EXT2_TIND_N_BLOCKS + EXT2_DIND_N_BLOCKS + EXT2_IND_N_BLOCKS +
+                                 EXT2_NDIR_BLOCKS) *
+                                _block_size))) {
         return EXT2_INVALID_BLOCK;
     }
 
-    uint64_t block_index = offset / _block_size;
-    uint64_t doubly_indirect_block = EXT2_INVALID_BLOCK, doubly_index = 0,
-             singly_indirect_block = EXT2_INVALID_BLOCK, singly_index = 0;
-
     if (block_index < EXT2_NDIR_BLOCKS) {  // Direct block
+        // Allocate new block if needed
+        if (allocate && inode->block_pointers[block_index] == EXT2_INVALID_BLOCK) {
+            inode->block_pointers[block_index] = alloc_block();
+            inode->disk_sectors_count += _block_size / ATA_SECTOR_SIZE;
+        }
+
         return inode->block_pointers[block_index];
     } else if (block_index < (EXT2_IND_N_BLOCKS + EXT2_NDIR_BLOCKS)) {  // Singly indirect block
+        // Allocate new block if needed
+        if (allocate && inode->block_pointers[EXT2_IND_BLOCK] == EXT2_INVALID_BLOCK) {
+            inode->block_pointers[EXT2_IND_BLOCK] = alloc_block();
+            inode->disk_sectors_count += _block_size / ATA_SECTOR_SIZE;
+
+            if (inode->block_pointers[EXT2_IND_BLOCK] == EXT2_INVALID_BLOCK ||
+                !clear_block(inode->block_pointers[EXT2_IND_BLOCK])) {
+                return inode->block_pointers[EXT2_IND_BLOCK];
+            }
+        }
+
         singly_indirect_block = inode->block_pointers[EXT2_IND_BLOCK];
         singly_index = block_index - EXT2_NDIR_BLOCKS;
     } else if (block_index < (EXT2_DIND_N_BLOCKS + EXT2_IND_N_BLOCKS +
                               EXT2_NDIR_BLOCKS)) {  // Doubly indirect block
+        // Allocate new block if needed
+        if (allocate && inode->block_pointers[EXT2_DIND_BLOCK] == EXT2_INVALID_BLOCK) {
+            inode->block_pointers[EXT2_DIND_BLOCK] = alloc_block();
+            inode->disk_sectors_count += _block_size / ATA_SECTOR_SIZE;
+
+            if (inode->block_pointers[EXT2_DIND_BLOCK] == EXT2_INVALID_BLOCK ||
+                !clear_block(inode->block_pointers[EXT2_DIND_BLOCK])) {
+                return inode->block_pointers[EXT2_DIND_BLOCK];
+            }
+        }
+
         doubly_indirect_block = inode->block_pointers[EXT2_DIND_BLOCK];
-        doubly_index = (block_index - (EXT2_NDIR_BLOCKS + EXT2_IND_N_BLOCKS)) / EXT2_IND_N_BLOCKS;
-        singly_index = (block_index - (EXT2_NDIR_BLOCKS + EXT2_IND_N_BLOCKS)) % EXT2_IND_N_BLOCKS;
+        doubly_index = (uint32_t)(block_index - (EXT2_NDIR_BLOCKS + EXT2_IND_N_BLOCKS)) /
+                       (uint32_t)EXT2_IND_N_BLOCKS;
+        singly_index = (uint32_t)(block_index - (EXT2_NDIR_BLOCKS + EXT2_IND_N_BLOCKS)) %
+                       (uint32_t)EXT2_IND_N_BLOCKS;
     } else {  // Triply indirect block
+        // Allocate new block if needed
+        if (allocate && inode->block_pointers[EXT2_TIND_BLOCK] == EXT2_INVALID_BLOCK) {
+            inode->block_pointers[EXT2_TIND_BLOCK] = alloc_block();
+            inode->disk_sectors_count += _block_size / ATA_SECTOR_SIZE;
+
+            if (inode->block_pointers[EXT2_TIND_BLOCK] == EXT2_INVALID_BLOCK ||
+                !clear_block(inode->block_pointers[EXT2_TIND_BLOCK])) {
+                return inode->block_pointers[EXT2_TIND_BLOCK];
+            }
+        }
+
         buf =
             read_block(inode->block_pointers[EXT2_TIND_BLOCK],
                        (block_index - (EXT2_NDIR_BLOCKS + EXT2_IND_N_BLOCKS + EXT2_DIND_N_BLOCKS)) /
                            EXT2_DIND_N_BLOCKS,
                        sizeof(uint32_t));
         if (buf.size() == sizeof(uint32_t)) {
+            // If there is no block for doubly indirect, allocate one
+            if (allocate && *(uint32_t *)buf.data() == EXT2_INVALID_BLOCK) {
+                *(uint32_t *)buf.data() = alloc_block();
+                inode->disk_sectors_count += _block_size / ATA_SECTOR_SIZE;
+
+                if (*(uint32_t *)buf.data() == EXT2_INVALID_BLOCK ||
+                    !clear_block(*(uint32_t *)buf.data()) ||
+                    !write_block(inode->block_pointers[EXT2_TIND_BLOCK], buf,
+                                 (block_index -
+                                  (EXT2_NDIR_BLOCKS + EXT2_IND_N_BLOCKS + EXT2_DIND_N_BLOCKS)) /
+                                     EXT2_DIND_N_BLOCKS)) {
+                    return EXT2_INVALID_BLOCK;
+                }
+            }
+
             doubly_indirect_block = *(uint32_t *)buf.data();
-            doubly_index =
-                (block_index - (EXT2_NDIR_BLOCKS + EXT2_IND_N_BLOCKS + EXT2_DIND_N_BLOCKS)) /
-                EXT2_DIND_N_BLOCKS;
-            singly_index =
-                (block_index - (EXT2_NDIR_BLOCKS + EXT2_IND_N_BLOCKS + EXT2_DIND_N_BLOCKS)) %
-                EXT2_IND_N_BLOCKS;
+            doubly_index = (uint32_t)(block_index -
+                                      (EXT2_NDIR_BLOCKS + EXT2_IND_N_BLOCKS + EXT2_DIND_N_BLOCKS)) /
+                           (uint32_t)EXT2_DIND_N_BLOCKS;
+            singly_index = (uint32_t)(block_index -
+                                      (EXT2_NDIR_BLOCKS + EXT2_IND_N_BLOCKS + EXT2_DIND_N_BLOCKS)) %
+                           (uint32_t)EXT2_IND_N_BLOCKS;
         } else {
             return EXT2_INVALID_BLOCK;
         }
@@ -304,6 +415,18 @@ uint64_t influx::fs::ext2::get_block_for_offset(influx::fs::ext2_inode *inode, u
     if (doubly_indirect_block != EXT2_INVALID_BLOCK) {
         buf = read_block(doubly_indirect_block, doubly_index * sizeof(uint32_t), sizeof(uint32_t));
         if (buf.size() == sizeof(uint32_t)) {
+            // If there is no block for signly indirect, allocate one
+            if (allocate && *(uint32_t *)buf.data() == EXT2_INVALID_BLOCK) {
+                *(uint32_t *)buf.data() = alloc_block();
+                inode->disk_sectors_count += _block_size / ATA_SECTOR_SIZE;
+
+                if (*(uint32_t *)buf.data() == EXT2_INVALID_BLOCK ||
+                    !clear_block(*(uint32_t *)buf.data()) ||
+                    !write_block(doubly_indirect_block, buf, doubly_index * sizeof(uint32_t))) {
+                    return EXT2_INVALID_BLOCK;
+                }
+            }
+
             singly_indirect_block = *(uint32_t *)buf.data();
         } else {
             return EXT2_INVALID_BLOCK;
@@ -314,6 +437,17 @@ uint64_t influx::fs::ext2::get_block_for_offset(influx::fs::ext2_inode *inode, u
     if (singly_indirect_block != EXT2_INVALID_BLOCK) {
         buf = read_block(singly_indirect_block, singly_index * sizeof(uint32_t), sizeof(uint32_t));
         if (buf.size() == sizeof(uint32_t)) {
+            // If there is no block, allocate one
+            if (allocate && *(uint32_t *)buf.data() == EXT2_INVALID_BLOCK) {
+                *(uint32_t *)buf.data() = alloc_block();
+                inode->disk_sectors_count += _block_size / ATA_SECTOR_SIZE;
+
+                if (*(uint32_t *)buf.data() == EXT2_INVALID_BLOCK ||
+                    !write_block(singly_indirect_block, buf, singly_index * sizeof(uint32_t))) {
+                    return EXT2_INVALID_BLOCK;
+                }
+            }
+
             return *(uint32_t *)buf.data();
         } else {
             return EXT2_INVALID_BLOCK;
@@ -330,51 +464,97 @@ influx::structures::dynamic_buffer influx::fs::ext2::read_file(influx::fs::ext2_
     structures::dynamic_buffer buf(amount);
 
     uint64_t current_offset = offset + (_block_size - (offset % _block_size)),
-             current_block = get_block_for_offset(inode, current_offset);
-    uint64_t first_block = get_block_for_offset(inode, offset),
-             last_block =
-                 get_block_for_offset(inode, offset + amount - ((amount + offset) % _block_size));
+             current_block = get_block_for_offset(inode, current_offset, false);
+    uint32_t first_block = get_block_for_offset(inode, offset, false),
+             last_block = get_block_for_offset(
+                 inode, offset + amount - ((amount + offset) % _block_size), false);
     uint64_t first_block_read_amount = (amount + (offset % _block_size)) > _block_size
                                            ? _block_size - (offset % _block_size)
                                            : amount,
              last_block_read_amount = (amount + offset) % _block_size;
 
-    // Verify valid file blocks
-    if (first_block == EXT2_INVALID_BLOCK ||
-        (last_block_read_amount > 0 && last_block == EXT2_INVALID_BLOCK)) {
-        return structures::dynamic_buffer();
-    }
-
     // Read the first wanted block
-    if (!_drive.read(first_block * _block_size + (offset % _block_size), first_block_read_amount,
+    if (first_block != EXT2_INVALID_BLOCK &&
+        !_drive.read(first_block * _block_size + (offset % _block_size), first_block_read_amount,
                      buf.data())) {
         return structures::dynamic_buffer();
     }
 
     // For each complete block, read it
-    while (current_block != last_block && first_block_read_amount != amount) {
-        if (!_drive.read(current_block * _block_size, _block_size,
-                         buf.data() + (current_offset - offset))) {
-            return structures::dynamic_buffer();
-        }
+    if (first_block_read_amount != amount) {
+        while (current_block != last_block) {
+            if (current_block != EXT2_INVALID_BLOCK &&
+                !_drive.read(current_block * _block_size, _block_size,
+                             buf.data() + (current_offset - offset))) {
+                return structures::dynamic_buffer();
+            }
 
-        // Get the next block
-        current_offset += _block_size;
-        current_block = get_block_for_offset(inode, current_offset);
-        if (current_offset == EXT2_INVALID_BLOCK) {
-            return structures::dynamic_buffer();
+            // Get the next block
+            current_offset += _block_size;
+            current_block = get_block_for_offset(inode, current_offset, false);
         }
     }
 
     // Read the last block remainder
     if (last_block != first_block) {
-        if (!_drive.read(last_block * _block_size, last_block_read_amount,
+        if (last_block != EXT2_INVALID_BLOCK &&
+            !_drive.read(last_block * _block_size, last_block_read_amount,
                          buf.data() + (amount - last_block_read_amount))) {
             return structures::dynamic_buffer();
         }
     }
 
+    // Update accessed time of inode
+    inode->last_access_time = (uint32_t)kernel::time_manager()->unix_timestamp();
+
     return buf;
+}
+
+uint64_t influx::fs::ext2::write_file(influx::fs::ext2_inode *inode, uint64_t offset,
+                                      influx::structures::dynamic_buffer buf) {
+    uint64_t amount = buf.size();
+    uint64_t current_offset = 0, current_write_amount = 0;
+
+    uint32_t current_block = EXT2_INVALID_BLOCK;
+    uint32_t size_change = (uint32_t)(buf.size() - (inode->size - offset));
+
+    // Verify file offset
+    if ((offset + buf.size() >=
+         ((EXT2_NDIR_BLOCKS + EXT2_IND_N_BLOCKS + EXT2_DIND_N_BLOCKS + EXT2_TIND_N_BLOCKS) *
+          _block_size))) {
+        return 0;
+    }
+
+    // While we didn't write the entire data
+    while (current_offset < amount) {
+        // Get(allocate if needed) the block for the current offset
+        current_block = get_block_for_offset(inode, offset + current_offset, true);
+        if (current_block == EXT2_INVALID_BLOCK) {
+            break;
+        }
+
+        // Calculate current write amount
+        current_write_amount = algorithm::min<uint64_t>(
+            _block_size - (offset + current_offset) % _block_size, amount - current_offset);
+
+        // Write the data for the block
+        if (!_drive.write(current_block * _block_size + (offset + current_offset) % _block_size,
+                          current_write_amount, buf.data() + current_offset)) {
+            break;
+        }
+
+        // Advance to the next block
+        current_offset += current_write_amount;
+    }
+
+    // Update file's size and disk sectors
+    inode->size += (uint32_t)size_change;
+
+    // Update accessed and modified times of inode
+    inode->last_access_time = (uint32_t)kernel::time_manager()->unix_timestamp();
+    inode->last_modification_time = (uint32_t)kernel::time_manager()->unix_timestamp();
+
+    return current_offset;
 }
 
 influx::structures::vector<influx::vfs::dir_entry> influx::fs::ext2::read_dir(
@@ -480,8 +660,8 @@ influx::vfs::file_permissions influx::fs::ext2::file_permissions_for_inode(
     return permissions;
 }
 
-uint64_t influx::fs::ext2::alloc_block() {
-    uint64_t block_group = _block_groups.size();
+uint32_t influx::fs::ext2::alloc_block() {
+    uint32_t block_group = (uint32_t)_block_groups.size();
     uint64_t block_index = EXT2_INVALID_BLOCK;
 
     structures::dynamic_buffer bitmap_buf;
@@ -502,7 +682,7 @@ uint64_t influx::fs::ext2::alloc_block() {
     }
 
     // Search for a block group with free blocks
-    for (uint64_t i = 0; i < _block_groups.size(); i++) {
+    for (uint32_t i = 0; i < _block_groups.size(); i++) {
         threading::lock_guard lk(_block_groups_mutexes[i]);
 
         // If the block group has free blocks, set it as the block group
@@ -553,11 +733,11 @@ uint64_t influx::fs::ext2::alloc_block() {
         return EXT2_INVALID_BLOCK;
     }
 
-    return block_group * _sb.blocks_per_group + block_index;
+    return block_group * _sb.blocks_per_group + (uint32_t)block_index;
 }
 
-uint64_t influx::fs::ext2::alloc_inode() {
-    uint64_t block_group = _block_groups.size();
+uint32_t influx::fs::ext2::alloc_inode() {
+    uint32_t block_group = (uint32_t)_block_groups.size();
     uint64_t inode_index = EXT2_INVALID_INODE;
 
     structures::dynamic_buffer bitmap_buf;
@@ -578,7 +758,7 @@ uint64_t influx::fs::ext2::alloc_inode() {
     }
 
     // Search for a block group with free inodes
-    for (uint64_t i = 0; i < _block_groups.size(); i++) {
+    for (uint32_t i = 0; i < _block_groups.size(); i++) {
         threading::lock_guard lk(_block_groups_mutexes[i]);
 
         // If the block group has free inodes, set it as the block group
@@ -629,12 +809,12 @@ uint64_t influx::fs::ext2::alloc_inode() {
         return EXT2_INVALID_INODE;
     }
 
-    return block_group * _sb.inodes_per_group + inode_index + 1;
+    return block_group * _sb.inodes_per_group + (uint32_t)inode_index + 1;
 }
 
-bool influx::fs::ext2::free_block(uint64_t block) {
-    uint64_t block_group = block / _sb.blocks_per_group;
-    uint64_t block_index = block % _sb.blocks_per_group;
+bool influx::fs::ext2::free_block(uint32_t block) {
+    uint32_t block_group = block / _sb.blocks_per_group;
+    uint32_t block_index = block % _sb.blocks_per_group;
 
     structures::dynamic_buffer bitmap_buf;
     structures::bitmap<uint8_t> block_bitmap;
@@ -680,11 +860,11 @@ bool influx::fs::ext2::free_block(uint64_t block) {
     return true;
 }
 
-bool influx::fs::ext2::free_inode(uint64_t inode) {
-    uint64_t block_group = (inode - 1) / _sb.inodes_per_group;
-    uint64_t inode_index = (inode - 1) % _sb.inodes_per_group;
-    uint64_t block_index = inode_index / (_block_size / _sb.inode_size);
-    uint64_t inode_block_index = (inode - 1) % (_block_size / _sb.inode_size);
+bool influx::fs::ext2::free_inode(uint32_t inode) {
+    uint32_t block_group = (inode - 1) / _sb.inodes_per_group;
+    uint32_t inode_index = (inode - 1) % _sb.inodes_per_group;
+    uint32_t block_index = inode_index / (_block_size / _sb.inode_size);
+    uint32_t inode_block_index = (inode - 1) % (_block_size / _sb.inode_size);
 
     structures::dynamic_buffer bitmap_buf, inode_table_buf;
     structures::bitmap<uint8_t> inode_bitmap;
@@ -746,10 +926,31 @@ bool influx::fs::ext2::free_inode(uint64_t inode) {
     return true;
 }
 
-bool influx::fs::ext2::save_block_group(uint64_t block_group) {
+bool influx::fs::ext2::save_block_group(uint32_t block_group) {
     // Mutex for block group should be taken already
 
     return _drive.write(
         _block_size * EXT2_BGDT_BLOCK + (block_group * sizeof(ext2_block_group_desc)),
         sizeof(ext2_block_group_desc), &_block_groups[block_group]);
+}
+
+bool influx::fs::ext2::save_inode(uint32_t inode, influx::fs::ext2_inode *inode_obj) {
+    kassert(inode <= _sb.inodes_count);
+
+    uint32_t block_group = (inode - 1) / _sb.inodes_per_group;
+    uint32_t inode_index = (inode - 1) % _sb.inodes_per_group;
+    uint32_t block_index = inode_index / (_block_size / _sb.inode_size);
+    uint32_t inode_block_index = (inode - 1) % (_block_size / _sb.inode_size);
+
+    threading::lock_guard lk(_block_groups_mutexes[block_group]);
+
+    // Write the inode
+    if (!_drive.write(
+            (_block_groups[block_group].inode_table_start_block + block_index) * _block_size +
+                inode_block_index * _sb.inode_size,
+            sizeof(ext2_inode), inode_obj)) {
+        return false;
+    }
+
+    return true;
 }

@@ -38,10 +38,8 @@ class ext2 : public vfs::filesystem {
     virtual bool mount(const vfs::path& mount_path);
     virtual vfs::error read(void* fs_file_info, char* buffer, size_t count, size_t offset,
                             size_t& amount_read);
-    inline virtual vfs::error write(void* fs_file_info, const char* buffer, size_t count,
-                                    size_t offset, size_t& amount_written) {
-        return vfs::error::success;
-    };
+    virtual vfs::error write(void* fs_file_info, const char* buffer, size_t count, size_t offset,
+                             size_t& amount_written);
     virtual vfs::error get_file_info(void* fs_file_info, vfs::file_info& file);
     virtual vfs::error entries(void* fs_file_info, structures::vector<vfs::dir_entry>& entries);
     inline virtual vfs::error create_file(const vfs::path& file_path) {
@@ -56,24 +54,26 @@ class ext2 : public vfs::filesystem {
     ext2_superblock _sb;
     threading::mutex _sb_mutex;  // Use this only when accessing non-const fields
 
-    uint64_t _block_size;
+    uint32_t _block_size;
 
     structures::vector<ext2_block_group_desc> _block_groups;
     structures::vector<threading::mutex> _block_groups_mutexes;
 
-    structures::dynamic_buffer read_block(uint64_t block, uint64_t offset = 0, int64_t amount = -1);
-    bool write_block(uint64_t block, structures::dynamic_buffer& buf, uint64_t offset = 0);
+    structures::dynamic_buffer read_block(uint32_t block, uint64_t offset = 0, int64_t amount = -1);
+    bool write_block(uint32_t block, structures::dynamic_buffer& buf, uint64_t offset = 0);
+    bool clear_block(uint32_t block);
 
-    ext2_inode* get_inode(uint64_t inode);
-    uint64_t find_inode(const vfs::path& file_path);
+    ext2_inode* get_inode(uint32_t inode);
+    uint32_t find_inode(const vfs::path& file_path);
 
-    uint64_t get_block_for_offset(ext2_inode* inode, uint64_t offset);
+    uint32_t get_block_for_offset(ext2_inode* inode, uint64_t offset, bool allocate);
     structures::dynamic_buffer read_file(ext2_inode* inode, uint64_t offset, uint64_t amount);
+    uint64_t write_file(ext2_inode* inode, uint64_t offset, structures::dynamic_buffer buf);
 
-    uint64_t alloc_block();
-    uint64_t alloc_inode();
-    bool free_block(uint64_t block);
-    bool free_inode(uint64_t inode);
+    uint32_t alloc_block();
+    uint32_t alloc_inode();
+    bool free_block(uint32_t block);
+    bool free_inode(uint32_t inode);
 
     structures::vector<vfs::dir_entry> read_dir(ext2_inode* dir_inode);
     vfs::file_type file_type_for_dir_entry(ext2_dir_entry* dir_entry);
@@ -81,7 +81,8 @@ class ext2 : public vfs::filesystem {
 
     vfs::file_permissions file_permissions_for_inode(ext2_inode* inode);
 
-    bool save_block_group(uint64_t block_group);
+    bool save_block_group(uint32_t block_group);
+    bool save_inode(uint32_t inode, ext2_inode* inode_obj);
 };
 };  // namespace fs
 };  // namespace influx
