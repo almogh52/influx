@@ -68,7 +68,7 @@ bool influx::drivers::ata::drive_slice::write(uint64_t address, uint64_t amount,
     }
 
     // If the start address is in the middle of a sector, read the sector
-    if (address % ATA_SECTOR_SIZE) {
+    if (address % ATA_SECTOR_SIZE || sector_count == 1) {
         if (!_driver->access_drive_sectors(_drive, access_type::read, start_lba, 1,
                                            (uint16_t *)aligned_buffer)) {
             kfree(aligned_buffer);
@@ -77,14 +77,11 @@ bool influx::drivers::ata::drive_slice::write(uint64_t address, uint64_t amount,
     }
 
     // If the end is in the middle of a sector, read the last sector
-    if ((address + amount) % ATA_SECTOR_SIZE &&
-        (address + amount) / ATA_SECTOR_SIZE != address / ATA_SECTOR_SIZE) {
+    if ((address + amount) % ATA_SECTOR_SIZE && sector_count > 1) {
         if (!_driver->access_drive_sectors(
                 _drive, access_type::read,
                 (uint32_t)(start_lba + (address + amount) / ATA_SECTOR_SIZE), 1,
-                (uint16_t *)((uint8_t *)aligned_buffer +
-                             (start_lba + (address + amount) / ATA_SECTOR_SIZE) *
-                                 ATA_SECTOR_SIZE))) {
+                (uint16_t *)((uint8_t *)aligned_buffer + (sector_count - 1) * ATA_SECTOR_SIZE))) {
             kfree(aligned_buffer);
             return false;
         }
