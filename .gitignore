@@ -16,7 +16,7 @@ ipch
 hdd.img
 
 # Ignore generated headers
-include/kernel/console/bga_u_vga16_font.h
+include/kernel/console/gfx_u_vga16_font.h
 
 # Ignore sysroot
 sysroot
