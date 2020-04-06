@@ -26,6 +26,17 @@ class path {
     inline const structures::vector<structures::string>& branches() const { return _branches; };
     inline size_t amount_of_branches() const { return _branches.size(); }
 
+    inline path parent_path() const {
+        if (_branches.size() > 1) {
+            structures::vector<structures::string> parent_branches = _branches;
+            parent_branches.pop_back();
+
+            return path(parent_branches);
+        } else {
+            return path();
+        }
+    };
+
     inline structures::string base_name() const {
         return _branches.empty() ? "" : *(_branches.end() - 1);
     };
@@ -43,6 +54,8 @@ class path {
 
    private:
     structures::vector<structures::string> _branches;
+
+    path(structures::vector<structures::string>& branches);
 
     static structures::vector<structures::string> build_path(const structures::string& path_str);
 };

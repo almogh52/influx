@@ -3,6 +3,9 @@
 influx::vfs::path::path(const influx::structures::string &path_str)
     : _branches(build_path(path_str)) {}
 
+influx::vfs::path::path(influx::structures::vector<influx::structures::string> &branches)
+    : _branches(branches) {}
+
 influx::vfs::path &influx::vfs::path::operator=(influx::structures::string path) {
     _branches = build_path(path);
     return *this;
