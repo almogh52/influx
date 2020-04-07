@@ -23,7 +23,7 @@ class unique_hash_map : public hash_map<uint64_t, T> {
     template <typename... Args>
     inline pair<hash_map_iterator<uint64_t, T, hash<uint64_t>>, bool> emplace_unique(
         Args&&... args) {
-        return hash_map<uint64_t, T>::insert(pair<const uint64_t, T>(_counter, T(args...)));
+        return hash_map<uint64_t, T>::insert(pair<const uint64_t, T>(_counter++, T(args...)));
     }
 
    private:
