@@ -125,9 +125,7 @@ int64_t influx::vfs::vfs::open(const influx::vfs::path& file_path, influx::vfs::
         open_file{.vnode_index = vn.first, .position = 0, .flags = flags});
 }
 
-int64_t influx::vfs::vfs::read(int64_t fd, void* buf, size_t count) {
-    kassert(fd >= 0);
-
+int64_t influx::vfs::vfs::read(size_t fd, void* buf, size_t count) {
     open_file file;
     size_t amount_read = 0;
 
@@ -140,8 +138,13 @@ int64_t influx::vfs::vfs::read(int64_t fd, void* buf, size_t count) {
         return err;
     }
 
-    // Create a copy of the vnode
+    // Create a ref of the vnode
     vnode& vn = _vnodes[file.vnode_index];
+
+    // Check if the file is a directory
+    if (vn.file.type == file_type::directory) {
+        return error::file_is_directory;
+    }
 
     // Check access for the file
     if (!(file.flags & open_flags::read)) {
@@ -163,10 +166,66 @@ int64_t influx::vfs::vfs::read(int64_t fd, void* buf, size_t count) {
     file.position += amount_read;
     kernel::scheduler()->update_file_descriptor(fd, file);
 
-    // Update last accessed time
-    vn.file.accessed = kernel::time_manager()->unix_timestamp();
+    // Update the file object
+    if ((err = vn.fs->get_file_info(vn.fs_data, vn.file)) != error::success) {
+        return err;
+    }
 
     return amount_read;
+}
+
+int64_t influx::vfs::vfs::write(size_t fd, const void* buf, size_t count) {
+    open_file file;
+    size_t amount_written = 0;
+
+    error err;
+
+    threading::unique_lock vnodes_lk(_vnodes_mutex);
+
+    // Try to get the open file object
+    if ((err = get_open_file_for_fd(fd, file)) != error::success) {
+        return err;
+    }
+
+    // Create a ref of the vnode
+    vnode& vn = _vnodes[file.vnode_index];
+
+    // Check if the file is a directory
+    if (vn.file.type == file_type::directory) {
+        return error::file_is_directory;
+    }
+
+    // Check access for the file
+    if (!(file.flags & open_flags::write)) {
+        return error::invalid_file_access;
+    }
+
+    // Lock the file mutex
+    vnodes_lk.unlock();
+    threading::lock_guard file_lk(vn.file_mutex);
+
+    // Check append access for the file
+    if (file.flags & open_flags::append) {
+        // Set position at the end of the file
+        file.position = vn.file.size;
+    }
+
+    // Write to the file
+    if ((err = vn.fs->write(vn.fs_data, (const char*)buf, count, file.position, amount_written)) !=
+        error::success) {
+        return err;
+    }
+
+    // Update file position
+    file.position += amount_written;
+    kernel::scheduler()->update_file_descriptor(fd, file);
+
+    // Update the file object
+    if ((err = vn.fs->get_file_info(vn.fs_data, vn.file)) != error::success) {
+        return err;
+    }
+
+    return amount_written;
 }
 
 influx::vfs::error influx::vfs::vfs::get_open_file_for_fd(int64_t fd,

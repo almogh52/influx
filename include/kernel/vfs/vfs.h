@@ -11,6 +11,7 @@
 #include <kernel/vfs/open_file.h>
 #include <kernel/vfs/open_flags.h>
 #include <kernel/vfs/vnode.h>
+#include <stddef.h>
 
 namespace influx {
 namespace vfs {
@@ -21,7 +22,8 @@ class vfs {
     bool mount(fs_type type, path mount_path, drivers::ata::drive_slice drive);
 
     int64_t open(const path& file_path, open_flags flags);
-    int64_t read(int64_t fd, void* buf, size_t count);
+    int64_t read(size_t fd, void* buf, size_t count);
+    int64_t write(size_t fd, const void* buf, size_t count);
 
    private:
     logger _log;
