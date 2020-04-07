@@ -21,7 +21,8 @@ class vfs {
 
     bool mount(fs_type type, path mount_path, drivers::ata::drive_slice drive);
 
-    int64_t open(const path& file_path, open_flags flags);
+    int64_t open(const path& file_path, open_flags flags,
+                 file_permissions permissions = {.raw = 0});
     int64_t read(size_t fd, void* buf, size_t count);
     int64_t write(size_t fd, const void* buf, size_t count);
 

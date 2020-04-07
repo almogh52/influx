@@ -53,7 +53,8 @@ bool influx::vfs::vfs::mount(influx::vfs::fs_type type, influx::vfs::path mount_
     return true;
 }
 
-int64_t influx::vfs::vfs::open(const influx::vfs::path& file_path, influx::vfs::open_flags flags) {
+int64_t influx::vfs::vfs::open(const influx::vfs::path& file_path, influx::vfs::open_flags flags,
+                               influx::vfs::file_permissions permissions) {
     filesystem* fs = get_fs_for_file(file_path);
     void* fs_file_data = nullptr;
 
@@ -71,16 +72,17 @@ int64_t influx::vfs::vfs::open(const influx::vfs::path& file_path, influx::vfs::
 
     // If no filesystem contains this file path
     if (fs == nullptr) {
-        if (flags & open_flags::create) {
-            // TODO: Implement file creating
-        } else {
-            return error::file_not_found;
-        }
+        return error::file_not_found;
     }
 
     // If the file wasn't found in the filesystem
     if ((fs_file_data = fs->get_fs_file_data(file_path)) == nullptr) {
-        return error::file_not_found;
+        if (flags & open_flags::create &&
+            (err = fs->create_file(file_path, permissions, &fs_file_data)) != error::success) {
+            return err;
+        } else if (!(flags & open_flags::create)) {
+            return error::file_not_found;
+        }
     }
 
     // Read file info from filesystem
