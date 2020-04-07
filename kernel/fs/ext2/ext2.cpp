@@ -155,7 +155,7 @@ influx::vfs::error influx::fs::ext2::get_file_info(void *fs_file_info,
     file.size = inode->size;
     file.permissions = file_permissions_for_inode(inode);
     file.modified = inode->last_modification_time;
-    file.modified = inode->last_access_time;
+    file.accessed = inode->last_access_time;
     file.created = inode->creation_time;
 
     return vfs::error::success;
@@ -865,7 +865,7 @@ influx::vfs::file_type influx::fs::ext2::file_type_for_inode(influx::fs::ext2_in
 
 influx::vfs::file_permissions influx::fs::ext2::file_permissions_for_inode(
     influx::fs::ext2_inode *inode) {
-    vfs::file_permissions permissions;
+    vfs::file_permissions permissions{.raw = 0};
 
     // Read permission
     if (inode->types_permissions & ext2_types_permissions::user_read) {
@@ -1015,6 +1015,8 @@ uint32_t influx::fs::ext2::create_inode(influx::vfs::file_type type,
 }
 
 bool influx::fs::ext2::remove_dir_entry(uint32_t dir_inode, influx::structures::string file_name) {
+    threading::lock_guard lk(_dir_edit_mutex);
+
     ext2_inode *dir_inode_obj = get_inode(dir_inode);
 
     structures::dynamic_buffer buf, entry_buf;
@@ -1096,6 +1098,8 @@ influx::vfs::error influx::fs::ext2::create_dir_entry(ext2_inode *dir_inode, uin
 
     // ** This assumes there is no other file in the directory with the same name **
     // ** This also assumes that the dir has write permission **
+
+    threading::lock_guard lk(_dir_edit_mutex);
 
     uint64_t dir_file_offset = 0, new_dir_entry_offset = dir_inode->size;
     ext2_dir_entry *dir_entry = nullptr;

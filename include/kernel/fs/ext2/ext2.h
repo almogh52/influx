@@ -60,6 +60,8 @@ class ext2 : public vfs::filesystem {
     structures::vector<ext2_block_group_desc> _block_groups;
     structures::vector<threading::mutex> _block_groups_mutexes;
 
+    threading::mutex _dir_edit_mutex;
+
     structures::dynamic_buffer read_block(uint32_t block, uint64_t offset = 0, int64_t amount = -1);
     bool write_block(uint32_t block, structures::dynamic_buffer& buf, uint64_t offset = 0);
     bool clear_block(uint32_t block);
