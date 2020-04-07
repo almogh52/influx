@@ -46,7 +46,7 @@ class ext2 : public vfs::filesystem {
                                    void** fs_file_info_ptr);
     virtual vfs::error create_dir(const vfs::path& dir_path, vfs::file_permissions permissions,
                                   void** fs_file_info_ptr);
-    inline virtual vfs::error remove(void* fs_file_info) { return vfs::error::success; };
+    virtual vfs::error unlink_file(const vfs::path& file_path);
     virtual void* get_fs_file_data(const vfs::path& file_path);
     virtual bool compare_fs_file_data(void* fs_file_data_1, void* fs_file_data_2);
 
@@ -71,6 +71,8 @@ class ext2 : public vfs::filesystem {
     uint64_t write_file(ext2_inode* inode, uint64_t offset, structures::dynamic_buffer buf);
 
     uint32_t create_inode(vfs::file_type type, vfs::file_permissions permissions);
+
+    bool remove_dir_entry(uint32_t dir_inode, structures::string file_name);
     influx::vfs::error create_dir_entry(ext2_inode* dir_inode, uint32_t file_inode,
                                         ext2_dir_entry_type entry_type,
                                         structures::string file_name);
@@ -79,6 +81,10 @@ class ext2 : public vfs::filesystem {
     uint32_t alloc_inode();
     bool free_block(uint32_t block);
     bool free_inode(uint32_t inode);
+    bool free_inode_blocks(ext2_inode* inode);
+    bool free_singly_indirect_blocks(uint32_t singly_block);
+    bool free_doubly_indirect_blocks(uint32_t doubly_block);
+    bool free_triply_indirect_blocks(uint32_t triply_block);
 
     structures::vector<vfs::dir_entry> read_dir(ext2_inode* dir_inode);
     vfs::file_type file_type_for_dir_entry(ext2_dir_entry* dir_entry);

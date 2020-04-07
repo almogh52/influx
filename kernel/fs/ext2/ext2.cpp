@@ -345,6 +345,56 @@ influx::vfs::error influx::fs::ext2::create_dir(const influx::vfs::path &dir_pat
     return vfs::error::success;
 }
 
+influx::vfs::error influx::fs::ext2::unlink_file(const influx::vfs::path &file_path) {
+    uint32_t inode = find_inode(file_path);
+    uint32_t parent_inode = find_inode(file_path.parent_path());
+
+    ext2_inode *inode_obj = nullptr;
+
+    // If the inode wasn't found
+    if (inode == EXT2_INVALID_INODE || parent_inode == EXT2_INVALID_INODE) {
+        return vfs::error::file_not_found;
+    }
+
+    // Get the inode object of the file
+    inode_obj = get_inode(inode);
+    if (inode_obj == nullptr) {
+        return vfs::error::io_error;
+    }
+
+    // Check write permission for the file
+    if (!(inode_obj->types_permissions & ext2_types_permissions::user_write)) {
+        delete inode_obj;
+        return vfs::error::insufficient_permissions;
+    }
+
+    // Check that the inode isn't a directory
+    if (inode_obj->types_permissions & ext2_types_permissions::directory) {
+        delete inode_obj;
+        return vfs::error::file_is_directory;
+    }
+
+    // Remove the dir entry of the file
+    if (!remove_dir_entry(parent_inode, file_path.base_name())) {
+        return vfs::error::io_error;
+    }
+
+    // If the hard link count of the inode is 0, delete the file
+    if (--inode_obj->hard_links_count == 0) {
+        // Free the inode
+        if (!free_inode(inode)) {
+            return vfs::error::io_error;
+        }
+    } else {
+        // Save the inode object
+        if (!save_inode(inode, inode_obj)) {
+            return vfs::error::io_error;
+        }
+    }
+
+    return vfs::error::success;
+}
+
 void *influx::fs::ext2::get_fs_file_data(const influx::vfs::path &file_path) {
     uint32_t inode = find_inode(file_path);
 
@@ -960,6 +1010,81 @@ uint32_t influx::fs::ext2::create_inode(influx::vfs::file_type type,
     return inode;
 }
 
+bool influx::fs::ext2::remove_dir_entry(uint32_t dir_inode, influx::structures::string file_name) {
+    ext2_inode *dir_inode_obj = get_inode(dir_inode);
+
+    structures::dynamic_buffer buf, entry_buf;
+    uint64_t buf_offset = 0;
+
+    ext2_dir_entry *prev_dir_entry = nullptr, *dir_entry = nullptr;
+
+    bool found = false;
+
+    // If the inode wasn't found
+    if (dir_inode_obj == nullptr) {
+        return false;
+    }
+
+    // Read the dir file
+    buf = read_file(dir_inode_obj, 0, dir_inode_obj->size);
+    if (!buf.empty()) {
+        // While we didn't reach the end of the dir entry table
+        while (buf_offset < dir_inode_obj->size) {
+            dir_entry = (ext2_dir_entry *)(buf.data() + buf_offset);
+
+            // If the entry was found
+            if (dir_entry->inode != EXT2_INVALID_INODE && dir_entry->name_len == file_name.size() &&
+                memory::utils::memcmp(file_name.c_str(), dir_entry->name, dir_entry->name_len) ==
+                    0) {
+                found = true;
+                break;
+            }
+
+            // Increase buf offset
+            buf_offset += dir_entry->size;
+
+            // Save previous dir entry
+            prev_dir_entry = dir_entry;
+        }
+    } else {
+        return false;
+    }
+
+    // If the dir entry was found
+    if (found && prev_dir_entry != nullptr) {
+        // Allocate entry buffer
+        entry_buf = structures::dynamic_buffer(dir_entry - prev_dir_entry + dir_entry->name_len +
+                                               sizeof(ext2_dir_entry));
+
+        // Clear the entry buffer
+        memory::utils::memset(entry_buf.data() + (dir_entry - prev_dir_entry), 0,
+                              entry_buf.size() - (dir_entry - prev_dir_entry));
+
+        // Extend the size of the previous dir entry
+        prev_dir_entry->size = (uint16_t)(prev_dir_entry->size + dir_entry->size);
+
+        // Copy the previous dir entry
+        memory::utils::memcpy(entry_buf.data(), prev_dir_entry,
+                              sizeof(ext2_dir_entry) + prev_dir_entry->name_len);
+
+        // Write the 2 entries to drive
+        if (!_drive.write((uint8_t *)prev_dir_entry - buf.data(), entry_buf.size(),
+                          entry_buf.data())) {
+            return false;
+        }
+    } else if (found) {
+        // Reset the inode
+        dir_entry->inode = 0;
+
+        // Rewrite the entry
+        if (!_drive.write(buf_offset, sizeof(ext2_dir_entry), dir_entry)) {
+            return false;
+        }
+    }
+
+    return found;
+}
+
 influx::vfs::error influx::fs::ext2::create_dir_entry(ext2_inode *dir_inode, uint32_t file_inode,
                                                       influx::fs::ext2_dir_entry_type entry_type,
                                                       influx::structures::string file_name) {
@@ -1258,17 +1383,24 @@ bool influx::fs::ext2::free_inode(uint32_t inode) {
     structures::dynamic_buffer bitmap_buf, inode_table_buf;
     structures::bitmap<uint8_t> inode_bitmap;
 
-    threading::lock_guard lk(_block_groups_mutexes[block_group]);
+    ext2_inode *inode_obj = get_inode(inode);
+    if (inode_obj == nullptr) {
+        return false;
+    }
+
+    threading::unique_lock lk(_block_groups_mutexes[block_group]);
 
     // Read inode bitmap
     bitmap_buf = read_block(_block_groups[block_group].inode_bitmap_block);
     inode_bitmap = structures::bitmap<uint8_t>(bitmap_buf.data(), _sb.inodes_per_group, false);
     if (bitmap_buf.empty()) {
+        delete inode_obj;
         return false;
     }
 
     // If the inode is already free
     if (inode_bitmap[inode_index] == false) {
+        delete inode_obj;
         return true;
     }
 
@@ -1277,18 +1409,21 @@ bool influx::fs::ext2::free_inode(uint32_t inode) {
 
     // Write the bitmap to the inode bitmap block
     if (!write_block(_block_groups[block_group].inode_bitmap_block, bitmap_buf)) {
+        delete inode_obj;
         return false;
     }
 
     // Increase the amount of free inodes in the block group and update it
     _block_groups[block_group].free_inodes_count++;
     if (!save_block_group(block_group)) {
+        delete inode_obj;
         return false;
     }
 
     // Read the inode table block
     inode_table_buf = read_block(_block_groups[block_group].inode_table_start_block + block_index);
     if (inode_table_buf.empty()) {
+        delete inode_obj;
         return false;
     }
 
@@ -1299,6 +1434,7 @@ bool influx::fs::ext2::free_inode(uint32_t inode) {
     // Write the inode table block back
     if (!write_block(_block_groups[block_group].inode_table_start_block + block_index,
                      inode_table_buf)) {
+        delete inode_obj;
         return false;
     }
 
@@ -1308,6 +1444,106 @@ bool influx::fs::ext2::free_inode(uint32_t inode) {
         // Increase the amount of free inode
         _sb.free_inodes_count++;
         if (!_drive.write(EXT2_SUPERBLOCK_OFFSET, sizeof(_sb), &_sb)) {
+            delete inode_obj;
+            return false;
+        }
+    }
+
+    // Free the block group lock
+    lk.unlock();
+
+    // Free the inode's blocks
+    free_inode_blocks(inode_obj);
+
+    return true;
+}
+
+bool influx::fs::ext2::free_inode_blocks(ext2_inode *inode) {
+    // Free direct blocks
+    for (int i = 0; i < EXT2_NDIR_BLOCKS; i++) {
+        // If the block is allocated, free it
+        if (inode->block_pointers[i] != EXT2_INVALID_BLOCK) {
+            if (!free_block(inode->block_pointers[i])) {
+                return false;
+            }
+        }
+    }
+
+    // If there is a singly indirect block, free it
+    if (inode->block_pointers[EXT2_IND_BLOCK] != EXT2_INVALID_BLOCK &&
+        (!free_singly_indirect_blocks(inode->block_pointers[EXT2_IND_BLOCK]) ||
+         !free_block(inode->block_pointers[EXT2_IND_BLOCK]))) {
+        return false;
+    }
+
+    // If there is a doubly indirect block, free it
+    if (inode->block_pointers[EXT2_DIND_BLOCK] != EXT2_INVALID_BLOCK &&
+        (!free_doubly_indirect_blocks(inode->block_pointers[EXT2_DIND_BLOCK]) ||
+         !free_block(inode->block_pointers[EXT2_DIND_BLOCK]))) {
+        return false;
+    }
+    // If there is a triploy indirect block, free it
+    if (inode->block_pointers[EXT2_TIND_BLOCK] != EXT2_INVALID_BLOCK &&
+        (!free_triply_indirect_blocks(inode->block_pointers[EXT2_TIND_BLOCK]) ||
+         !free_block(inode->block_pointers[EXT2_TIND_BLOCK]))) {
+        return false;
+    }
+
+    return true;
+}
+
+bool influx::fs::ext2::free_singly_indirect_blocks(uint32_t singly_block) {
+    structures::dynamic_buffer buf = read_block(singly_block);
+
+    // I/O error
+    if (buf.empty()) {
+        return false;
+    }
+
+    // For each block, free it
+    for (uint32_t i = 0; i < EXT2_IND_N_BLOCKS; i++) {
+        if (((uint32_t *)buf.data())[i] != EXT2_INVALID_BLOCK &&
+            !free_block(((uint32_t *)buf.data())[i])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool influx::fs::ext2::free_doubly_indirect_blocks(uint32_t doubly_block) {
+    structures::dynamic_buffer buf = read_block(doubly_block);
+
+    // I/O error
+    if (buf.empty()) {
+        return false;
+    }
+
+    // For each signly indirect block, free it
+    for (uint32_t i = 0; i < EXT2_IND_N_BLOCKS; i++) {
+        if (((uint32_t *)buf.data())[i] != EXT2_INVALID_BLOCK &&
+            (!free_singly_indirect_blocks(((uint32_t *)buf.data())[i]) ||
+             !free_block(((uint32_t *)buf.data())[i]))) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool influx::fs::ext2::free_triply_indirect_blocks(uint32_t triply_block) {
+    structures::dynamic_buffer buf = read_block(triply_block);
+
+    // I/O error
+    if (buf.empty()) {
+        return false;
+    }
+
+    // For each doubly indirect block, free it
+    for (uint32_t i = 0; i < EXT2_IND_N_BLOCKS; i++) {
+        if (((uint32_t *)buf.data())[i] != EXT2_INVALID_BLOCK &&
+            (!free_doubly_indirect_blocks(((uint32_t *)buf.data())[i]) ||
+             !free_block(((uint32_t *)buf.data())[i]))) {
             return false;
         }
     }
