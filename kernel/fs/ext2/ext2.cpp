@@ -162,7 +162,8 @@ influx::vfs::error influx::fs::ext2::get_file_info(void *fs_file_info,
 }
 
 influx::vfs::error influx::fs::ext2::entries(
-    void *fs_file_info, influx::structures::vector<influx::vfs::dir_entry> &entries) {
+    void *fs_file_info, size_t count, size_t offset,
+    influx::structures::vector<influx::vfs::dir_entry> &entries) {
     kassert(fs_file_info != nullptr);
 
     // Get the inode of the file
@@ -177,7 +178,7 @@ influx::vfs::error influx::fs::ext2::entries(
     }
 
     // Set the properties of the file
-    entries = read_dir(inode);
+    entries = read_dir(inode, offset, count);
 
     // Save the inode of the dir
     if (!save_inode(*(uint32_t *)fs_file_info, inode)) {
@@ -771,19 +772,22 @@ uint64_t influx::fs::ext2::write_file(influx::fs::ext2_inode *inode, uint64_t of
 }
 
 influx::structures::vector<influx::vfs::dir_entry> influx::fs::ext2::read_dir(
-    influx::fs::ext2_inode *dir_inode) {
+    influx::fs::ext2_inode *dir_inode, uint64_t offset, int64_t count) {
     kassert(dir_inode->types_permissions & ext2_types_permissions::directory);
+    kassert(offset < dir_inode->size);
 
     structures::vector<vfs::dir_entry> entries;
 
     uint64_t buf_offset = 0;
     ext2_dir_entry *dir_entry = nullptr;
 
+    uint64_t max_count = count < 0 ? UINT64_MAX : count;
+
     // Read the dir file
-    structures::dynamic_buffer buf = read_file(dir_inode, 0, dir_inode->size);
+    structures::dynamic_buffer buf = read_file(dir_inode, offset, dir_inode->size - offset);
     if (!buf.empty()) {
         // While we didn't reach the end of the dir entry table
-        while (buf_offset < dir_inode->size) {
+        while (buf_offset < dir_inode->size && entries.size() < max_count) {
             dir_entry = (ext2_dir_entry *)(buf.data() + buf_offset);
 
             // If the entry isn't blank
