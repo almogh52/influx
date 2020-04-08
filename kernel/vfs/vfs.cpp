@@ -128,6 +128,39 @@ int64_t influx::vfs::vfs::open(const influx::vfs::path& file_path, influx::vfs::
         open_file{.vnode_index = vn.first, .position = 0, .flags = flags});
 }
 
+int64_t influx::vfs::vfs::close(size_t fd) {
+    open_file file;
+    error err;
+
+    threading::unique_lock vnodes_lk(_vnodes_mutex);
+
+    // Try to get the open file object
+    if ((err = get_open_file_for_fd(fd, file)) != error::success) {
+        return err;
+    }
+
+    // Create a ref of the vnode
+    vnode& vn = _vnodes[file.vnode_index];
+
+    // Decrease the amount of open files for the file
+    vn.amount_of_open_files--;
+
+    // If there are no open files for the file, free it
+    if (vn.amount_of_open_files == 0) {
+        _vnodes.erase(file.vnode_index);
+
+        // TODO: Implement file unlinking here
+    }
+
+    // Unlock vnodes lock
+    vnodes_lk.unlock();
+
+    // Remove the file descriptor
+    kernel::scheduler()->remove_file_descriptor(fd);
+
+    return error::success;
+}
+
 int64_t influx::vfs::vfs::read(size_t fd, void* buf, size_t count) {
     open_file file;
     size_t amount_read = 0;

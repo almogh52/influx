@@ -388,6 +388,12 @@ void influx::threading::scheduler::update_file_descriptor(uint64_t fd,
     process.file_descriptors[fd] = file;
 }
 
+void influx::threading::scheduler::remove_file_descriptor(uint64_t fd) {
+    process &process = _processes[_current_task->value().pid];
+
+    process.file_descriptors.erase(fd);
+}
+
 void influx::threading::scheduler::tasks_clean_task() {
     interrupts_lock int_lk(false);
 
