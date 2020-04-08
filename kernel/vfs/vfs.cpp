@@ -367,6 +367,12 @@ int64_t influx::vfs::vfs::unlink(const influx::vfs::path& file_path) {
 
     // Check if the file is already open
     if (get_vnode_for_file(fs, fs_file_data, vn) == error::success) {
+        // Verify that the file isn't a directory
+        if (vn.second->file.type == file_type::directory) {
+            return error::file_is_directory;
+        }
+
+        // If the file isn't deleted yet
         if (!vn.second->deleted) {
             // Set the vnode as deleted
             vn.second->deleted = true;
