@@ -3,10 +3,12 @@
 
 #include <kernel/console/color.h>
 #include <kernel/memory/memory.h>
+#include <kernel/threading/mutex.h>
 #include <memory/vma_region.h>
 #include <stdint.h>
 
-#define EARLY_VIDEO_MEMORY_ADDRESS (HIGHER_HALF_KERNEL_OFFSET + 0xB8000)
+#define EARLY_VIDEO_MEMORY_PHYSICAL_ADDRESS 0xB8000
+#define EARLY_VIDEO_MEMORY_ADDRESS (HIGHER_HALF_KERNEL_OFFSET + EARLY_VIDEO_MEMORY_PHYSICAL_ADDRESS)
 
 #define AMOUNT_OF_COLUMNS 80
 #define AMOUNT_OF_LINES 25
@@ -17,6 +19,8 @@ class early_console : public console {
    public:
     early_console();
 
+    virtual bool load();
+
     virtual void stdout_putchar(char c);
     virtual void stdout_write(structures::string &str);
     virtual void stdout_clear();
@@ -25,10 +29,13 @@ class early_console : public console {
     inline virtual void stderr_write(structures::string &str) { stdout_write(str); }
     inline virtual void stderr_clear() { stderr_clear(); }
 
+    inline virtual bool save_history() const { return true; }
+
     static vma_region get_vma_region();
 
    private:
     unsigned char *_video;
+    threading::mutex _mutex;
 
     uint8_t _attribute;
     uint8_t _x_pos;

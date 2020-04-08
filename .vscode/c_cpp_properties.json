@@ -2,7 +2,10 @@
 	"configurations": [
 		{
 			"name": "default",
-			"includePath": ["${workspaceFolder}/include"],
+			"includePath": [
+				"${workspaceFolder}/include",
+				"${workspaceFolder}/vendor/scalable-font"
+			],
 			"cStandard": "c11",
 			"cppStandard": "c++17"
 		}

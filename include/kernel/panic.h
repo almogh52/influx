@@ -4,7 +4,7 @@
 extern "C" {
 #endif
 
-void kpanic();
+void kpanic(const char* fmt = nullptr, ...);
 
 #ifdef __cplusplus
 }

@@ -7,9 +7,9 @@ namespace drivers {
 class driver {
    public:
     driver(const structures::string& driver_name)
-        : _log(driver_name + " Driver"), _driver_name(driver_name){};
+        : _log(driver_name + " Driver", console_color::yellow), _driver_name(driver_name){};
     virtual ~driver(){};
-    virtual void load() = 0;
+    virtual bool load() = 0;
 
     const structures::string& driver_name() const { return _driver_name; };
 

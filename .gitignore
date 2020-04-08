@@ -14,3 +14,10 @@ ipch
 
 # Ignore hard drive image
 hdd.img
+
+# Ignore generated headers
+include/kernel/console/gfx_u_vga16_font.h
+
+# Ignore sysroot
+sysroot
+sysroot.mtree

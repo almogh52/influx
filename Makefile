@@ -6,10 +6,10 @@ HOST_OS_NAME            := $(shell uname -s | tr A-Z a-z)
 OS_NAME                 := influx
 
 # Color configuration
-COM_COLOR   = \033[0;32m
-LNK_COLOR   = \033[0;33m
-OBJ_COLOR   = \033[0;35m
-NO_COLOR    = \033[m
+COM_COLOR               := \033[0;32m
+LNK_COLOR               := \033[0;33m
+OBJ_COLOR               := \033[0;35m
+NO_COLOR                := \033[m
 
 # Toolchain Configuration
 CC                      := x86_64-elf-gcc
@@ -25,10 +25,11 @@ else
 endif
 
 # Build Configuration - Include
-INCLUDE_DIR             := include
+INCLUDE_DIR             := include vendor/scalable-font
 
 # Assembler -- Flags
 ASFLAGS                 += -f elf64
+ASFLAGS                 += -i kernel
 
 # C Compiler -- Flags
 CFLAGS                  += $(addprefix -I, $(INCLUDE_DIR))
@@ -38,6 +39,7 @@ CFLAGS                  += -mcmodel=large
 CFLAGS                  += -ffreestanding
 CFLAGS                  += -fshort-wchar
 CFLAGS                  += -mno-red-zone
+CFLAGS                  += -mno-avx
 
 # C Compiler -- Warnings 
 CFLAGS                  += -Wall
@@ -66,9 +68,6 @@ CXXFLAGS                += -fno-rtti
 # Set compile standards
 CFLAGS                  += $(C_STANDARD)
 CXXFLAGS                += $(CXX_STANDARD)
-
-# Set interrupt handlers compile flags
-INTERRUPTS_FLAGS        := $(CXXFLAGS) -mgeneral-regs-only
 
 # libgcc location
 LIBGCC_DIR              := $(dir $(shell $(CC) $(CFLAGS) -print-libgcc-file-name))
@@ -129,7 +128,6 @@ $(OBJ_DIR)/$(BOOT_DIR)/%.o: $(BOOT_DIR)/%.c
 
 $(EFI_DIR)/$(BOOT_DIR)/$(OS_NAME)-kernel.bin: ${KERNEL_OBJ_FILES} ${KERNEL_DIR}/linker.ld
 	@printf '%b' '$(LNK_COLOR)Linking kernel executable$(NO_COLOR)\n'
-	@echo ${LIBGCC_DIR}
 	@mkdir -p $(@D)
 	$(PREFIX)/$(LINK) -T${KERNEL_DIR}/linker.ld $(LDFLAGS) $(KERNEL_OBJ_FILES) -o $@
 
@@ -142,11 +140,6 @@ $(OBJ_DIR)/${KERNEL_DIR}/%.o: ${KERNEL_DIR}/%.c
 	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'
 	@mkdir -p $(@D)
 	$(PREFIX)/$(CC) $(CFLAGS) -c $< -o $@
-
-$(OBJ_DIR)/${KERNEL_DIR}/%_interrupt_handler.o: ${KERNEL_DIR}/%_interrupt_handler.cpp
-	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'
-	@mkdir -p $(@D)
-	$(PREFIX)/$(CXX) $(INTERRUPTS_FLAGS) -c $< -o $@
 	
 $(OBJ_DIR)/${KERNEL_DIR}/%.o: ${KERNEL_DIR}/%.cpp
 	@printf '%b' '$(COM_COLOR)Compiling $(OBJ_COLOR)$<$(NO_COLOR)\n'

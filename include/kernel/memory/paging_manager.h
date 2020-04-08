@@ -27,7 +27,7 @@ class paging_manager {
 
     static uint64_t get_physical_address(uint64_t virtual_address);
 
-    static bool map_page(uint64_t page_base_address);
+    static bool map_page(uint64_t page_base_address, int64_t page_index=-1);
     static bool map_page(uint64_t page_base_address, uint64_t page_index, buffer_t &buf,
                          uint64_t buf_physical_address);
     static void unmap_page(uint64_t page_base_address);

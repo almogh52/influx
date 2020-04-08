@@ -35,6 +35,11 @@ void influx::structures::memblock::assign(const influx::structures::memblock &b)
 
 void influx::structures::memblock::assign(const void *p,
                                           influx::structures::memblock::size_type n) {
+    // Free old data
+    if (_data != nullptr) {
+        kfree(_data);
+    }
+                                            
     _data = (pointer)p;
     _capacity = n;
 }

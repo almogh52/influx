@@ -1,0 +1,3 @@
+[submodule "vendor/scalable-font"]
+	path = vendor/scalable-font
+	url = https://gitlab.com/bztsrc/scalable-font
