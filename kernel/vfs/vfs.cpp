@@ -173,6 +173,49 @@ int64_t influx::vfs::vfs::close(size_t fd) {
     return error::success;
 }
 
+int64_t influx::vfs::vfs::seek(size_t fd, int64_t offset, influx::vfs::seek_type type) {
+    open_file file;
+    int64_t new_position = 0;
+
+    error err;
+
+    threading::unique_lock vnodes_lk(_vnodes_mutex);
+
+    // Try to get the open file object
+    if ((err = get_open_file_for_fd(fd, file)) != error::success) {
+        return err;
+    }
+
+    // Create a ref of the vnode
+    vnode& vn = _vnodes[file.vnode_index];
+
+    // Offset from beginning of the file
+    if (type == seek_type::set) {
+        new_position = offset;
+    } else if (type == seek_type::current)  // Offset from the current offset
+    {
+        new_position = file.position + offset;
+    } else if (type == seek_type::end) {
+        new_position = vn.file.size + offset;
+    }
+
+    // Unlock vnodes lock
+    vnodes_lk.unlock();
+
+    // Check that the new position is valid
+    if (new_position < 0) {
+        return error::invalid_position;
+    }
+
+    // Set the new position
+    file.position = new_position;
+
+    // Save the file
+    kernel::scheduler()->update_file_descriptor(fd, file);
+
+    return new_position;
+}
+
 int64_t influx::vfs::vfs::read(size_t fd, void* buf, size_t count) {
     open_file file;
     size_t amount_read = 0;
