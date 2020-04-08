@@ -36,7 +36,7 @@ influx::structures::string influx::vfs::path::string() const {
     }
 
     // Remove the last divider
-    if (path_str.size() != 1) {
+    if (path_str.size() > 1) {
         path_str.resize(path_str.size() - 1);
     }
 
