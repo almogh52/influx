@@ -26,8 +26,17 @@ typedef struct boot_info_mem {
     boot_info_mem_entry entries[MAX_MEM_ENTRIES];
 } boot_info_mem;
 
+typedef struct boot_info_framebuffer {
+    uint64_t framebuffer_addr;
+    uint32_t framebuffer_pitch;
+    uint32_t framebuffer_height;
+    uint32_t framebuffer_width;
+    uint8_t framebuffer_bpp;
+} boot_info_framebuffer;
+
 typedef struct boot_info {
     boot_info_kernel_module kernel_module;
     boot_info_mem memory;
+    boot_info_framebuffer framebuffer;
     char *cmdline;
 } boot_info;

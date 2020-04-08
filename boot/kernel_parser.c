@@ -72,7 +72,7 @@ void load_segments(void *kernel_file, Elf64_Phdr *pheader, unsigned int num_of_p
                    header->p_filesz);
 
             // Set all 0s in the remaining data
-            memset((uint8_t *)(header->p_vaddr + header->p_offset + header->p_filesz), 0,
+            memset((uint8_t *)(header->p_vaddr + header->p_filesz), 0,
                    header->p_memsz - header->p_filesz);
 
             // Add kernel memory entry

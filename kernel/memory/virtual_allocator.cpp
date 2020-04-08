@@ -15,6 +15,12 @@ void influx::memory::virtual_allocator::init(const boot_info_mem &mmap) {
                                      .protection_flags = 0x0,
                                      .allocated = false});
 
+    // Insert the page of the initial VMA list
+    insert_vma_region({.base_addr = VMA_LIST_INITIAL_ADDRESS,
+                       .size = PAGE_SIZE,
+                       .protection_flags = PROT_READ | PROT_WRITE,
+                       .allocated = true});
+
     // For each kernel memory entry, set it's region as allocated
     for (uint32_t i = 0; i < mmap.entry_count; i++) {
         if (mmap.entries[i].type == KERNEL) {
@@ -61,11 +67,12 @@ void influx::memory::virtual_allocator::init(const boot_info_mem &mmap) {
     }
 }
 
-void *influx::memory::virtual_allocator::allocate(uint64_t size, protection_flags_t pflags) {
+void *influx::memory::virtual_allocator::allocate(uint64_t size, protection_flags_t pflags,
+                                                  int64_t physical_page_index) {
     if (size % PAGE_SIZE == 0) {
         vma_region_t region = find_free_region(size, pflags);
 
-        return allocate(region);
+        return allocate(region, physical_page_index);
     } else {
         // TODO: throw exception
 
@@ -87,52 +94,65 @@ void influx::memory::virtual_allocator::free(void *ptr, uint64_t size) {
 
         // Free all physical pages and mapping
         for (uint64_t i = 0; i < size / PAGE_SIZE; i++) {
-            // Free the mapping to the page
-            paging_manager::unmap_page((uint64_t)ptr + i * PAGE_SIZE);
-
             // Get the physical address of the page and free it if available
             page_physical_address =
                 paging_manager::get_physical_address((uint64_t)ptr + i * PAGE_SIZE);
             if (page_physical_address != 0) {
                 physical_allocator::free_page(page_physical_address);
             }
+
+            // Free the mapping to the page
+            paging_manager::unmap_page((uint64_t)ptr + i * PAGE_SIZE);
         }
     } else {
         // TODO: throw exception
     }
 }
 
-influx::memory::vma_node_t *influx::memory::virtual_allocator::alloc_vma_node(vma_region_t region) {
+influx::memory::vma_node_t *influx::memory::virtual_allocator::alloc_vma_node(
+    vma_region_t region, bool insert_new_region) {
     void *vma_node_ptr = nullptr;
     vma_node_t *vma_node = nullptr;
 
-    vma_region_t vma_list_page_region;
+    vma_region_t vma_list_page_region = {
+        .base_addr = 0, .size = 0, .protection_flags = 0, .allocated = false};
 
     // Check if it's the initial alloc
     if (_current_vma_list_page.ptr == nullptr) {
-        // Allocate and map the initial VMA list page
-        paging_manager::map_page(VMA_LIST_INITIAL_ADDRESS);
-
-        // Set the page as R/W
-        paging_manager::set_pte_permissions(VMA_LIST_INITIAL_ADDRESS, PROT_READ | PROT_WRITE);
-
-        // Set the buffer
-        _current_vma_list_page = {.ptr = (void *)VMA_LIST_INITIAL_ADDRESS, .size = PAGE_SIZE};
+        vma_list_page_region = {.base_addr = VMA_LIST_INITIAL_ADDRESS,
+                                .size = PAGE_SIZE,
+                                .protection_flags = PROT_READ | PROT_WRITE,
+                                .allocated = true};
     } else if (_current_vma_list_page.size < sizeof(vma_node_t)) {
         // Find a free region for the VMA list new page
-        vma_list_page_region = find_free_region(PAGE_SIZE, PROT_READ | PROT_WRITE);
+        vma_list_page_region = find_free_region(PAGE_SIZE, PROT_READ | PROT_WRITE, region);
+    }
 
+    // If a new page for the VMA list is needed, allocate it
+    if (vma_list_page_region.size > 0) {
         // Allocate and map a VMA list page
-        paging_manager::map_page(vma_list_page_region.base_addr);
+        if (!paging_manager::map_page(vma_list_page_region.base_addr)) {
+            return nullptr;
+        }
 
         // Set the page as R/W
-        paging_manager::set_pte_permissions(VMA_LIST_INITIAL_ADDRESS, PROT_READ | PROT_WRITE);
+        paging_manager::set_pte_permissions(vma_list_page_region.base_addr, PROT_READ | PROT_WRITE);
 
         // Set the buffer
-        _current_vma_list_page = {.ptr = (void *)vma_list_page_region.base_addr, .size = PAGE_SIZE};
+        _current_vma_list_page = {.ptr = (void *)vma_list_page_region.base_addr,
+                                  .size = vma_list_page_region.size};
 
         // Set the region as allocated in the VMA list
-        allocate(region);
+        if (_vma_list_head != nullptr && insert_new_region) {
+            insert_vma_region(vma_list_page_region);
+        } else if (!insert_new_region) {
+            _vma_list_pending_new_region = vma_list_page_region;
+        }
+    }
+
+    // If there is still not enough memory for VMA node return null
+    if (_current_vma_list_page.size < sizeof(vma_node_t)) {
+        return nullptr;
     }
 
     // Allocate the node
@@ -155,6 +175,8 @@ void influx::memory::virtual_allocator::insert_vma_region(vma_region_t region) {
     vma_node_t *new_node = nullptr, *remainder_new_node = nullptr;
     vma_node_t *vma_region_container_node = nullptr;
 
+    vma_region_t vma_list_pending_new_region_copy;
+
     // Try to find if the new region is contained in another existing region
     if ((vma_region_container_node =
              _vma_list_head->find_node(region.base_addr, &address_in_vma_region)) != nullptr) {
@@ -165,7 +187,7 @@ void influx::memory::virtual_allocator::insert_vma_region(vma_region_t region) {
                 vma_region_container_node->value() = region;
             } else {
                 // Allocate the new node
-                new_node = alloc_vma_node(region);
+                new_node = alloc_vma_node(region, false);
 
                 // Resize the container node
                 vma_region_container_node->value().base_addr += region.size;
@@ -184,7 +206,7 @@ void influx::memory::virtual_allocator::insert_vma_region(vma_region_t region) {
                     vma_region_container_node->value().size ==
                 region.base_addr + region.size) {
                 // Allocate the new node
-                new_node = alloc_vma_node(region);
+                new_node = alloc_vma_node(region, false);
 
                 // Resize the container node
                 vma_region_container_node->value().size -= region.size;
@@ -193,7 +215,7 @@ void influx::memory::virtual_allocator::insert_vma_region(vma_region_t region) {
                 vma_region_container_node->insert_next(new_node);
             } else {
                 // Allocate the new node
-                new_node = alloc_vma_node(region);
+                new_node = alloc_vma_node(region, false);
 
                 // Allocate the remainder node
                 remainder_new_node = alloc_vma_node(
@@ -202,7 +224,8 @@ void influx::memory::virtual_allocator::insert_vma_region(vma_region_t region) {
                               vma_region_container_node->value().size) -
                              (region.base_addr + region.size),
                      .protection_flags = vma_region_container_node->value().protection_flags,
-                     .allocated = vma_region_container_node->value().allocated});
+                     .allocated = vma_region_container_node->value().allocated},
+                    false);
 
                 // Resize the container node
                 vma_region_container_node->value().size =
@@ -217,7 +240,7 @@ void influx::memory::virtual_allocator::insert_vma_region(vma_region_t region) {
         }
     } else {
         // Allocate the new node
-        new_node = alloc_vma_node(region);
+        new_node = alloc_vma_node(region, false);
 
         // If not in any of the other regions just add the region
         _vma_list_head = _vma_list_head->insert(new_node);
@@ -228,11 +251,21 @@ void influx::memory::virtual_allocator::insert_vma_region(vma_region_t region) {
         // Check for VMA node combination
         check_for_vma_node_combination(new_node);
     }
+
+    // If there is a new pending VMA list page, insert it
+    if (_vma_list_pending_new_region.size > 0) {
+        vma_list_pending_new_region_copy = _vma_list_pending_new_region;
+        _vma_list_pending_new_region = {
+            .base_addr = 0, .size = 0, .protection_flags = 0, .allocated = false};
+        insert_vma_region(vma_list_pending_new_region_copy);
+    }
 }
 
 bool influx::memory::virtual_allocator::free_vma_region(vma_region_t region) {
     vma_node_t *new_node = nullptr, *remainder_new_node = nullptr;
     vma_node_t *vma_region_container_node = nullptr;
+
+    vma_region_t vma_list_pending_new_region_copy;
 
     // If there is a node that contains the region
     if ((vma_region_container_node =
@@ -251,7 +284,8 @@ bool influx::memory::virtual_allocator::free_vma_region(vma_region_t region) {
                     {.base_addr = region.base_addr + region.size,
                      .size = vma_region_container_node->value().size - region.size,
                      .protection_flags = vma_region_container_node->value().protection_flags,
-                     .allocated = true});
+                     .allocated = true},
+                    false);
                 vma_region_container_node->insert_next(new_node);
 
                 // Resize the container
@@ -272,7 +306,8 @@ bool influx::memory::virtual_allocator::free_vma_region(vma_region_t region) {
                 new_node = alloc_vma_node({.base_addr = region.base_addr,
                                            .size = region.size,
                                            .protection_flags = 0,
-                                           .allocated = false});
+                                           .allocated = false},
+                                          false);
                 vma_region_container_node->insert_next(new_node);
             } else {
                 // Resize the container region
@@ -286,13 +321,15 @@ bool influx::memory::virtual_allocator::free_vma_region(vma_region_t region) {
                               vma_region_container_node->value().size) -
                              (region.base_addr + region.size),
                      .protection_flags = vma_region_container_node->value().protection_flags,
-                     .allocated = true});
+                     .allocated = true},
+                    false);
 
                 // Allocate a node for the new free region
                 new_node = alloc_vma_node({.base_addr = region.base_addr,
                                            .size = region.size,
                                            .protection_flags = 0,
-                                           .allocated = false});
+                                           .allocated = false},
+                                          false);
                 vma_region_container_node->insert_next(new_node);
 
                 // Set the remainder VMA region node as the next node for the new node
@@ -315,7 +352,23 @@ bool influx::memory::virtual_allocator::free_vma_region(vma_region_t region) {
             check_for_vma_node_combination(remainder_new_node);
         }
 
+        // If there is a new pending VMA list page, insert it
+        if (_vma_list_pending_new_region.size > 0) {
+            vma_list_pending_new_region_copy = _vma_list_pending_new_region;
+            _vma_list_pending_new_region = {
+                .base_addr = 0, .size = 0, .protection_flags = 0, .allocated = false};
+            insert_vma_region(vma_list_pending_new_region_copy);
+        }
+
         return true;
+    }
+
+    // If there is a new pending VMA list page, insert it
+    if (_vma_list_pending_new_region.size > 0) {
+        vma_list_pending_new_region_copy = _vma_list_pending_new_region;
+        _vma_list_pending_new_region = {
+            .base_addr = 0, .size = 0, .protection_flags = 0, .allocated = false};
+        insert_vma_region(vma_list_pending_new_region_copy);
     }
 
     return false;
@@ -355,16 +408,23 @@ bool influx::memory::virtual_allocator::address_in_vma_region(vma_region_t &regi
 }
 
 vma_region_t influx::memory::virtual_allocator::find_free_region(uint64_t size,
-                                                                 protection_flags_t pflags) {
+                                                                 protection_flags_t pflags,
+                                                                 vma_region ignore_region) {
     vma_node_t *current_node = _vma_list_head;
 
     // While we didn't reach the end of the list and the current node cannot fit the new region
-    while (current_node != nullptr &&
-           (current_node->value().size <
-                size + (current_node->value().base_addr % PAGE_SIZE
-                            ? PAGE_SIZE - (current_node->value().base_addr % PAGE_SIZE)
-                            : 0) ||
-            current_node->value().allocated == true)) {
+    while (
+        current_node != nullptr &&
+        (current_node->value().size <
+             size + (current_node->value().base_addr % PAGE_SIZE
+                         ? PAGE_SIZE - (current_node->value().base_addr % PAGE_SIZE)
+                         : 0) ||
+         current_node->value().allocated == true ||
+         (current_node->value().base_addr == ignore_region.base_addr &&
+          (current_node->value().size - ignore_region.size) <
+              size + ((ignore_region.base_addr + ignore_region.size) % PAGE_SIZE
+                          ? PAGE_SIZE - ((ignore_region.base_addr + ignore_region.size) % PAGE_SIZE)
+                          : 0)))) {
         current_node = current_node->next();
     }
 
@@ -372,31 +432,48 @@ vma_region_t influx::memory::virtual_allocator::find_free_region(uint64_t size,
     if (!current_node) {
         return {.base_addr = 0, .size = 0, .protection_flags = 0, .allocated = false};
     } else {
-        return {.base_addr = current_node->value().base_addr +
-                             (current_node->value().base_addr % PAGE_SIZE
-                                  ? PAGE_SIZE - (current_node->value().base_addr % PAGE_SIZE)
-                                  : 0),
+        return {.base_addr =
+                    current_node->value().base_addr == ignore_region.base_addr
+                        ? ((ignore_region.base_addr + ignore_region.size) +
+                           ((ignore_region.base_addr + ignore_region.size) % PAGE_SIZE
+                                ? PAGE_SIZE -
+                                      ((ignore_region.base_addr + ignore_region.size) % PAGE_SIZE)
+                                : 0))
+                        : (current_node->value().base_addr +
+                           (current_node->value().base_addr % PAGE_SIZE
+                                ? PAGE_SIZE - (current_node->value().base_addr % PAGE_SIZE)
+                                : 0)),
                 .size = size,
                 .protection_flags = pflags,
                 .allocated = true};
     }
 }
 
-void *influx::memory::virtual_allocator::allocate(vma_region_t region) {
+void *influx::memory::virtual_allocator::allocate(vma_region_t region,
+                                                  int64_t physical_page_index) {
     // If a region wasn't found
     if (region.size == 0) {
         return nullptr;
     } else {
-        // Insert the VMA region
-        insert_vma_region(region);
-
         // Map pages
         // TODO: Swap this with page-fault exception
         for (uint64_t i = 0; i < region.size / PAGE_SIZE; i++) {
-            paging_manager::map_page(region.base_addr + i * PAGE_SIZE);
+            if (!paging_manager::map_page(
+                    region.base_addr + i * PAGE_SIZE,
+                    physical_page_index == -1 ? physical_page_index : physical_page_index + i)) {
+                // Revert all page maps
+                for (uint64_t j = 0; j < i; i++) {
+                    paging_manager::unmap_page(region.base_addr + j * PAGE_SIZE);
+                }
+
+                return nullptr;
+            }
             paging_manager::set_pte_permissions(region.base_addr + i * PAGE_SIZE,
                                                 region.protection_flags);
         }
+
+        // Insert the VMA region
+        insert_vma_region(region);
 
         return (void *)region.base_addr;
     }

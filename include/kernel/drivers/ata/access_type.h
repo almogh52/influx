@@ -2,6 +2,8 @@
 
 namespace influx {
 namespace drivers {
-enum class ata_access_type { read, write };
+namespace ata {
+enum class access_type { read, write };
 };
+};  // namespace drivers
 };  // namespace influx

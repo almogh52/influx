@@ -2,8 +2,8 @@
 #include <stdint.h>
 
 #include <interrupt_descriptor.h>
+#include <kernel/interrupts/interrupt_regs.h>
 #include <kernel/interrupts/interrupt_request.h>
-#include <kernel/interrupts/interrupt_service_routine.h>
 #include <kernel/logger.h>
 
 #define AMOUNT_OF_INTERRUPT_DESCRIPTORS 256
@@ -16,27 +16,36 @@
 
 namespace influx {
 namespace interrupts {
-template <uint8_t number>
-void irq_interrupt_handler(struct interrupt_frame *frame);
+enum class interrupt_service_routine_type {
+    interrupt_gate = INTERRUPT_GATE_TYPE,
+    trap_gate = TRAP_GATE_TYPE
+};
+
+extern "C" void isr_handler(regs *context);
+
+void exception_interrupt_handler(regs *context);
+void irq_interrupt_handler(regs *context);
 
 class interrupt_manager {
    public:
     interrupt_manager();
 
-    void set_interrupt_service_routine(uint8_t interrupt_index, interrupt_service_routine isr);
+    void set_interrupt_service_routine(uint8_t interrupt_index, uint64_t isr);
     void set_irq_handler(uint8_t irq, uint64_t irq_handler_address, void *irq_handler_data);
 
     void enable_interrupts() const;
     void disable_interrupts() const;
 
-    template <uint8_t number>
-    friend void irq_interrupt_handler(struct interrupt_frame *frame);
+    friend void irq_interrupt_handler(regs *frame);
 
    private:
     logger _log;
 
     interrupt_descriptor_t *_idt;
     interrupt_request _irqs[PIC_INTERRUPT_COUNT] = {0};
+
+    void init_isrs();
+    void set_isr(uint8_t interrupt_index, uint64_t isr, interrupt_service_routine_type type);
 
     void load_idt();
     void remap_pic_interrupts();

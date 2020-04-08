@@ -60,3 +60,14 @@ void influx::memory::utils::memcpy(void *dst, const void *src, uint64_t amount) 
         }
     }
 }
+
+int influx::memory::utils::memcmp(const void *a, const void *b, uint64_t amount) {
+    const uint8_t *s1 = (const uint8_t *)a;
+    const uint8_t *s2 = (const uint8_t *)b;
+
+    while (amount-- > 0) {
+        if (*s1++ != *s2++) return s1[-1] < s2[-1] ? -1 : 1;
+    }
+
+    return 0;
+}

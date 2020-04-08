@@ -5,7 +5,7 @@
 #include <kernel/memory/utils.h>
 
 influx::structures::string::string(influx::structures::string::const_pointer s, size_t len)
-    : _data(string::capacity_for_string_size(len)) {
+    : _data(string::capacity_for_string_size(len)), _length(len) {
     kassert(_data.data() != nullptr);
 
     // Copy string data
@@ -14,7 +14,7 @@ influx::structures::string::string(influx::structures::string::const_pointer s, 
 }
 
 influx::structures::string::string(size_t n, influx::structures::string::value_type c)
-    : _data(string::capacity_for_string_size(n)) {
+    : _data(string::capacity_for_string_size(n)), _length(n) {
     kassert(_data.data() != nullptr);
 
     // Set string data1
@@ -23,8 +23,6 @@ influx::structures::string::string(size_t n, influx::structures::string::value_t
 }
 
 void influx::structures::string::resize(size_t n, influx::structures::string::value_type c) {
-    size_t str_len = length();
-
     // If the current capacity isn't sufficient for the new string size
     if (n + 1 > _data.capacity()) {
         // Resize block size
@@ -32,20 +30,23 @@ void influx::structures::string::resize(size_t n, influx::structures::string::va
     }
 
     // If the new string length is bigger than the current length
-    if (n > str_len) {
+    if (n > _length) {
         // Extend the string and set it to the wanted character
-        for (size_t i = str_len; i < n; i++) {
+        for (size_t i = _length; i < n; i++) {
             _data.data()[i] = c;
         }
     }
 
     // Set the end of the string
     _data.data()[n] = 0;
+
+    // Set the new size of the string
+    _length = n;
 }
 
 influx::structures::string::reference influx::structures::string::at(size_t pos) {
     // Check for valid size
-    kassert(pos < length());
+    kassert(pos < _length);
 
     return (reference)*_data.iat(pos);
 }
@@ -68,26 +69,26 @@ size_t influx::structures::string::length(const_pointer s) {
 
 influx::structures::string &influx::structures::string::append(
     influx::structures::string::const_pointer s, size_t len) {
-    size_t str_len = length();
+    size_t old_str_size = _length;
 
     // Resize the string
-    resize(str_len + len);
+    resize(_length + len);
 
     // Copy the data from the other string
-    memory::utils::memcpy(_data.data() + str_len, s, len);
+    memory::utils::memcpy(_data.data() + old_str_size, s, len);
 
     return *this;
 }
 
 influx::structures::string &influx::structures::string::append(
     size_t n, influx::structures::string::value_type c) {
-    size_t str_len = length();
+    size_t old_str_size = _length;
 
     // Resize the string
-    resize(str_len + n);
+    resize(_length + n);
 
     // Set the character n times in the data
-    memory::utils::memset(_data.data() + str_len, c, n);
+    memory::utils::memset(_data.data() + old_str_size, c, n);
 
     return *this;
 }
@@ -103,6 +104,9 @@ influx::structures::string &influx::structures::string::assign(
 
     // Copy the data from the string to the data
     memory::utils::memcpy(_data.data(), s, len + 1);
+
+    // Set the size of the string
+    _length = len;
 
     return *this;
 }
@@ -130,12 +134,11 @@ influx::structures::string influx::structures::string::operator+(
 
 void influx::structures::string::reverse() {
     value_type temp;
-    uint64_t str_len = length();
 
     // Swap matching characters in both ends of the string
-    for (uint64_t i = 0; i < str_len / 2; i++) {
+    for (uint64_t i = 0; i < _length / 2; i++) {
         temp = _data.data()[i];
-        _data.data()[i] = _data.data()[str_len - i - 1];
-        _data.data()[str_len - i - 1] = temp;
+        _data.data()[i] = _data.data()[_length - i - 1];
+        _data.data()[_length - i - 1] = temp;
     }
 }
