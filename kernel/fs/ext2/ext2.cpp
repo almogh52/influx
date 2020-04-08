@@ -267,7 +267,9 @@ influx::vfs::error influx::fs::ext2::create_file(const influx::vfs::path &file_p
     delete dir_inode_obj;
 
     // Get the fs file info for the new file
-    *fs_file_info_ptr = new uint32_t(file_inode);
+    if (fs_file_info_ptr != nullptr) {
+        *fs_file_info_ptr = new uint32_t(file_inode);
+    }
 
     return vfs::error::success;
 }
@@ -358,7 +360,9 @@ influx::vfs::error influx::fs::ext2::create_dir(const influx::vfs::path &dir_pat
     delete new_dir_inode_obj;
 
     // Get the fs file info for the new dir
-    *fs_file_info_ptr = new uint32_t(new_dir_inode);
+    if (fs_file_info_ptr != nullptr) {
+        *fs_file_info_ptr = new uint32_t(new_dir_inode);
+    }
 
     return vfs::error::success;
 }

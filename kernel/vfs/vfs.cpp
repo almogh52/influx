@@ -65,7 +65,8 @@ int64_t influx::vfs::vfs::open(const influx::vfs::path& file_path, influx::vfs::
     structures::pair<uint64_t, structures::reference_wrapper<vnode>> vn(0, _vnodes.empty_item());
 
     // Verify flags
-    if ((!(flags & open_flags::read) && !(flags & open_flags::write))) {
+    if ((!(flags & open_flags::read) && !(flags & open_flags::write)) ||
+        ((flags & open_flags::directory) && (flags & open_flags::create))) {
         return error::invalid_flags;
     } else if ((flags & open_flags::directory) && (flags & open_flags::write)) {
         return error::file_is_directory;
@@ -264,6 +265,24 @@ int64_t influx::vfs::vfs::write(size_t fd, const void* buf, size_t count) {
     }
 
     return amount_written;
+}
+
+int64_t influx::vfs::vfs::mkdir(const path& dir_path, influx::vfs::file_permissions permissions) {
+    filesystem* fs = get_fs_for_file(dir_path);
+
+    error err;
+
+    // If the filesystem for the new dir path wasn't found
+    if (fs == nullptr) {
+        return error::file_not_found;
+    }
+
+    // Try to create the directory
+    if ((err = fs->create_dir(dir_path, permissions, nullptr)) != error::success) {
+        return err;
+    }
+
+    return error::success;
 }
 
 int64_t influx::vfs::vfs::get_dir_entries(
