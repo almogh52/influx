@@ -1,6 +1,7 @@
 #pragma once
 #include <kernel/drivers/ata/slice.h>
 #include <kernel/logger.h>
+#include <kernel/structures/hash_map.h>
 #include <kernel/structures/reference_wrapper.h>
 #include <kernel/structures/unique_hash_map.h>
 #include <kernel/structures/vector.h>
@@ -32,6 +33,8 @@ class vfs {
     int64_t get_dir_entries(size_t fd, structures::vector<dir_entry>& entries,
                             uint64_t dirent_buffer_size);
 
+    int64_t unlink(const path& file_path);
+
     static uint64_t dirent_size_for_dir_entry(dir_entry& entry);
 
    private:
@@ -41,6 +44,7 @@ class vfs {
     threading::mutex _mounts_mutex;
 
     structures::unique_hash_map<vnode> _vnodes;
+    structures::hash_map<uint64_t, path> _deleted_vnodes_paths;
     threading::mutex _vnodes_mutex;
 
     error get_open_file_for_fd(int64_t fd, open_file& file);

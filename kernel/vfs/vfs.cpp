@@ -118,6 +118,12 @@ int64_t influx::vfs::vfs::open(const influx::vfs::path& file_path, influx::vfs::
         return err;
     }
 
+    // If the file is already deleted
+    if (vn.second->deleted) {
+        delete (uint32_t*)fs_file_data;
+        return error::file_not_found;
+    }
+
     // Lock the file mutex
     threading::lock_guard file_lk(vn.second->file_mutex);
 
@@ -148,9 +154,14 @@ int64_t influx::vfs::vfs::close(size_t fd) {
 
     // If there are no open files for the file, free it
     if (vn.amount_of_open_files == 0) {
-        _vnodes.erase(file.vnode_index);
+        // Check if the file need to be deleted, unlink it
+        if (vn.deleted && _deleted_vnodes_paths.count(file.vnode_index) == 1) {
+            vn.fs->unlink_file(_deleted_vnodes_paths[file.vnode_index]);
+            _deleted_vnodes_paths.erase(file.vnode_index);
+        }
 
-        // TODO: Implement file unlinking here
+        // Erase the vnode object
+        _vnodes.erase(file.vnode_index);
     }
 
     // Unlock vnodes lock
@@ -333,6 +344,47 @@ int64_t influx::vfs::vfs::get_dir_entries(
     }
 
     return amount_read;
+}
+
+int64_t influx::vfs::vfs::unlink(const influx::vfs::path& file_path) {
+    filesystem* fs = get_fs_for_file(file_path);
+    void* fs_file_data = nullptr;
+
+    structures::pair<uint64_t, structures::reference_wrapper<vnode>> vn(0, _vnodes.empty_item());
+    error err;
+
+    threading::lock_guard lk(_vnodes_mutex);
+
+    // If the filesystem for the new dir path wasn't found
+    if (fs == nullptr) {
+        return error::file_not_found;
+    }
+
+    // Try to get the fs file data for the file
+    if ((fs_file_data = fs->get_fs_file_data(file_path)) == nullptr) {
+        return error::file_not_found;
+    }
+
+    // Check if the file is already open
+    if (get_vnode_for_file(fs, fs_file_data, vn) == error::success) {
+        if (!vn.second->deleted) {
+            // Set the vnode as deleted
+            vn.second->deleted = true;
+
+            // Save the path of the file
+            _deleted_vnodes_paths[vn.first] = file_path;
+        } else {
+            // File was already deleted
+            return error::file_not_found;
+        }
+    } else {
+        // Try to unlink the file
+        if ((err = fs->unlink_file(file_path)) != error::success) {
+            return err;
+        }
+    }
+
+    return error::success;
 }
 
 uint64_t influx::vfs::vfs::dirent_size_for_dir_entry(influx::vfs::dir_entry& entry) {
