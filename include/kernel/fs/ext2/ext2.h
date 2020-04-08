@@ -7,6 +7,7 @@
 #include <kernel/fs/ext2/superblock.h>
 #include <kernel/structures/bitmap.h>
 #include <kernel/structures/dynamic_buffer.h>
+#include <kernel/structures/pair.h>
 #include <kernel/structures/vector.h>
 #include <kernel/threading/mutex.h>
 #include <kernel/vfs/file_permissions.h>
@@ -41,8 +42,9 @@ class ext2 : public vfs::filesystem {
     virtual vfs::error write(void* fs_file_info, const char* buffer, size_t count, size_t offset,
                              size_t& amount_written);
     virtual vfs::error get_file_info(void* fs_file_info, vfs::file_info& file);
-    virtual vfs::error entries(void* fs_file_info, size_t count, size_t offset,
-                               structures::vector<vfs::dir_entry>& entries);
+    virtual vfs::error read_dir_entries(void* fs_file_info, size_t offset,
+                                        structures::vector<vfs::dir_entry>& entries,
+                                        size_t dirent_buffer_size, size_t& amount_read);
     virtual vfs::error create_file(const vfs::path& file_path, vfs::file_permissions permissions,
                                    void** fs_file_info_ptr);
     virtual vfs::error create_dir(const vfs::path& dir_path, vfs::file_permissions permissions,
@@ -89,8 +91,8 @@ class ext2 : public vfs::filesystem {
     bool free_doubly_indirect_blocks(uint32_t doubly_block);
     bool free_triply_indirect_blocks(uint32_t triply_block);
 
-    structures::vector<vfs::dir_entry> read_dir(ext2_inode* dir_inode, uint64_t offset = 0,
-                                                int64_t count = -1);
+    structures::pair<structures::vector<vfs::dir_entry>, uint64_t> read_dir(
+        ext2_inode* dir_inode, uint64_t offset = 0, int64_t dirent_buffer_size = -1);
     vfs::file_type file_type_for_dir_entry(ext2_dir_entry* dir_entry);
     vfs::file_type file_type_for_inode(ext2_inode* inode);
     vfs::file_permissions file_permissions_for_inode(ext2_inode* inode);

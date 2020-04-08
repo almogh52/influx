@@ -20,8 +20,9 @@ class filesystem {
     virtual error write(void* fs_file_info, const char* buffer, size_t count, size_t offset,
                         size_t& amount_written) = 0;
     virtual error get_file_info(void* fs_file_info, file_info& file) = 0;
-    virtual error entries(void* fs_file_info, size_t count, size_t offset,
-                          structures::vector<dir_entry>& entries) = 0;
+    virtual error read_dir_entries(void* fs_file_info, size_t offset,
+                                   structures::vector<dir_entry>& entries,
+                                   size_t dirent_buffer_size, size_t& amount_read) = 0;
     virtual error create_file(const path& file_path, file_permissions permissions,
                               void** fs_file_info_ptr) = 0;
     virtual error create_dir(const path& dir_path, file_permissions permissions,

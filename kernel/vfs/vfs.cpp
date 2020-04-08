@@ -1,5 +1,6 @@
 #include <kernel/vfs/vfs.h>
 
+#include <dirent.h>
 #include <kernel/algorithm.h>
 #include <kernel/fs/ext2/ext2.h>
 #include <kernel/kernel.h>
@@ -158,9 +159,11 @@ int64_t influx::vfs::vfs::read(size_t fd, void* buf, size_t count) {
     threading::lock_guard file_lk(vn.file_mutex);
 
     // Read the file
-    if ((err = vn.fs->read(vn.fs_data, (char*)buf,
-                           algorithm::min<size_t>(count, vn.file.size - file.position),
-                           file.position, amount_read)) != error::success) {
+    if ((err = vn.fs->read(
+             vn.fs_data, (char*)buf,
+             algorithm::min<size_t>(
+                 count, file.position > vn.file.size ? 0 : vn.file.size - file.position),
+             file.position, amount_read)) != error::success) {
         return err;
     }
 
@@ -228,6 +231,60 @@ int64_t influx::vfs::vfs::write(size_t fd, const void* buf, size_t count) {
     }
 
     return amount_written;
+}
+
+int64_t influx::vfs::vfs::get_dir_entries(
+    size_t fd, influx::structures::vector<influx::vfs::dir_entry>& entries,
+    uint64_t dirent_buffer_size) {
+    open_file file;
+    size_t amount_read = 0;
+
+    error err;
+
+    threading::unique_lock vnodes_lk(_vnodes_mutex);
+
+    // Try to get the open file object
+    if ((err = get_open_file_for_fd(fd, file)) != error::success) {
+        return err;
+    }
+
+    // Create a ref of the vnode
+    vnode& vn = _vnodes[file.vnode_index];
+
+    // Check if the file is a directory
+    if (vn.file.type != file_type::directory) {
+        return error::file_is_not_directory;
+    }
+
+    // Check access for the file
+    if (!(file.flags & open_flags::read)) {
+        return error::invalid_file_access;
+    }
+
+    // Lock the file mutex
+    vnodes_lk.unlock();
+    threading::lock_guard file_lk(vn.file_mutex);
+
+    // Read the directory's entries
+    if ((err = vn.fs->read_dir_entries(vn.fs_data, file.position, entries, dirent_buffer_size,
+                                       amount_read)) != error::success) {
+        return err;
+    }
+
+    // Update file position
+    file.position += amount_read;
+    kernel::scheduler()->update_file_descriptor(fd, file);
+
+    // Update the file object
+    if ((err = vn.fs->get_file_info(vn.fs_data, vn.file)) != error::success) {
+        return err;
+    }
+
+    return amount_read;
+}
+
+uint64_t influx::vfs::vfs::dirent_size_for_dir_entry(influx::vfs::dir_entry& entry) {
+    return sizeof(dirent) + entry.name.size() + 1;
 }
 
 influx::vfs::error influx::vfs::vfs::get_open_file_for_fd(int64_t fd,

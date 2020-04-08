@@ -16,7 +16,8 @@ enum error : int64_t {
     invalid_file_access = -9,
     invalid_flags = -10,
     quota_exhausted = -11,
-    file_already_exists = -12
+    file_already_exists = -12,
+    buffer_too_small = -13
 };
 };
 };  // namespace influx

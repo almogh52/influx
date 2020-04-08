@@ -26,6 +26,11 @@ class vfs {
     int64_t read(size_t fd, void* buf, size_t count);
     int64_t write(size_t fd, const void* buf, size_t count);
 
+    int64_t get_dir_entries(size_t fd, structures::vector<dir_entry>& entries,
+                            uint64_t dirent_buffer_size);
+
+    static uint64_t dirent_size_for_dir_entry(dir_entry& entry);
+
    private:
     logger _log;
 

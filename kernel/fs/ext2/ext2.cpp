@@ -69,7 +69,7 @@ bool influx::fs::ext2::mount(const influx::vfs::path &mount_path) {
 
 influx::vfs::error influx::fs::ext2::read(void *fs_file_info, char *buffer, size_t count,
                                           size_t offset, size_t &amount_read) {
-    kassert(fs_file_info != nullptr && buffer != nullptr && count > 0);
+    kassert(fs_file_info != nullptr && buffer != nullptr);
 
     structures::dynamic_buffer buf;
 
@@ -86,7 +86,7 @@ influx::vfs::error influx::fs::ext2::read(void *fs_file_info, char *buffer, size
 
     // If the offset + the amount of bytes surpasses the size of the file, reduce the count
     if (offset + count > inode->size) {
-        count = inode->size - offset;
+        count = offset > inode->size ? 0 : inode->size - offset;
     }
 
     // Try to read the file
@@ -161,10 +161,12 @@ influx::vfs::error influx::fs::ext2::get_file_info(void *fs_file_info,
     return vfs::error::success;
 }
 
-influx::vfs::error influx::fs::ext2::entries(
-    void *fs_file_info, size_t count, size_t offset,
-    influx::structures::vector<influx::vfs::dir_entry> &entries) {
+influx::vfs::error influx::fs::ext2::read_dir_entries(
+    void *fs_file_info, size_t offset, influx::structures::vector<influx::vfs::dir_entry> &entries,
+    size_t dirent_buffer_size, size_t &amount_read) {
     kassert(fs_file_info != nullptr);
+
+    structures::pair<structures::vector<vfs::dir_entry>, uint64_t> read_dir_pair;
 
     // Get the inode of the file
     ext2_inode *inode = get_inode(*(uint32_t *)fs_file_info);
@@ -173,12 +175,27 @@ influx::vfs::error influx::fs::ext2::entries(
     }
 
     // Check if the file is a directory
-    if (file_type_for_inode(inode) == vfs::file_type::directory) {
+    if (file_type_for_inode(inode) != vfs::file_type::directory) {
         return vfs::error::file_is_not_directory;
     }
 
-    // Set the properties of the file
-    entries = read_dir(inode, offset, count);
+    // Read the directory
+    if (offset < inode->size) {
+        read_dir_pair = read_dir(inode, offset, dirent_buffer_size);
+        entries = read_dir_pair.first;
+        amount_read = read_dir_pair.second;
+
+        // If we didn't reach the end of the file but the read amount is 0, it means the buffer was
+        // too small
+        if (amount_read == 0 && offset < inode->size) {
+            return vfs::error::buffer_too_small;
+        }
+    } else {
+        amount_read = 0;
+
+        // Update last accessed time
+        inode->last_access_time = (uint32_t)kernel::time_manager()->unix_timestamp();
+    }
 
     // Save the inode of the dir
     if (!save_inode(*(uint32_t *)fs_file_info, inode)) {
@@ -223,7 +240,7 @@ influx::vfs::error influx::fs::ext2::create_file(const influx::vfs::path &file_p
     }
 
     // Get dir entries and check that the name isn't taken
-    dir_entries = read_dir(dir_inode_obj);
+    dir_entries = read_dir(dir_inode_obj).first;
     for (const auto &dir_entry : dir_entries) {
         // If the name is taken
         if (dir_entry.name == file_path.base_name()) {
@@ -291,7 +308,7 @@ influx::vfs::error influx::fs::ext2::create_dir(const influx::vfs::path &dir_pat
     }
 
     // Get dir entries and check that the name isn't taken
-    dir_entries = read_dir(dir_inode_obj);
+    dir_entries = read_dir(dir_inode_obj).first;
     for (const auto &dir_entry : dir_entries) {
         // If the name is taken
         if (dir_entry.name == dir_path.base_name()) {
@@ -490,7 +507,7 @@ uint32_t influx::fs::ext2::find_inode(const influx::vfs::path &file_path) {
                        ext2_types_permissions::directory)  // Check that the inode is a directory
         {
             // Read directory
-            dir_entries = read_dir(current_inode_obj);
+            dir_entries = read_dir(current_inode_obj).first;
 
             // Search for the wanted entry
             for (const auto &entry : dir_entries) {
@@ -771,32 +788,44 @@ uint64_t influx::fs::ext2::write_file(influx::fs::ext2_inode *inode, uint64_t of
     return current_offset;
 }
 
-influx::structures::vector<influx::vfs::dir_entry> influx::fs::ext2::read_dir(
-    influx::fs::ext2_inode *dir_inode, uint64_t offset, int64_t count) {
+influx::structures::pair<influx::structures::vector<influx::vfs::dir_entry>, uint64_t>
+influx::fs::ext2::read_dir(influx::fs::ext2_inode *dir_inode, uint64_t offset,
+                           int64_t dirent_buffer_size) {
     kassert(dir_inode->types_permissions & ext2_types_permissions::directory);
     kassert(offset < dir_inode->size);
 
+    vfs::dir_entry entry;
     structures::vector<vfs::dir_entry> entries;
 
-    uint64_t buf_offset = 0;
+    uint64_t buf_offset = 0, amount_read = 0;
     ext2_dir_entry *dir_entry = nullptr;
 
-    uint64_t max_count = count < 0 ? UINT64_MAX : count;
+    int64_t current_buffer_usage = 0;
 
     // Read the dir file
     structures::dynamic_buffer buf = read_file(dir_inode, offset, dir_inode->size - offset);
     if (!buf.empty()) {
-        // While we didn't reach the end of the dir entry table
-        while (buf_offset < dir_inode->size && entries.size() < max_count) {
+        // While we didn't reach the end of the buffer
+        while (buf_offset < buf.size() &&
+               (current_buffer_usage < dirent_buffer_size || dirent_buffer_size < 0)) {
             dir_entry = (ext2_dir_entry *)(buf.data() + buf_offset);
 
             // If the entry isn't blank
             if (dir_entry->inode != EXT2_INVALID_INODE) {
-                // Create the entry for the dir entry
-                entries.push_back(vfs::dir_entry{
+                // Init the entry object
+                entry = vfs::dir_entry{
                     .inode = dir_entry->inode,
                     .type = file_type_for_dir_entry(dir_entry),
-                    .name = structures::string((char *)dir_entry->name, dir_entry->name_len)});
+                    .name = structures::string((char *)dir_entry->name, dir_entry->name_len)};
+
+                // Increase the current buffer usage
+                current_buffer_usage += vfs::vfs::dirent_size_for_dir_entry(entry);
+
+                // Create the entry for the dir entry
+                if (current_buffer_usage <= dirent_buffer_size || dirent_buffer_size < 0) {
+                    amount_read += dir_entry->size;
+                    entries.push_back(entry);
+                }
             }
 
             // Increase buf offset
@@ -804,7 +833,7 @@ influx::structures::vector<influx::vfs::dir_entry> influx::fs::ext2::read_dir(
         }
     }
 
-    return entries;
+    return structures::pair(entries, amount_read);
 }
 
 influx::vfs::file_type influx::fs::ext2::file_type_for_dir_entry(
