@@ -12,7 +12,7 @@ $DIR/generate_headers.sh
 echo -e '\033[0;36mCompiling..\033[0m'
 
 # Build the project if it's not built
-if [[ "$1" -eq "DEBUG" ]]; then
+if [[ $1 == "DEBUG" ]]; then
     make DEBUG=1
 else
     make
