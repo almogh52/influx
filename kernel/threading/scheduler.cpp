@@ -3,6 +3,7 @@
 #include <kernel/algorithm.h>
 #include <kernel/assert.h>
 #include <kernel/kernel.h>
+#include <kernel/memory/paging_manager.h>
 #include <kernel/memory/virtual_allocator.h>
 #include <kernel/threading/interrupts_lock.h>
 #include <kernel/threading/scheduler_utils.h>
@@ -10,7 +11,7 @@
 #include <kernel/utils.h>
 #include <memory/protection_flags.h>
 
-void influx::threading::new_thread_wrapper(void (*func)(void *), void *data) {
+void influx::threading::new_kernel_thread_wrapper(void (*func)(void *), void *data) {
     // Re-enable interrupts since they were disabled in the reschedule function
     kernel::interrupt_manager()->enable_interrupts();
 
@@ -21,12 +22,65 @@ void influx::threading::new_thread_wrapper(void (*func)(void *), void *data) {
     kernel::scheduler()->kill_current_task();
 }
 
-influx::threading::scheduler::scheduler()
+void influx::threading::new_user_process_wrapper(influx::elf_file &exec_file) {
+    uint64_t user_stack_virtual_address =
+        (uint64_t)kernel::scheduler()->_current_task->value().user_stack;
+
+    // Re-enable interrupts since they were disabled in the reschedule function
+    kernel::interrupt_manager()->enable_interrupts();
+
+    // Load each segment to the user's memory space
+    for (const auto &segment : exec_file.segments()) {
+        // Check valid segment location
+        if (segment.virtual_address < HIGHER_HALF_KERNEL_OFFSET &&
+            segment.virtual_address + segment.data.size() < HIGHER_HALF_KERNEL_OFFSET) {
+            // For each page of the segment map it
+            for (uint64_t page_addr = segment.virtual_address;
+                 page_addr < (segment.virtual_address + segment.data.size());
+                 page_addr += PAGE_SIZE) {
+                if (!memory::paging_manager::map_page(page_addr)) {
+                    kernel::scheduler()->kill_current_task();
+                }
+
+                // Set map permissions
+                memory::paging_manager::set_pte_permissions(page_addr, segment.protection, true);
+            }
+
+            // Copy segment data to the memory
+            memory::utils::memcpy((void *)segment.virtual_address, segment.data.data(),
+                                  segment.data.size());
+        } else {
+            kernel::scheduler()->kill_current_task();
+        }
+    }
+
+    // Map user stack
+    for (uint64_t stack_offset = 0; stack_offset < DEFAULT_USER_STACK_SIZE;
+         stack_offset += PAGE_SIZE) {
+        if (!memory::paging_manager::map_page(DEFAULT_USER_STACK_ADDRESS + stack_offset,
+                                              memory::paging_manager::get_physical_address(
+                                                  user_stack_virtual_address + stack_offset))) {
+            kernel::scheduler()->kill_current_task();
+        }
+
+        // Set R/W permission and DPL of ring 3
+        memory::paging_manager::set_pte_permissions(DEFAULT_USER_STACK_ADDRESS + stack_offset,
+                                                    PROT_READ | PROT_WRITE, true);
+    }
+
+    // Jump to the process entry point
+    scheduler_utils::jump_to_ring_3(
+        exec_file.entry_address(),
+        (void *)(DEFAULT_USER_STACK_ADDRESS + DEFAULT_USER_STACK_SIZE - 8), (void *)0x0);
+}
+
+influx::threading::scheduler::scheduler(uint64_t tss_addr)
     : _log("Scheduler", console_color::blue),
       _started(false),
       _priority_queues(MAX_PRIORITY_LEVEL + 1),
       _current_task(nullptr),
-      _max_quantum((kernel::time_manager()->timer_frequency() / 1000) * TASK_MAX_TIME_SLICE) {
+      _max_quantum((kernel::time_manager()->timer_frequency() / 1000) * TASK_MAX_TIME_SLICE),
+      _tss((tss_t *)tss_addr) {
     kassert(_max_quantum != 0);
 
     // Create kernel process
@@ -35,7 +89,8 @@ influx::threading::scheduler::scheduler()
                               .ppid = 0,
                               .priority = MAX_PRIORITY_LEVEL,
                               .system = true,
-                              .cr3 = scheduler_utils::get_cr3(),
+                              .cr3 = (uint64_t)memory::utils::get_pml4(),
+                              .pml4t = nullptr,
                               .threads = structures::unique_vector(),
                               .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
                               .name = "kernel"});
@@ -47,6 +102,7 @@ influx::threading::scheduler::scheduler()
                        .pid = 0,
                        .context = nullptr,
                        .kernel_stack = (void *)get_stack_pointer(),
+                       .user_stack = nullptr,
                        .state = thread_state::running,
                        .quantum = 0,
                        .sleep_quantum = 0});
@@ -61,6 +117,7 @@ influx::threading::scheduler::scheduler()
                                  .context = nullptr,
                                  .kernel_stack = memory::virtual_allocator::allocate(
                                      DEFAULT_KERNEL_STACK_SIZE, PROT_READ | PROT_WRITE),
+                                 .user_stack = nullptr,
                                  .state = thread_state::running,
                                  .quantum = 0,
                                  .sleep_quantum = 0}));
@@ -106,6 +163,7 @@ influx::threading::tcb *influx::threading::scheduler::create_kernel_thread(void 
                                    .pid = 0,
                                    .context = context,
                                    .kernel_stack = stack,
+                                   .user_stack = nullptr,
                                    .state = blocked ? thread_state::blocked : thread_state::ready,
                                    .quantum = 0,
                                    .sleep_quantum = 0});
@@ -115,7 +173,7 @@ influx::threading::tcb *influx::threading::scheduler::create_kernel_thread(void 
 
     // Set the RIP to return to when the thread is selected
     *(uint64_t *)((uint8_t *)stack + DEFAULT_KERNEL_STACK_SIZE - sizeof(uint64_t)) =
-        (uint64_t)new_thread_wrapper;
+        (uint64_t)new_kernel_thread_wrapper;
 
     // Send to the new thread wrapper the thread function and it's data
     context->rdi = (uint64_t)func;
@@ -163,6 +221,12 @@ void influx::threading::scheduler::reschedule() {
 
     // Don't switch tasks if the new task is the current task
     if (next_task != current_task) {
+        // Set TSS kernel stack pointer for userspace programs
+        if (!_processes[next_task->value().pid].system) {
+            _tss->rsp0_low = (uint64_t)next_task->value().context & 0xFFFFFFFF;
+            _tss->rsp0_high = ((uint64_t)next_task->value().context >> 32) & 0xFFFFFFFF;
+        }
+
         // Switch to the new task
         scheduler_utils::switch_task(&current_task->value(), &next_task->value(),
                                      &_processes[next_task->value().pid]);
@@ -203,7 +267,8 @@ influx::threading::tcb *influx::threading::scheduler::update_priority_queue_next
     }
 
     // If no new task was found, set the next task as null
-    if (new_next_task == current_next_task) {
+    if (_priority_queues[priority].next_task->value().state != thread_state::ready &&
+        _priority_queues[priority].next_task->value().state != thread_state::running) {
         _priority_queues[priority].next_task = nullptr;
     }
 
@@ -293,6 +358,11 @@ void influx::threading::scheduler::kill_current_task() {
     // Set the task as killed
     _current_task->value().state = thread_state::killed;
 
+    // If it is the next task, set the next task as null
+    if (task_priority_queue.next_task == _current_task) {
+        task_priority_queue.next_task = nullptr;
+    }
+
     // Unlock the interrupts lock
     int_lk.unlock();
 
@@ -343,6 +413,84 @@ void influx::threading::scheduler::unblock_task(influx::threading::tcb *task) {
             task_priority_queue.next_task = task;
         }
     }
+}
+
+uint64_t influx::threading::scheduler::exec(influx::elf_file &exec_file,
+                                            const influx::structures::string exec_name) {
+    uint64_t pid = 0;
+    pml4e_t *pml4t = 0;
+
+    void *kernel_stack = nullptr;
+    void *user_stack = nullptr;
+    regs *context = nullptr;
+    tcb *task = nullptr;
+
+    // If the file wasn't parsed
+    if (!exec_file.parsed()) {
+        return 0;
+    }
+
+    // Allocate PML4T
+    pml4t = (pml4e_t *)memory::virtual_allocator::allocate(PAGE_SIZE, PROT_READ | PROT_WRITE);
+    if (pml4t == 0) {
+        return 0;
+    }
+
+    // Initiate PML4T for the userland executable
+    memory::paging_manager::init_user_process_paging((uint64_t)pml4t);
+
+    // Create the process for the executable
+    pid = _processes.insert_unique(process());
+    _processes[pid] = {.pid = pid,
+                       .ppid = _current_task->value().pid,
+                       .priority = DEFAULT_USER_SPACE_PROCESS_PRIORITY,
+                       .system = false,
+                       .cr3 = memory::paging_manager::get_physical_address((uint64_t)pml4t),
+                       .pml4t = pml4t,
+                       .threads = structures::unique_vector(),
+                       .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
+                       .name = exec_name};
+
+    // Allocate kernel stack for main process task
+    kernel_stack =
+        memory::virtual_allocator::allocate(DEFAULT_KERNEL_STACK_SIZE, PROT_READ | PROT_WRITE);
+    if (!kernel_stack) {
+        _processes.erase(pid);
+        return 0;
+    }
+    context = (regs *)((uint8_t *)kernel_stack + DEFAULT_KERNEL_STACK_SIZE - sizeof(regs) -
+                       sizeof(uint64_t));
+
+    // Allocate user stack for main process task
+    user_stack =
+        memory::virtual_allocator::allocate(DEFAULT_USER_STACK_SIZE, PROT_READ | PROT_WRITE);
+    if (!user_stack) {
+        memory::virtual_allocator::free(user_stack, DEFAULT_KERNEL_STACK_SIZE);
+        _processes.erase(pid);
+        return 0;
+    }
+
+    // Create main task for the process
+    task = new tcb(thread{.tid = _processes[pid].threads.insert_unique(),
+                          .pid = pid,
+                          .context = context,
+                          .kernel_stack = kernel_stack,
+                          .user_stack = user_stack,
+                          .state = thread_state::ready,
+                          .quantum = 0,
+                          .sleep_quantum = 0});
+
+    // Set the RIP to return to when the thread is selected
+    *(uint64_t *)((uint8_t *)kernel_stack + DEFAULT_KERNEL_STACK_SIZE - sizeof(uint64_t)) =
+        (uint64_t)new_user_process_wrapper;
+
+    // Send to the new thread wrapper the thread function and it's data
+    context->rdi = (uint64_t)&exec_file;
+
+    // Queue the task
+    queue_task(task);
+
+    return pid;
 }
 
 influx::threading::tcb *influx::threading::scheduler::get_current_task() const {

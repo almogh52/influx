@@ -55,14 +55,16 @@ void influx::kernel::kmain(const boot_info info) {
 
     // Init scheduler
     log("Loading scheduler..\n");
-    _scheduler = new threading::scheduler();
+    _scheduler = new threading::scheduler(info.tss_address);
     log("Scheduler loaded.\n");
 
     // Init VFS
     drivers::ata::ata *ata = (drivers::ata::ata *)_driver_manager->get_driver("ATA");
     _vfs = new vfs::vfs();
-    _vfs->mount(vfs::fs_type::ext2, vfs::path("/"),
-                drivers::ata::drive_slice(ata, ata->drives()[0], 0));
+    if (!_vfs->mount(vfs::fs_type::ext2, vfs::path("/"),
+                     drivers::ata::drive_slice(ata, ata->drives()[0], 0))) {
+        kpanic("Unable to mount main drive!\n");
+    }
 
     // Kill this task since it's no necessary
     log("Kernel initialization complete.\n");

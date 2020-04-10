@@ -12,7 +12,9 @@ struct thread {
     uint64_t pid;
 
     regs* context;
+
     void* kernel_stack;
+    void* user_stack;
 
     thread_state state;
     uint64_t quantum;

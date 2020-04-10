@@ -3,6 +3,7 @@
 #include <kernel/structures/unique_hash_map.h>
 #include <kernel/structures/unique_vector.h>
 #include <kernel/vfs/open_file.h>
+#include <memory/paging.h>
 #include <stdint.h>
 
 #define MAX_PRIORITY_LEVEL 9
@@ -18,6 +19,7 @@ struct process {
     bool system;
 
     uint64_t cr3 __attribute__((packed));
+    pml4e_t *pml4t;
 
     structures::unique_vector threads;
 
