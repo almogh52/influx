@@ -8,6 +8,7 @@ namespace scheduler_utils {
 extern "C" {
 void switch_task(thread *current_task, thread *new_task, process *new_task_process);
 uint64_t get_cr3();
+void jump_to_ring_3(uint64_t ring_3_function_address, void *user_stack, void *param);
 };
 };  // namespace scheduler_utils
 };  // namespace threading
