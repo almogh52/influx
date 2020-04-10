@@ -4,7 +4,7 @@
 %define PROCESS_CR3_OFFSET 18
 
 section .text
-global switch_task, get_cr3, jump_to_ring_3
+global switch_task, jump_to_ring_3
 
 ;   void switch_task(thread *current_task, thread *new_task, process *new_task_process)
 
@@ -35,11 +35,6 @@ switch_task:
 ;   Restore new task's registers
     restore_context
 
-    ret
-
-;   uint64_t get_cr3()
-get_cr3:
-    mov rax, cr3
     ret
 
 ;   void jump_to_ring_3(uint64_t ring_3_function_address, void *user_stack, void *param)
