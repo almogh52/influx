@@ -4,7 +4,7 @@
 #include <kernel/memory/utils.h>
 #include <kernel/threading/scheduler.h>
 
-influx::elf_file::elf_file(size_t fd) : _fd(fd), _entry_address(0) {}
+influx::elf_file::elf_file(size_t fd) : _parsed(false), _fd(fd), _entry_address(0) {}
 
 bool influx::elf_file::parse() {
     Elf64_Ehdr header;
@@ -46,13 +46,15 @@ bool influx::elf_file::parse() {
             // Init segment object
             seg = segment{.virtual_address = program_header.p_vaddr,
                           .data = structures::dynamic_buffer(program_header.p_memsz),
-                          .permissions = {.read = (bool)(program_header.p_flags & PF_R),
-                                          .write = (bool)(program_header.p_flags & PF_W),
-                                          .execute = (bool)(program_header.p_flags & PF_X)}};
+                          .protection = (protection_flags_t)(
+                              (program_header.p_flags & PF_R ? PROT_READ : 0) |
+                              (program_header.p_flags & PF_W ? PROT_WRITE : 0) |
+                              (program_header.p_flags & PF_X ? PROT_EXEC : 0))};
 
             // Read segment data
-            if (kernel::vfs()->seek(_fd, program_header.p_offset, vfs::seek_type::set) < 0 ||
-                kernel::vfs()->read(_fd, seg.data.data(), program_header.p_filesz) < 0) {
+            if (program_header.p_filesz > 0 &&
+                (kernel::vfs()->seek(_fd, program_header.p_offset, vfs::seek_type::set) < 0 ||
+                 kernel::vfs()->read(_fd, seg.data.data(), program_header.p_filesz) < 0)) {
                 return false;
             }
 
@@ -60,6 +62,9 @@ bool influx::elf_file::parse() {
             _segments.push_back(seg);
         }
     }
+
+    // Mark the file as parsed
+    _parsed = true;
 
     return true;
 }
