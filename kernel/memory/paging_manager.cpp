@@ -111,6 +111,7 @@ bool influx::memory::paging_manager::map_page(uint64_t page_base_address, uint64
                                      0xFFFFFFFFFF;
         pml4e->read_write = READ_WRITE_ACCESS;
         pml4e->present = true;
+        pml4e->no_execute = false;
 
         // Increase the buf physical offset
         buf_physical_offset += AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pdpe_t);
@@ -141,6 +142,7 @@ bool influx::memory::paging_manager::map_page(uint64_t page_base_address, uint64
                                     0xFFFFFFFFFF;
         pdpe->read_write = READ_WRITE_ACCESS;
         pdpe->present = true;
+        pdpe->no_execute = false;
 
         // Increase the buf physical offset
         buf_physical_offset += AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pde_t);
@@ -171,6 +173,7 @@ bool influx::memory::paging_manager::map_page(uint64_t page_base_address, uint64
                                    0xFFFFFFFFFF;
         pde->read_write = READ_WRITE_ACCESS;
         pde->present = true;
+        pde->no_execute = false;
 
         // Increase the buf physical offset
         buf_physical_offset += AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pde_t);
@@ -278,8 +281,29 @@ void influx::memory::paging_manager::unmap_temp_mapping(uint64_t page_base_addre
     invalidate_page(page_base_address);
 }
 
+void influx::memory::paging_manager::init_user_process_paging(uint64_t pml4t_virtual_address) {
+    pml4e_t *pml4t = (pml4e_t *)pml4t_virtual_address;
+
+    pml4e_t recursive_pml4e = {.raw = 0};
+
+    // Reset all other entries
+    utils::memset(pml4t, 0, sizeof(pml4e_t) * (AMOUNT_OF_PAGE_TABLE_ENTRIES - 2));
+
+    // Map the kernel inside the user process' paging
+    *(pml4t + AMOUNT_OF_PAGE_TABLE_ENTRIES - 2) = *get_pml4e(HIGHER_HALF_KERNEL_OFFSET);
+
+    // Recursive map of the paging structures in the last PDPE
+    recursive_pml4e.address_placeholder =
+        utils::patch_page_address_set_value(get_physical_address(pml4t_virtual_address)) &
+        0xFFFFFFFFFF;
+    recursive_pml4e.present = true;
+    recursive_pml4e.read_write = READ_WRITE_ACCESS;
+    *(pml4t + AMOUNT_OF_PAGE_TABLE_ENTRIES - 1) = recursive_pml4e;
+}
+
 void influx::memory::paging_manager::set_pte_permissions(uint64_t virtual_address,
-                                                         protection_flags_t pflags) {
+                                                         protection_flags_t pflags,
+                                                         bool user_access) {
     pml4e_t *pml4e = get_pml4e(virtual_address);
     pdpe_t *pdpe = get_pdpe(virtual_address);
     pde_t *pde = get_pde(virtual_address);
@@ -301,6 +325,16 @@ void influx::memory::paging_manager::set_pte_permissions(uint64_t virtual_addres
             pte->no_execute = false;
         } else {
             pte->no_execute = true;
+        }
+
+        // If we need to allow user access to the page
+        if (user_access) {
+            pml4e->user_supervisor = SUPERVISOR_USER_ACCESS;
+            pdpe->user_supervisor = SUPERVISOR_USER_ACCESS;
+            pde->user_supervisor = SUPERVISOR_USER_ACCESS;
+            pte->user_supervisor = SUPERVISOR_USER_ACCESS;
+        } else {
+            pte->user_supervisor = SUPERVISOR_ONLY_ACCESS;
         }
 
         // Invalidate the page to refresh it
