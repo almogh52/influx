@@ -21,6 +21,7 @@ void influx::threading::interrupts_lock::lock() {
     // If not locked, disable interrupts
     if (!_locked) {
         kernel::interrupt_manager()->disable_interrupts();
+        _locked = true;
     }
 }
 
@@ -28,5 +29,6 @@ void influx::threading::interrupts_lock::unlock() {
     // If locked, enable interrupts
     if (_locked) {
         kernel::interrupt_manager()->enable_interrupts();
+        _locked = false;
     }
 }
