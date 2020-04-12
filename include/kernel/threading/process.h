@@ -21,10 +21,11 @@ struct process {
     uint64_t cr3 __attribute__((packed));
     pml4e_t *pml4t;
 
+    uint64_t program_break_start;
+    uint64_t program_break_end;
+
     structures::unique_vector threads;
-
     structures::unique_hash_map<vfs::open_file> file_descriptors;
-
     structures::string name;
 };
 };  // namespace threading

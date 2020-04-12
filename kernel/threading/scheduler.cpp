@@ -23,11 +23,14 @@ void influx::threading::new_kernel_thread_wrapper(void (*func)(void *), void *da
 }
 
 void influx::threading::new_user_process_wrapper(influx::elf_file &exec_file) {
+    // Re-enable interrupts since they were disabled in the reschedule function
+    kernel::interrupt_manager()->enable_interrupts();
+
     uint64_t user_stack_virtual_address =
         (uint64_t)kernel::scheduler()->_current_task->value().user_stack;
 
-    // Re-enable interrupts since they were disabled in the reschedule function
-    kernel::interrupt_manager()->enable_interrupts();
+    interrupts_lock int_lk(false);
+    uint64_t end_of_executable = 0;
 
     // Load each segment to the user's memory space
     for (const auto &segment : exec_file.segments()) {
@@ -49,6 +52,11 @@ void influx::threading::new_user_process_wrapper(influx::elf_file &exec_file) {
             // Copy segment data to the memory
             memory::utils::memcpy((void *)segment.virtual_address, segment.data.data(),
                                   segment.data.size());
+
+            // Update end of executable
+            if (segment.virtual_address + segment.data.size() > end_of_executable) {
+                end_of_executable = segment.virtual_address + segment.data.size();
+            }
         } else {
             kernel::scheduler()->kill_current_task();
         }
@@ -59,7 +67,8 @@ void influx::threading::new_user_process_wrapper(influx::elf_file &exec_file) {
          stack_offset += PAGE_SIZE) {
         if (!memory::paging_manager::map_page(DEFAULT_USER_STACK_ADDRESS + stack_offset,
                                               memory::paging_manager::get_physical_address(
-                                                  user_stack_virtual_address + stack_offset))) {
+                                                  user_stack_virtual_address + stack_offset) /
+                                                  PAGE_SIZE)) {
             kernel::scheduler()->kill_current_task();
         }
 
@@ -67,6 +76,20 @@ void influx::threading::new_user_process_wrapper(influx::elf_file &exec_file) {
         memory::paging_manager::set_pte_permissions(DEFAULT_USER_STACK_ADDRESS + stack_offset,
                                                     PROT_READ | PROT_WRITE, true);
     }
+
+    // Align the end of the exeuctable
+    end_of_executable +=
+        end_of_executable % PAGE_SIZE ? (PAGE_SIZE - (end_of_executable % PAGE_SIZE)) : 0;
+
+    // Set program break
+    int_lk.lock();
+    kernel::scheduler()
+        ->_processes[kernel::scheduler()->_current_task->value().pid]
+        .program_break_start = end_of_executable;
+    kernel::scheduler()
+        ->_processes[kernel::scheduler()->_current_task->value().pid]
+        .program_break_end = end_of_executable;
+    int_lk.unlock();
 
     // Jump to the process entry point
     scheduler_utils::jump_to_ring_3(
@@ -91,6 +114,8 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .system = true,
                               .cr3 = (uint64_t)memory::utils::get_pml4(),
                               .pml4t = nullptr,
+                              .program_break_start = 0,
+                              .program_break_end = 0,
                               .threads = structures::unique_vector(),
                               .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
                               .name = "kernel"});
@@ -325,11 +350,22 @@ void influx::threading::scheduler::update_tasks_sleep_quantum() {
 void influx::threading::scheduler::sleep(uint64_t ms) {
     kassert(ms != 0);
 
+    interrupts_lock int_lk;
+
+    process &current_process = _processes[_current_task->value().pid];
+    priority_tcb_queue &task_priority_queue = _priority_queues[current_process.priority];
+
     // Set the task's sleep quantum
     _current_task->value().sleep_quantum = ms * (kernel::time_manager()->timer_frequency() / 1000);
 
     // Set the task's state to sleeping
     _current_task->value().state = thread_state::sleeping;
+
+    // If it is the next task, set the next task as null
+    if (task_priority_queue.next_task == _current_task) {
+        task_priority_queue.next_task = nullptr;
+    }
+    int_lk.unlock();
 
     // Re-schedule to another task
     reschedule();
@@ -355,16 +391,14 @@ void influx::threading::scheduler::kill_current_task() {
     // Add the task to the killed tasks queue
     _killed_tasks_queue.push_back(_current_task);
 
-    // Set the task as killed
-    _current_task->value().state = thread_state::killed;
-
     // If it is the next task, set the next task as null
     if (task_priority_queue.next_task == _current_task) {
         task_priority_queue.next_task = nullptr;
     }
-
-    // Unlock the interrupts lock
     int_lk.unlock();
+
+    // Set the task as killed
+    _current_task->value().state = thread_state::killed;
 
     // Unblock the tasks clean task
     unblock_task(_tasks_clean_task);
@@ -447,6 +481,8 @@ uint64_t influx::threading::scheduler::exec(influx::elf_file &exec_file,
                        .system = false,
                        .cr3 = memory::paging_manager::get_physical_address((uint64_t)pml4t),
                        .pml4t = pml4t,
+                       .program_break_start = 0,
+                       .program_break_end = 0,
                        .threads = structures::unique_vector(),
                        .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
                        .name = exec_name};
@@ -465,7 +501,7 @@ uint64_t influx::threading::scheduler::exec(influx::elf_file &exec_file,
     user_stack =
         memory::virtual_allocator::allocate(DEFAULT_USER_STACK_SIZE, PROT_READ | PROT_WRITE);
     if (!user_stack) {
-        memory::virtual_allocator::free(user_stack, DEFAULT_KERNEL_STACK_SIZE);
+        memory::virtual_allocator::free(kernel_stack, DEFAULT_KERNEL_STACK_SIZE);
         _processes.erase(pid);
         return 0;
     }
@@ -491,6 +527,57 @@ uint64_t influx::threading::scheduler::exec(influx::elf_file &exec_file,
     queue_task(task);
 
     return pid;
+}
+
+uint64_t influx::threading::scheduler::sbrk(int64_t inc) {
+    interrupts_lock int_lk;
+
+    process &task_process = _processes[_current_task->value().pid];
+
+    // No change
+    if (inc == 0) {
+        return task_process.program_break_end;
+    }
+
+    // Verify the new program break
+    if (task_process.program_break_end + inc < task_process.program_break_start ||
+        task_process.program_break_end + inc >= DEFAULT_USER_STACK_ADDRESS) {
+        return 0;
+    }
+
+    // If the the brk section has increased and new pages should be allocated, map new pages
+    if (inc > 0 && (task_process.program_break_end / PAGE_SIZE !=
+                        (task_process.program_break_end + inc) / PAGE_SIZE ||
+                    task_process.program_break_start == task_process.program_break_end)) {
+        for (uint64_t addr = task_process.program_break_end +
+                             (task_process.program_break_end % PAGE_SIZE
+                                  ? (PAGE_SIZE - (task_process.program_break_end % PAGE_SIZE))
+                                  : 0);
+             addr < (task_process.program_break_end + inc); addr += PAGE_SIZE) {
+            // Map new page
+            if (!memory::paging_manager::map_page(addr)) {
+                return 0;
+            }
+
+            // Set page permissions
+            memory::paging_manager::set_pte_permissions(addr, PROT_READ | PROT_WRITE, true);
+        }
+    } else if (inc < 0) {
+        // Free all deallocated pages
+        for (uint64_t addr =
+                 task_process.program_break_end - (task_process.program_break_end % PAGE_SIZE
+                                                       ? task_process.program_break_end % PAGE_SIZE
+                                                       : PAGE_SIZE);
+             addr >= task_process.program_break_end + inc; addr -= PAGE_SIZE) {
+            // Free the page
+            memory::paging_manager::unmap_page(addr);
+        }
+    }
+
+    // Set new program break end
+    task_process.program_break_end += inc;
+
+    return task_process.program_break_end - inc;
 }
 
 influx::threading::tcb *influx::threading::scheduler::get_current_task() const {

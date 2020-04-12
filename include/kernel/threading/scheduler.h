@@ -1,6 +1,7 @@
 #pragma once
 #include <kernel/elf_file.h>
 #include <kernel/logger.h>
+#include <kernel/memory/memory.h>
 #include <kernel/structures/unique_hash_map.h>
 #include <kernel/structures/vector.h>
 #include <kernel/threading/process.h>
@@ -14,10 +15,10 @@
 
 #define TASK_MAX_TIME_SLICE 25
 
-#define DEFAULT_KERNEL_STACK_SIZE (4 * PAGE_SIZE)
-#define DEFAULT_USER_STACK_SIZE (4 * PAGE_SIZE)
+#define DEFAULT_KERNEL_STACK_SIZE (0x100000 * 10)
+#define DEFAULT_USER_STACK_SIZE (0x100000 * 10)
 
-#define DEFAULT_USER_STACK_ADDRESS 0x1000000
+#define DEFAULT_USER_STACK_ADDRESS (HIGHER_HALF_KERNEL_OFFSET - DEFAULT_USER_STACK_SIZE)
 
 namespace influx {
 namespace threading {
@@ -46,6 +47,7 @@ class scheduler {
     void unblock_task(tcb *task);
 
     uint64_t exec(elf_file &exec_file, const structures::string exec_name);
+    uint64_t sbrk(int64_t inc);
 
     uint64_t get_current_task_id() const;
     uint64_t get_current_process_id() const;
