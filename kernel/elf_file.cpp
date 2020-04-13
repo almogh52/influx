@@ -4,6 +4,7 @@
 #include <kernel/memory/utils.h>
 #include <kernel/threading/scheduler.h>
 
+influx::elf_file::elf_file() : _parsed(false), _fd(0), _entry_address(0) {}
 influx::elf_file::elf_file(size_t fd) : _parsed(false), _fd(fd), _entry_address(0) {}
 
 bool influx::elf_file::parse() {

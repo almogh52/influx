@@ -6,6 +6,7 @@
 namespace influx {
 class elf_file {
    public:
+    elf_file();
     elf_file(size_t fd);
 
     bool parse();
