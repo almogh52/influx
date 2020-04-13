@@ -2,6 +2,7 @@
 #include <kernel/structures/string.h>
 #include <kernel/structures/unique_hash_map.h>
 #include <kernel/structures/unique_vector.h>
+#include <kernel/structures/vector.h>
 #include <kernel/vfs/open_file.h>
 #include <memory/paging.h>
 #include <stdint.h>
@@ -19,14 +20,21 @@ struct process {
     bool system;
 
     uint64_t cr3 __attribute__((packed));
-    pml4e_t *pml4t;
+    pml4e_t* pml4t;
 
     uint64_t program_break_start;
     uint64_t program_break_end;
 
     structures::unique_vector threads;
+    structures::vector<uint64_t> child_processes;
+
     structures::unique_hash_map<vfs::open_file> file_descriptors;
     structures::string name;
+
+    bool terminated;
+
+    inline bool operator==(const process& p) const { return pid == p.pid && name == p.name; };
+    inline bool operator!=(const process& p) const { return !(*this == p); }
 };
 };  // namespace threading
 };  // namespace influx
