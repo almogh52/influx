@@ -37,11 +37,13 @@ switch_task:
 
     ret
 
-;   void jump_to_ring_3(uint64_t ring_3_function_address, void *user_stack, void *param)
+;   void jump_to_ring_3(uint64_t ring_3_function_address, void *user_stack, uint64_t argc, const char **argv, const char **envp)
 
 ;   rdi = the address of the ring 3 function
 ;   rsi = the pointer to the user stack
-;   rdx = the parameter to pass to the ring 3 function
+;   rdx = argc
+;   rcx = argv
+;   r8 = envp
 jump_to_ring_3:
 ;   Set ring 3 data segment
     mov ax, 0x20 + 11b ; Ring 3 data segment
@@ -57,15 +59,15 @@ jump_to_ring_3:
     push 0x18 + 11b ; Ring 3 code segment
     push rdi
 
-;   Set parameter for function
+;   Set parameters for function
     mov rdi, rdx
+    mov rsi, rcx
+    mov rdx, r8
 
 ;   Clear registers
     xor rax, rax
     xor rbx, rbx
     xor rcx, rcx
-    xor rdx, rdx
-    xor rsi, rsi
     xor rbp, rbp
     xor r8, r8
     xor r9, r9
