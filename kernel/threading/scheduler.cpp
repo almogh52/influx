@@ -34,34 +34,36 @@ void influx::threading::new_user_process_wrapper(influx::threading::executable *
 
     uint64_t argc = exec->args.size(), entry = exec->file.entry_address();
 
-    interrupts_lock int_lk(false);
     uint64_t end_of_executable = 0;
 
+    // Get the process object
+    interrupts_lock int_lk;
+    process &process =
+        kernel::scheduler()->_processes[kernel::scheduler()->_current_task->value().pid];
+    int_lk.unlock();
+
     // Load each segment to the user's memory space
-    for (const auto &segment : exec->file.segments()) {
+    for (const auto &seg : exec->file.segments()) {
         // Check valid segment location
-        if (segment.virtual_address < USERLAND_MEMORY_BARRIER &&
-            segment.virtual_address + segment.data.size() < USERLAND_MEMORY_BARRIER) {
+        if (seg.virtual_address < USERLAND_MEMORY_BARRIER &&
+            seg.virtual_address + seg.data.size() < USERLAND_MEMORY_BARRIER) {
             // For each page of the segment map it
-            for (uint64_t page_addr = segment.virtual_address;
-                 page_addr < (segment.virtual_address + segment.data.size());
-                 page_addr += PAGE_SIZE) {
+            for (uint64_t page_addr = seg.virtual_address;
+                 page_addr < (seg.virtual_address + seg.data.size()); page_addr += PAGE_SIZE) {
                 if (!memory::paging_manager::map_page(page_addr)) {
                     delete exec;
                     kernel::scheduler()->kill_current_task();
                 }
 
                 // Set map permissions
-                memory::paging_manager::set_pte_permissions(page_addr, segment.protection, true);
+                memory::paging_manager::set_pte_permissions(page_addr, seg.protection, true);
             }
 
             // Copy segment data to the memory
-            memory::utils::memcpy((void *)segment.virtual_address, segment.data.data(),
-                                  segment.data.size());
-
+            memory::utils::memcpy((void *)seg.virtual_address, seg.data.data(), seg.data.size());
             // Update end of executable
-            if (segment.virtual_address + segment.data.size() > end_of_executable) {
-                end_of_executable = segment.virtual_address + segment.data.size();
+            if (seg.virtual_address + seg.data.size() > end_of_executable) {
+                end_of_executable = seg.virtual_address + seg.data.size();
             }
         } else {
             delete exec;
@@ -115,14 +117,8 @@ void influx::threading::new_user_process_wrapper(influx::threading::executable *
         end_of_executable % PAGE_SIZE ? (PAGE_SIZE - (end_of_executable % PAGE_SIZE)) : 0;
 
     // Set program break
-    int_lk.lock();
-    kernel::scheduler()
-        ->_processes[kernel::scheduler()->_current_task->value().pid]
-        .program_break_start = end_of_executable;
-    kernel::scheduler()
-        ->_processes[kernel::scheduler()->_current_task->value().pid]
-        .program_break_end = end_of_executable;
-    int_lk.unlock();
+    process.program_break_start = end_of_executable;
+    process.program_break_end = end_of_executable;
 
     // Free executable object
     delete exec;
@@ -509,6 +505,13 @@ void influx::threading::scheduler::kill_current_task() {
     process &current_process = _processes[_current_task->value().pid];
     priority_tcb_queue &task_priority_queue = _priority_queues[current_process.priority];
 
+    // If it's the last thread of the user process, free it's memory
+    if (!current_process.system && current_process.threads.size() == 1) {
+        int_lk.unlock();
+        memory::paging_manager::free_user_process_paging();
+        int_lk.lock();
+    }
+
     // If the current task is the first task in the priority queue, set the start as the next task
     if (task_priority_queue.start == _current_task && _current_task->next() != _current_task) {
         task_priority_queue.start = _current_task->next();
@@ -726,11 +729,6 @@ void influx::threading::scheduler::tasks_clean_task() {
             process &task_process = _processes[task->value().pid];
             int_lk.unlock();
 
-            // If the process is a user process
-            if (!task_process.system) {
-                // TODO: Handle user tasks kill
-            }
-
             // Remove the thread from the threads list of the process
             int_lk.lock();
             task_process.threads.erase(algorithm::find(
@@ -738,7 +736,8 @@ void influx::threading::scheduler::tasks_clean_task() {
             int_lk.unlock();
 
             // Free the task kernel stack
-            delete[](uint64_t *) task->value().kernel_stack;
+            // NOTE: User stack is already released by paging manager
+            memory::virtual_allocator::free(task->value().kernel_stack, DEFAULT_KERNEL_STACK_SIZE);
 
             // Free the task object
             delete task;
@@ -746,7 +745,8 @@ void influx::threading::scheduler::tasks_clean_task() {
             // If the process has no threads left, kill the process
             if (task_process.threads.empty()) {
                 if (!task_process.system) {
-                    // TODO: Handle user process kill
+                    // Free PML4T
+                    memory::virtual_allocator::free(task_process.pml4t, PAGE_SIZE);
                 }
 
                 // Move all child processes to init's child processes
@@ -816,6 +816,9 @@ void influx::threading::scheduler::tasks_clean_task() {
                         _processes[task_process.ppid].child_processes.end(), task_process.pid));
                     _processes.erase(task_process.pid);
                     int_lk.unlock();
+
+                    _log("Process '%s' (PID: %d) has exited.\n", task_process.name.c_str(),
+                         task_process.pid);
                 } else {
                     // Set the process as terminated and waiting to be deleted (zombie process)
                     task_process.terminated = true;

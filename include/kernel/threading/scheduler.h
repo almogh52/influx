@@ -18,8 +18,6 @@
 
 #define TASK_MAX_TIME_SLICE 25
 
-#define USERLAND_MEMORY_BARRIER 0x800000000000
-
 #define DEFAULT_KERNEL_STACK_SIZE (0x100000 * 10)
 #define DEFAULT_USER_STACK_SIZE (0x100000 * 10)
 
@@ -57,7 +55,7 @@ class scheduler {
     void block_current_task();
     void unblock_task(tcb *task);
 
-    uint64_t exec(size_t fd, const structures::string& name,
+    uint64_t exec(size_t fd, const structures::string &name,
                   const structures::vector<structures::string> &args,
                   const structures::vector<structures::string> &env);
     uint64_t sbrk(int64_t inc);
@@ -106,7 +104,8 @@ class scheduler {
     uint64_t get_stack_pointer() const;
 
     uint64_t pages_for_argv_envp(executable &exec);
-    structures::pair<const char **, const char **> copy_argv_envp(executable &exec, uint64_t address);
+    structures::pair<const char **, const char **> copy_argv_envp(executable &exec,
+                                                                  uint64_t address);
 
     friend void new_user_process_wrapper(executable *exec);
 
