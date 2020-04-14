@@ -98,7 +98,7 @@ void influx::memory::virtual_allocator::free(void *ptr, uint64_t size) {
             page_physical_address =
                 paging_manager::get_physical_address((uint64_t)ptr + i * PAGE_SIZE);
             if (page_physical_address != 0) {
-                physical_allocator::free_page(page_physical_address);
+                physical_allocator::free_page(page_physical_address / PAGE_SIZE);
             }
 
             // Free the mapping to the page
