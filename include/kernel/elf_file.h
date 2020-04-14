@@ -1,5 +1,5 @@
 #pragma once
-#include <kernel/segment.h>
+#include <kernel/file_segment.h>
 #include <kernel/structures/vector.h>
 #include <stddef.h>
 
@@ -12,7 +12,7 @@ class elf_file {
     bool parse();
 
     inline bool parsed() const { return _parsed; };
-    inline const structures::vector<segment>& segments() const { return _segments; };
+    inline const structures::vector<file_segment>& segments() const { return _segments; };
     inline uint64_t entry_address() const { return _entry_address; }
 
    private:
@@ -20,6 +20,6 @@ class elf_file {
     size_t _fd;
 
     uint64_t _entry_address;
-    structures::vector<segment> _segments;
+    structures::vector<file_segment> _segments;
 };
 };  // namespace influx

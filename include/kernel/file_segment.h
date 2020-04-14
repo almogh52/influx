@@ -3,7 +3,7 @@
 #include <memory/protection_flags.h>
 
 namespace influx {
-struct segment {
+struct file_segment {
     uint64_t virtual_address;
     structures::dynamic_buffer data;
     protection_flags_t protection;
