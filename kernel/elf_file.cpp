@@ -11,7 +11,7 @@ bool influx::elf_file::parse() {
     Elf64_Ehdr header;
 
     Elf64_Phdr program_header;
-    segment seg;
+    file_segment seg;
 
     // Read the header from the file
     if (kernel::vfs()->read(_fd, &header, sizeof(Elf64_Ehdr)) < 0) {
@@ -45,12 +45,12 @@ bool influx::elf_file::parse() {
         // If the program header is a load program header
         if (program_header.p_type == PT_LOAD) {
             // Init segment object
-            seg = segment{.virtual_address = program_header.p_vaddr,
-                          .data = structures::dynamic_buffer(program_header.p_memsz),
-                          .protection = (protection_flags_t)(
-                              (program_header.p_flags & PF_R ? PROT_READ : 0) |
-                              (program_header.p_flags & PF_W ? PROT_WRITE : 0) |
-                              (program_header.p_flags & PF_X ? PROT_EXEC : 0))};
+            seg = file_segment{.virtual_address = program_header.p_vaddr,
+                               .data = structures::dynamic_buffer(program_header.p_memsz),
+                               .protection = (protection_flags_t)(
+                                   (program_header.p_flags & PF_R ? PROT_READ : 0) |
+                                   (program_header.p_flags & PF_W ? PROT_WRITE : 0) |
+                                   (program_header.p_flags & PF_X ? PROT_EXEC : 0))};
 
             // Read segment data
             if (program_header.p_filesz > 0 &&
