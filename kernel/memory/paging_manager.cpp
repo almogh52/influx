@@ -100,7 +100,7 @@ bool influx::memory::paging_manager::map_page(uint64_t page_base_address, uint64
         } else {
             // Unmap the temp mapping
             unmap_temp_mapping(page_base_address, buf_physical_address,
-                               buf.size + buf_physical_offset);
+                               buf.size + buf_physical_offset, true);
 
             return false;
         }
@@ -131,7 +131,7 @@ bool influx::memory::paging_manager::map_page(uint64_t page_base_address, uint64
         } else {
             // Unmap the temp mapping
             unmap_temp_mapping(page_base_address, buf_physical_address,
-                               buf.size + buf_physical_offset);
+                               buf.size + buf_physical_offset, true);
 
             return false;
         }
@@ -162,7 +162,7 @@ bool influx::memory::paging_manager::map_page(uint64_t page_base_address, uint64
         } else {
             // Unmap the temp mapping
             unmap_temp_mapping(page_base_address, buf_physical_address,
-                               buf.size + buf_physical_offset);
+                               buf.size + buf_physical_offset, true);
 
             return false;
         }
@@ -221,7 +221,7 @@ bool influx::memory::paging_manager::temp_map_page(uint64_t page_base_address, b
 
 void influx::memory::paging_manager::unmap_temp_mapping(uint64_t page_base_address,
                                                         uint64_t buf_physical_address,
-                                                        uint64_t buf_size) {
+                                                        uint64_t buf_size, bool free) {
     pml4e_t *pml4e = get_pml4e(page_base_address);
 
     pdpe_t *pdpe = nullptr;
@@ -238,7 +238,12 @@ void influx::memory::paging_manager::unmap_temp_mapping(uint64_t page_base_addre
     // Get the PDPT physical address and check if it's in the buffer
     data_structure_physical_address = utils::patch_page_address(pml4e->pdp_address);
     if (data_structure_physical_address >= buf_physical_address &&
-        data_structure_physical_address < (buf_physical_address - buf_size)) {
+        data_structure_physical_address < (buf_physical_address + buf_size)) {
+        // Free PDPT page
+        if (free) {
+            physical_allocator::free_page(data_structure_physical_address / PAGE_SIZE);
+        }
+
         // If the PDPT is in the buffer, disable the PML4E
         *pml4e = (pml4e_t){0};
     }
@@ -252,7 +257,12 @@ void influx::memory::paging_manager::unmap_temp_mapping(uint64_t page_base_addre
     // Get the PDT physical address and check if it's in the buffer
     data_structure_physical_address = utils::patch_page_address(pdpe->pd_address);
     if (data_structure_physical_address >= buf_physical_address &&
-        data_structure_physical_address < (buf_physical_address - buf_size)) {
+        data_structure_physical_address < (buf_physical_address + buf_size)) {
+        // Free PDT page
+        if (free) {
+            physical_allocator::free_page(data_structure_physical_address / PAGE_SIZE);
+        }
+
         // If the PDT is in the buffer, disable the PDPE
         *pdpe = (pdpe_t){0};
     }
@@ -266,13 +276,23 @@ void influx::memory::paging_manager::unmap_temp_mapping(uint64_t page_base_addre
     // Get the PT physical address and check if it's in the buffer
     data_structure_physical_address = utils::patch_page_address(pde->pt_address);
     if (data_structure_physical_address >= buf_physical_address &&
-        data_structure_physical_address < (buf_physical_address - buf_size)) {
+        data_structure_physical_address < (buf_physical_address + buf_size)) {
+        // Free PT page
+        if (free) {
+            physical_allocator::free_page(data_structure_physical_address / PAGE_SIZE);
+        }
+
         // If the PT is in the buffer, disable the PDE
         *pde = (pde_t){0};
     }
 
     // Get the PTE
     pte = get_pte(page_base_address);
+
+    // Free page
+    if (free && pte->present) {
+        physical_allocator::free_page(utils::patch_page_address(pte->page_address) / PAGE_SIZE);
+    }
 
     // Disable the PTE
     *pte = (pte_t){0};
@@ -299,6 +319,90 @@ void influx::memory::paging_manager::init_user_process_paging(uint64_t pml4t_vir
     recursive_pml4e.present = true;
     recursive_pml4e.read_write = READ_WRITE_ACCESS;
     *(pml4t + AMOUNT_OF_PAGE_TABLE_ENTRIES - 1) = recursive_pml4e;
+}
+
+void influx::memory::paging_manager::free_user_process_paging() {
+    // ** THIS SHOULD BE CALLED WHEN CR3 POINTS TO PML4T OF THE USER PROCESS **
+
+    uint64_t addr = 0;
+
+    pml4e_t *pml4e = nullptr;
+    pdpe_t *pdpe = nullptr;
+    pde_t *pde = nullptr;
+    pte *pte = nullptr;
+
+    // While we didn't reach the end of the memory
+    do {
+        // If we reached a new PML4 entry, get the new entry
+        if (addr % PML4E_RANGE == 0) {
+            // Release previous PDP
+            if (pml4e != nullptr) {
+                physical_allocator::free_page(
+                    get_physical_address((uint64_t)get_pdpe(addr - PML4E_RANGE)) / PAGE_SIZE);
+            }
+
+            // Get new PML4E
+            pml4e = get_pml4e(addr);
+
+            // If the PML4E isn't present, jump to next one
+            if (!pml4e->present) {
+                pml4e = nullptr;
+                addr += PML4E_RANGE;
+                continue;
+            }
+        }
+
+        // If we reached a new PDP entry, get the new entry
+        if (addr % PDPE_RANGE == 0) {
+            // Release previous PD
+            if (pdpe != nullptr) {
+                physical_allocator::free_page(
+                    get_physical_address((uint64_t)get_pde(addr - PDPE_RANGE)) / PAGE_SIZE);
+            }
+
+            // Get new PDPE
+            pdpe = get_pdpe(addr);
+
+            // If the PDPE isn't present, jump to next one
+            if (get_physical_address((uint64_t)pdpe) == 0 || !pdpe->present) {
+                pdpe = nullptr;
+                addr += PDPE_RANGE;
+                continue;
+            }
+        }
+
+        // If we reached a new PD entry, get the new entry
+        if (addr % PDE_RANGE == 0) {
+            // Release previous PT
+            if (pde != nullptr) {
+                physical_allocator::free_page(
+                    get_physical_address((uint64_t)get_pte(addr - PDE_RANGE)) / PAGE_SIZE);
+            }
+
+            // Get new PDE
+            pde = get_pde(addr);
+
+            // If the PDE isn't present, jump to next one
+            if (get_physical_address((uint64_t)pde) == 0 || !pde->present) {
+                pde = nullptr;
+                addr += PDE_RANGE;
+                continue;
+            }
+        }
+
+        // Get PTE
+        pte = get_pte(addr);
+
+        // If the PTE isn't present, jump to next one
+        if (get_physical_address((uint64_t)pte) == 0 || !pte->present) {
+            addr += PAGE_SIZE;
+            continue;
+        }
+
+        // Free page
+        physical_allocator::free_page(utils::patch_page_address(pte->page_address) / PAGE_SIZE);
+        addr += PAGE_SIZE;
+    } while (addr < USERLAND_MEMORY_BARRIER);
 }
 
 void influx::memory::paging_manager::set_pte_permissions(uint64_t virtual_address,
@@ -382,7 +486,7 @@ void influx::memory::paging_manager::free_structures_buffer() {
     // Unmap all pages for the structures buffer
     for (uint8_t i = 0; i < STRUCTURES_BUFFER_SIZE / PAGE_SIZE; i++) {
         unmap_temp_mapping(STRUCTURES_BUFFER_ADDRESS + i * PAGE_SIZE,
-                           structures_mapping_buffer_physical_address, PAGE_SIZE);
+                           structures_mapping_buffer_physical_address, PAGE_SIZE, false);
     }
 }
 

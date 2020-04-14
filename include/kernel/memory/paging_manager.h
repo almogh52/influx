@@ -35,9 +35,10 @@ class paging_manager {
     static bool temp_map_page(uint64_t page_base_address, buffer_t &buf,
                               uint64_t buf_physical_address, int64_t page_index = -1);
     static void unmap_temp_mapping(uint64_t page_base_address, uint64_t buf_physical_address,
-                                   uint64_t buf_size);
+                                   uint64_t buf_size, bool free);
 
     static void init_user_process_paging(uint64_t pml4t_virtual_address);
+    static void free_user_process_paging();
 
     static void set_pte_permissions(uint64_t virtual_address, protection_flags_t pflags,
                                     bool user_access = false);

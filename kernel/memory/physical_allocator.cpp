@@ -59,7 +59,7 @@ void influx::memory::physical_allocator::init(const boot_info_mem &mmap) {
                 page_chunk_start + i, structures_buffer, structures_page_index * PAGE_SIZE)) {
             // Unmap the structures page
             paging_manager::unmap_temp_mapping(
-                EARLY_TEMP_PAGE_BASE_ADDRESS, temp_buffer_physical_address, EARLY_TEMP_BUFFER_SIZE);
+                EARLY_TEMP_PAGE_BASE_ADDRESS, temp_buffer_physical_address, EARLY_TEMP_BUFFER_SIZE, false);
 
             // Search for a page for the structures
             if (!early_bitmap.search_bit(0, structures_page_index)) {
@@ -98,7 +98,7 @@ void influx::memory::physical_allocator::init(const boot_info_mem &mmap) {
 
     // Unmap the structures page
     paging_manager::unmap_temp_mapping(EARLY_TEMP_PAGE_BASE_ADDRESS,
-                                       structures_page_index * PAGE_SIZE, PAGE_SIZE);
+                                       structures_page_index * PAGE_SIZE, PAGE_SIZE, false);
 
     // Init bitmap object
     _bitmap = structures::bitmap((void *)(HIGHER_HALF_KERNEL_OFFSET + BITMAP_ADDRESS_OFFSET),

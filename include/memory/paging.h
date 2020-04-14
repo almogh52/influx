@@ -14,6 +14,10 @@
 #define WRITEBACK_CACHING_POLICY 0
 #define WRITETHROUGH_CACHING_POLICY 1
 
+#define PML4E_RANGE 0x8000000000
+#define PDPE_RANGE 0x40000000
+#define PDE_RANGE 0x200000
+
 typedef struct pml4e {
     union {
         uint64_t raw;
@@ -48,7 +52,7 @@ typedef struct pdpe {
             uint64_t page_cache_disable : 1;
             uint64_t accessed : 1;
             uint64_t ignore : 1;
-			uint64_t page_size : 1;
+            uint64_t page_size : 1;
             uint64_t zero : 1;
             uint64_t available1 : 3;
             uint64_t address_placeholder : 40;
