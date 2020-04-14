@@ -36,6 +36,8 @@ void influx::threading::init_process::queue_exec(influx::threading::executable &
 void influx::threading::init_process::main_task() {
     unique_lock execs_lk(_execs_mutex);
 
+    uint64_t pid = 0;
+
     while (true) {
         // Wait for new executable to start
         while (_execs.empty()) {
@@ -45,7 +47,8 @@ void influx::threading::init_process::main_task() {
         // Execute all queued processes
         for (auto &exec : _execs) {
             _log("Starting process '%s'..\n", exec.name.c_str());
-            _schd->start_process(exec);
+            pid = _schd->start_process(exec);
+            _log("Process '%s' (PID: %d) has started.\n", exec.name.c_str(), pid);
         }
 
         // Clear execute queue
