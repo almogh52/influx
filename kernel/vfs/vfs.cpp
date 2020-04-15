@@ -436,6 +436,16 @@ int64_t influx::vfs::vfs::unlink(const influx::vfs::path& file_path) {
     return error::success;
 }
 
+void influx::vfs::vfs::fork_file_descriptors(
+    influx::structures::unique_hash_map<influx::vfs::open_file>& file_descriptors) {
+    threading::lock_guard lk(_vnodes_mutex);
+
+    // For each file descriptor, increase it's vnode open count
+    for (auto& file_descriptor_pair : file_descriptors) {
+        _vnodes[file_descriptor_pair.second.vnode_index].amount_of_open_files++;
+    }
+}
+
 uint64_t influx::vfs::vfs::dirent_size_for_dir_entry(influx::vfs::dir_entry& entry) {
     return sizeof(dirent) + entry.name.size() + 1;
 }

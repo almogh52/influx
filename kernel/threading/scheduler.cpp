@@ -46,7 +46,7 @@ void influx::threading::new_user_process_wrapper(influx::threading::executable *
     for (const auto &seg : exec->file.segments()) {
         // Check valid segment location
         if (seg.virtual_address < USERLAND_MEMORY_BARRIER &&
-            seg.virtual_address + seg.data.size() < USERLAND_MEMORY_BARRIER) {
+            seg.virtual_address + seg.data.size() <= USERLAND_MEMORY_BARRIER) {
             // For each page of the segment map it
             for (uint64_t page_addr = seg.virtual_address;
                  page_addr < (seg.virtual_address + seg.data.size()); page_addr += PAGE_SIZE) {
@@ -61,6 +61,12 @@ void influx::threading::new_user_process_wrapper(influx::threading::executable *
 
             // Copy segment data to the memory
             memory::utils::memcpy((void *)seg.virtual_address, seg.data.data(), seg.data.size());
+
+            // Add segment to vector of segments
+            process.segments += segment{.virtual_address = seg.virtual_address,
+                                        .size = seg.data.size(),
+                                        .protection = seg.protection};
+
             // Update end of executable
             if (seg.virtual_address + seg.data.size() > end_of_executable) {
                 end_of_executable = seg.virtual_address + seg.data.size();
@@ -120,6 +126,11 @@ void influx::threading::new_user_process_wrapper(influx::threading::executable *
     process.program_break_start = end_of_executable;
     process.program_break_end = end_of_executable;
 
+    // Set args size
+    int_lk.lock();
+    kernel::scheduler()->_current_task->value().args_size = argv_envp_pages * PAGE_SIZE;
+    int_lk.unlock();
+
     // Free executable object
     delete exec;
 
@@ -128,6 +139,50 @@ void influx::threading::new_user_process_wrapper(influx::threading::executable *
                                     (void *)(DEFAULT_USER_STACK_ADDRESS + DEFAULT_USER_STACK_SIZE -
                                              8 - (argv_envp_pages * PAGE_SIZE)),
                                     argc, function_ptrs.first, function_ptrs.second);
+}
+
+void influx::threading::new_fork_process_wrapper(
+    influx::structures::vector<influx::file_segment> *segments,
+    influx::interrupts::regs *old_context) {
+    // Re-enable interrupts since they were disabled in the reschedule function
+    kernel::interrupt_manager()->enable_interrupts();
+
+    // Create a stack copy of the old context
+    interrupts::regs old_context_var = *old_context;
+
+    // Delete the old context object
+    delete old_context;
+
+    // Allocate and map the different sections of the executable in the memory
+    for (const auto &seg : *segments) {
+        // Check valid segment location
+        if (seg.virtual_address < USERLAND_MEMORY_BARRIER &&
+            seg.virtual_address + seg.data.size() <= USERLAND_MEMORY_BARRIER) {
+            // For each page of the segment map it
+            for (uint64_t page_addr = seg.virtual_address;
+                 page_addr < (seg.virtual_address + seg.data.size()); page_addr += PAGE_SIZE) {
+                if (!memory::paging_manager::map_page(page_addr)) {
+                    delete segments;
+                    kernel::scheduler()->kill_current_task();
+                }
+
+                // Set map permissions
+                memory::paging_manager::set_pte_permissions(page_addr, seg.protection, true);
+            }
+
+            // Copy segment data to the memory
+            memory::utils::memcpy((void *)seg.virtual_address, seg.data.data(), seg.data.size());
+        } else {
+            delete segments;
+            kernel::scheduler()->kill_current_task();
+        }
+    }
+
+    // Free segments vector and old context
+    delete segments;
+
+    // Return to the new process
+    scheduler_utils::return_to_fork_process(old_context_var);
 }
 
 influx::threading::scheduler::scheduler(uint64_t tss_addr)
@@ -154,6 +209,7 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .child_processes = structures::vector<uint64_t>(),
                               .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
                               .name = "kernel",
+                              .segments = structures::vector<segment>(),
                               .terminated = false});
 
     // Create kernel main thread
@@ -164,6 +220,7 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                        .context = nullptr,
                        .kernel_stack = (void *)get_stack_pointer(),
                        .user_stack = nullptr,
+                       .args_size = 0,
                        .state = thread_state::running,
                        .quantum = 0,
                        .sleep_quantum = 0,
@@ -174,16 +231,17 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
 
     // Create kernel idle thread
     _log("Creating scheduler idle thread..\n");
-    _idle_task = new tcb(thread({.tid = _processes[KERNEL_PID].threads.insert_unique(),
-                                 .pid = KERNEL_PID,
-                                 .context = nullptr,
-                                 .kernel_stack = memory::virtual_allocator::allocate(
-                                     DEFAULT_KERNEL_STACK_SIZE, PROT_READ | PROT_WRITE),
-                                 .user_stack = nullptr,
-                                 .state = thread_state::ready,
-                                 .quantum = 0,
-                                 .sleep_quantum = 0,
-                                 .child_wait_pid = 0}));
+    _idle_task = new tcb(thread{.tid = _processes[KERNEL_PID].threads.insert_unique(),
+                                .pid = KERNEL_PID,
+                                .context = nullptr,
+                                .kernel_stack = memory::virtual_allocator::allocate(
+                                    DEFAULT_KERNEL_STACK_SIZE, PROT_READ | PROT_WRITE),
+                                .user_stack = nullptr,
+                                .args_size = 0,
+                                .state = thread_state::ready,
+                                .quantum = 0,
+                                .sleep_quantum = 0,
+                                .child_wait_pid = 0});
     _idle_task->value().context =
         (regs *)((uint8_t *)_idle_task->value().kernel_stack + DEFAULT_KERNEL_STACK_SIZE -
                  sizeof(regs) - sizeof(uint64_t));  // Set context pointer
@@ -216,6 +274,7 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .child_processes = structures::vector<uint64_t>(),
                               .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
                               .name = "init",
+                              .segments = structures::vector<segment>(),
                               .terminated = false});
 
     // Start init process
@@ -250,6 +309,7 @@ influx::threading::tcb *influx::threading::scheduler::create_kernel_thread(void 
                                    .context = context,
                                    .kernel_stack = stack,
                                    .user_stack = nullptr,
+                                   .args_size = 0,
                                    .state = blocked ? thread_state::blocked : thread_state::ready,
                                    .quantum = 0,
                                    .sleep_quantum = 0,
@@ -606,6 +666,141 @@ uint64_t influx::threading::scheduler::exec(
     }
 }
 
+uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context) {
+    file_segment seg;
+    structures::vector<file_segment> segments, *segments_obj = nullptr;
+
+    uint64_t pid = 0;
+    pml4e_t *pml4t = 0;
+
+    void *kernel_stack = nullptr;
+    void *user_stack = nullptr;
+    regs *context = nullptr;
+    tcb *task = nullptr;
+
+    interrupts::regs *old_context_obj = nullptr;
+
+    interrupts_lock int_lk;
+    process process_fork = _processes[_current_task->value().pid];
+    int_lk.unlock();
+
+    // Allocate PML4T
+    pml4t = (pml4e_t *)memory::virtual_allocator::allocate(PAGE_SIZE, PROT_READ | PROT_WRITE);
+    if (pml4t == 0) {
+        return 0;
+    }
+
+    // Initiate PML4T for the userland executable
+    memory::paging_manager::init_user_process_paging((uint64_t)pml4t);
+
+    // Create a copy of all the segments of the current process
+    for (const auto &exec_seg : process_fork.segments) {
+        seg = file_segment{.virtual_address = exec_seg.virtual_address,
+                           .data = structures::dynamic_buffer(exec_seg.size),
+                           .protection = exec_seg.protection};
+
+        // Copy the segment data
+        memory::utils::memcpy(seg.data.data(), (void *)exec_seg.virtual_address, exec_seg.size);
+
+        // Add the segment to the segments vector
+        segments += seg;
+    }
+
+    // Create a copy of the program break
+    seg = file_segment{.virtual_address = process_fork.program_break_start,
+                       .data = structures::dynamic_buffer(process_fork.program_break_end -
+                                                          process_fork.program_break_start),
+                       .protection = PROT_READ | PROT_WRITE};
+    memory::utils::memcpy(seg.data.data(), (void *)process_fork.program_break_start,
+                          process_fork.program_break_end - process_fork.program_break_start);
+    segments += seg;
+
+    // Create a copy of the user stack
+    seg = file_segment{
+        .virtual_address = DEFAULT_USER_STACK_ADDRESS - _current_task->value().args_size,
+        .data = structures::dynamic_buffer(DEFAULT_USER_STACK_SIZE),
+        .protection = PROT_READ | PROT_WRITE};
+    memory::utils::memcpy(seg.data.data(),
+                          (void *)(DEFAULT_USER_STACK_ADDRESS - _current_task->value().args_size),
+                          DEFAULT_USER_STACK_SIZE);
+    segments += seg;
+
+    // Create a copy of the args
+    seg =
+        file_segment{.virtual_address = USERLAND_MEMORY_BARRIER - _current_task->value().args_size,
+                     .data = structures::dynamic_buffer(_current_task->value().args_size),
+                     .protection = PROT_READ};
+    memory::utils::memcpy(seg.data.data(),
+                          (void *)(USERLAND_MEMORY_BARRIER - _current_task->value().args_size),
+                          _current_task->value().args_size);
+    segments += seg;
+
+    // Fork the file descriptors
+    kernel::vfs()->fork_file_descriptors(process_fork.file_descriptors);
+
+    // Reset properties for the new process
+    process_fork.cr3 = memory::paging_manager::get_physical_address((uint64_t)pml4t);
+    process_fork.pml4t = pml4t;
+    process_fork.threads = structures::unique_vector();
+    process_fork.child_processes = structures::vector<uint64_t>();
+
+    // Create the fork process
+    int_lk.lock();
+    pid = _processes.insert_unique(process());
+    process_fork.pid = pid;
+    _processes[pid] = process_fork;
+
+    // Add the process as a child process for the parent process
+    _processes[process_fork.ppid].child_processes += pid;
+    int_lk.unlock();
+
+    // Allocate kernel stack for main process task
+    kernel_stack =
+        memory::virtual_allocator::allocate(DEFAULT_KERNEL_STACK_SIZE, PROT_READ | PROT_WRITE);
+    if (!kernel_stack) {
+        _processes.erase(pid);
+        return 0;
+    }
+    context = (regs *)((uint8_t *)kernel_stack + DEFAULT_KERNEL_STACK_SIZE - sizeof(regs) -
+                       sizeof(uint64_t));
+
+    // Allocate user stack for main process task
+    user_stack =
+        memory::virtual_allocator::allocate(DEFAULT_USER_STACK_SIZE, PROT_READ | PROT_WRITE);
+    if (!user_stack) {
+        memory::virtual_allocator::free(kernel_stack, DEFAULT_KERNEL_STACK_SIZE);
+        _processes.erase(pid);
+        return 0;
+    }
+
+    // Create main task for the process
+    task = new tcb(thread{.tid = _processes[pid].threads.insert_unique(),
+                          .pid = pid,
+                          .context = context,
+                          .kernel_stack = kernel_stack,
+                          .user_stack = user_stack,
+                          .args_size = 0,
+                          .state = thread_state::ready,
+                          .quantum = 0,
+                          .sleep_quantum = 0,
+                          .child_wait_pid = 0});
+
+    // Set the RIP to return to when the thread is selected
+    *(uint64_t *)((uint8_t *)kernel_stack + DEFAULT_KERNEL_STACK_SIZE - sizeof(uint64_t)) =
+        (uint64_t)new_fork_process_wrapper;
+
+    // Send to the new user process wrapper the executable object
+    segments_obj = new structures::vector<file_segment>(segments);
+    old_context_obj = new interrupts::regs(old_context);
+    context->rdi = (uint64_t)segments_obj;
+    context->rsi = (uint64_t)old_context_obj;
+
+    // Queue the task
+    queue_task(task);
+
+    return pid;
+}
+
 uint64_t influx::threading::scheduler::sbrk(int64_t inc) {
     interrupts_lock int_lk;
 
@@ -885,6 +1080,7 @@ uint64_t influx::threading::scheduler::start_process(influx::threading::executab
                               .child_processes = structures::vector<uint64_t>(),
                               .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
                               .name = exec.name,
+                              .segments = structures::vector<segment>(),
                               .terminated = false};
 
     // Add the process as a child process for the current process
@@ -916,6 +1112,7 @@ uint64_t influx::threading::scheduler::start_process(influx::threading::executab
                           .context = context,
                           .kernel_stack = kernel_stack,
                           .user_stack = user_stack,
+                          .args_size = 0,
                           .state = thread_state::ready,
                           .quantum = 0,
                           .sleep_quantum = 0,

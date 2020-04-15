@@ -15,6 +15,7 @@ struct thread {
 
     void* kernel_stack;
     void* user_stack;
+    uint64_t args_size;
 
     thread_state state;
     uint64_t quantum;

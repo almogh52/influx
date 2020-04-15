@@ -1,5 +1,6 @@
 #pragma once
 #include <kernel/elf_file.h>
+#include <kernel/interrupts/interrupt_regs.h>
 #include <kernel/logger.h>
 #include <kernel/memory/memory.h>
 #include <kernel/structures/unique_hash_map.h>
@@ -34,6 +35,8 @@ struct priority_tcb_queue {
 
 void new_kernel_thread_wrapper(void (*func)(void *), void *data);
 void new_user_process_wrapper(executable *exec);
+void new_fork_process_wrapper(structures::vector<file_segment> *segments,
+                              interrupts::regs *old_context);
 
 class scheduler {
    public:
@@ -58,6 +61,7 @@ class scheduler {
     uint64_t exec(size_t fd, const structures::string &name,
                   const structures::vector<structures::string> &args,
                   const structures::vector<structures::string> &env);
+    uint64_t fork(interrupts::regs old_context);
     uint64_t sbrk(int64_t inc);
 
     uint64_t get_current_task_id() const;

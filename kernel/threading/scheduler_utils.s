@@ -4,7 +4,7 @@
 %define PROCESS_CR3_OFFSET 18
 
 section .text
-global switch_task, jump_to_ring_3
+global switch_task, jump_to_ring_3, return_to_fork_process
 
 ;   void switch_task(thread *current_task, thread *new_task, process *new_task_process)
 
@@ -80,3 +80,27 @@ jump_to_ring_3:
 
 ;   Jump to ring 3 function
     iretq
+
+;   void return_to_fork_process()
+return_to_fork_process:
+;   Set ring 3 data segment
+    mov ax, 0x20 + 11b ; Ring 3 data segment
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+;   Ignore return address of caller function
+    add rsp, 8
+
+;   Restore the old context
+    restore_context
+
+;	Clean error code and interrupt number
+	add rsp, 16
+
+;   Set return value as 0
+    mov rax, 0
+
+	iretq
+

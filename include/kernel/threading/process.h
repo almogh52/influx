@@ -1,4 +1,5 @@
 #pragma once
+#include <kernel/segment.h>
 #include <kernel/structures/string.h>
 #include <kernel/structures/unique_hash_map.h>
 #include <kernel/structures/unique_vector.h>
@@ -30,6 +31,8 @@ struct process {
 
     structures::unique_hash_map<vfs::open_file> file_descriptors;
     structures::string name;
+
+    structures::vector<segment> segments;
 
     bool terminated;
 
