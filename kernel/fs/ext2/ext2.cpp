@@ -153,7 +153,12 @@ influx::vfs::error influx::fs::ext2::get_file_info(void *fs_file_info,
     // Set the properties of the file
     file.type = file_type_for_inode(inode);
     file.size = inode->size;
+    file.blocks = inode->disk_sectors_count;
     file.permissions = file_permissions_for_inode(inode);
+    file.owner_user_id = inode->user_id;
+    file.owner_group_id = inode->group_id;
+    file.fs_block_size = _block_size;
+    file.hard_links_count = inode->hard_links_count;
     file.modified = inode->last_modification_time;
     file.accessed = inode->last_access_time;
     file.created = inode->creation_time;

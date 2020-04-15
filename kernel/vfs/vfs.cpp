@@ -173,6 +173,25 @@ int64_t influx::vfs::vfs::close(size_t fd) {
     return error::success;
 }
 
+int64_t influx::vfs::vfs::stat(size_t fd, influx::vfs::file_info& info) {
+    open_file file;
+
+    error err;
+
+    threading::unique_lock vnodes_lk(_vnodes_mutex);
+
+    // Try to get the open file object
+    if ((err = get_open_file_for_fd(fd, file)) != error::success) {
+        return err;
+    }
+
+    // Get the file info
+    info = _vnodes[file.vnode_index].file;
+    vnodes_lk.unlock();
+
+    return 0;
+}
+
 int64_t influx::vfs::vfs::seek(size_t fd, int64_t offset, influx::vfs::seek_type type) {
     open_file file;
     int64_t new_position = 0;

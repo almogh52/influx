@@ -27,6 +27,8 @@ class vfs {
                  file_permissions permissions = {.raw = 0});
     int64_t close(size_t fd);
 
+    int64_t stat(size_t fd, file_info& info);
+
     int64_t seek(size_t fd, int64_t offset, seek_type type);
     int64_t read(size_t fd, void* buf, size_t count);
     int64_t write(size_t fd, const void* buf, size_t count);
