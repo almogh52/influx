@@ -210,7 +210,8 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
                               .name = "kernel",
                               .segments = structures::vector<segment>(),
-                              .terminated = false});
+                              .terminated = false,
+                              .new_exec_process = false});
 
     // Create kernel main thread
     _log("Creating kernel main thread..\n");
@@ -275,7 +276,8 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
                               .name = "init",
                               .segments = structures::vector<segment>(),
-                              .terminated = false});
+                              .terminated = false,
+                              .new_exec_process = false});
 
     // Start init process
     _log("Starting init process..\n");
@@ -649,10 +651,21 @@ uint64_t influx::threading::scheduler::exec(
     size_t fd, const influx::structures::string &name,
     const influx::structures::vector<influx::structures::string> &args,
     const influx::structures::vector<influx::structures::string> &env) {
+    vfs::file_info file;
     executable exec{.name = name, .file = elf_file(fd), .args = args, .env = env};
 
-    // Try to parse the file
+    interrupts_lock int_lk;
+    process &process = _processes[_current_task->value().pid];
+    int_lk.unlock();
+
+    // Check that the file has permission to execute
+    if (kernel::vfs()->stat(fd, file) != vfs::error::success || !file.permissions.execute) {
+        return 0;
+    }
+
+    // Try to parse the file as an ELF file
     if (!exec.file.parse()) {
+        // TODO: Search for interpreter line
         return 0;
     }
 
@@ -660,10 +673,23 @@ uint64_t influx::threading::scheduler::exec(
     if (_current_task->value().pid == KERNEL_PID) {
         _init_process.queue_exec(exec);
         return INIT_PROCESS_PID;
-    } else {
-        // Start the process
-        return start_process(exec);
     }
+
+    // TODO: Kill all other threads
+
+    // Set the process as new exec process
+    process.new_exec_process = true;
+
+    // Clean the process
+    clean_process(_current_task->value().pid, false, false);
+
+    // Start the process
+    start_process(exec, _current_task->value().pid);
+
+    // Kill the current task
+    kill_current_task();
+
+    return 0;
 }
 
 uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context) {
@@ -904,8 +930,6 @@ void influx::threading::scheduler::remove_file_descriptor(uint64_t fd) {
 void influx::threading::scheduler::tasks_clean_task() {
     interrupts_lock int_lk(false);
 
-    tcb *start_node = nullptr, *currnet_node = nullptr;
-
     while (true) {
         structures::vector<tcb *> killed_tasks_queue;
 
@@ -917,107 +941,37 @@ void influx::threading::scheduler::tasks_clean_task() {
 
         // For each task to be killed
         for (tcb *&task : killed_tasks_queue) {
-            bool waited = false;
-
             // Create a copy of the process struct of the task
             int_lk.lock();
             process &task_process = _processes[task->value().pid];
-            int_lk.unlock();
-
-            // Remove the thread from the threads list of the process
-            int_lk.lock();
-            task_process.threads.erase(algorithm::find(
-                task_process.threads.begin(), task_process.threads.end(), task->value().tid));
             int_lk.unlock();
 
             // Free the task kernel stack
             // NOTE: User stack is already released by paging manager
             memory::virtual_allocator::free(task->value().kernel_stack, DEFAULT_KERNEL_STACK_SIZE);
 
+            // Remove the thread from the threads list of the process
+            if (!task_process.new_exec_process) {
+                int_lk.lock();
+                task_process.threads.erase(algorithm::find(
+                    task_process.threads.begin(), task_process.threads.end(), task->value().tid));
+                int_lk.unlock();
+            }
+
             // Free the task object
             delete task;
 
-            // If the process has no threads left, kill the process
-            if (task_process.threads.empty()) {
-                if (!task_process.system) {
-                    // Free PML4T
-                    memory::virtual_allocator::free(task_process.pml4t, PAGE_SIZE);
-                }
-
-                // Move all child processes to init's child processes
-                int_lk.lock();
-                for (const auto &child_pid : task_process.child_processes) {
-                    // If it was already terminated (zombie process), remove it from the list
-                    if (_processes[child_pid].terminated) {
-                        _processes.erase(child_pid);
-                    } else {
-                        _processes[INIT_PROCESS_PID].child_processes += child_pid;
-                        _processes[child_pid].ppid = INIT_PROCESS_PID;
+            // If the process isn't a new exec process
+            if (!task_process.new_exec_process) {
+                // If the process has no threads left, kill the process
+                if (task_process.threads.empty()) {
+                    // Clean the process
+                    if (task_process.ppid != task_process.pid) {
+                        clean_process(task_process.pid, true, true);
                     }
                 }
-                int_lk.unlock();
-
-                // Check if one of the parent's tasks are waiting for the child
-                if (task_process.ppid != task_process.pid) {
-                    // Get the start node of the priority queue of the parent process
-                    int_lk.lock();
-                    start_node = _priority_queues[_processes[task_process.ppid].priority].start;
-                    currnet_node = start_node;
-
-                    // Search for the tasks of the parent process
-                    if (currnet_node != nullptr) {
-                        do {
-                            // If the task belongs to the parent process and it's waiting for a
-                            // child process, check if the process is the wanted process
-                            if (currnet_node->value().pid == task_process.ppid &&
-                                currnet_node->value().state == thread_state::waiting_for_child) {
-                                if (currnet_node->value().child_wait_pid ==
-                                        (int64_t)task_process.pid ||
-                                    currnet_node->value().child_wait_pid == WAIT_FOR_ANY_PROCESS) {
-                                    // Set the pid of the process that released it
-                                    currnet_node->value().child_wait_pid = task_process.pid;
-
-                                    // Remove the child as a child process
-                                    _processes[task_process.ppid].child_processes.erase(
-                                        algorithm::find(
-                                            _processes[task_process.ppid].child_processes.begin(),
-                                            _processes[task_process.ppid].child_processes.end(),
-                                            task_process.pid));
-
-                                    // Release interrupts lock
-                                    int_lk.unlock();
-
-                                    // Unblock the task
-                                    unblock_task(currnet_node);
-
-                                    // Mark the process as waited
-                                    waited = true;
-                                    break;
-                                }
-                            }
-
-                            // Move to next node
-                            currnet_node = currnet_node->next();
-                        } while (currnet_node != start_node);
-                    }
-                }
-
-                // If the process was waited or it was executed by init process, delete the process
-                // object
-                if (waited || task_process.ppid == INIT_PROCESS_PID) {
-                    int_lk.lock();
-                    _processes[task_process.ppid].child_processes.erase(algorithm::find(
-                        _processes[task_process.ppid].child_processes.begin(),
-                        _processes[task_process.ppid].child_processes.end(), task_process.pid));
-                    _processes.erase(task_process.pid);
-                    int_lk.unlock();
-
-                    _log("Process '%s' (PID: %d) has exited.\n", task_process.name.c_str(),
-                         task_process.pid);
-                } else {
-                    // Set the process as terminated and waiting to be deleted (zombie process)
-                    task_process.terminated = true;
-                }
+            } else {
+                task_process.new_exec_process = false;
             }
         }
 
@@ -1038,10 +992,10 @@ void influx::threading::scheduler::idle_task() {
     }
 }
 
-uint64_t influx::threading::scheduler::start_process(influx::threading::executable &exec) {
+uint64_t influx::threading::scheduler::start_process(influx::threading::executable &exec,
+                                                     int64_t pid) {
     interrupts_lock int_lk(false);
 
-    uint64_t pid = 0;
     pml4e_t *pml4t = 0;
 
     void *kernel_stack = nullptr;
@@ -1067,24 +1021,37 @@ uint64_t influx::threading::scheduler::start_process(influx::threading::executab
 
     // Create the process for the executable
     int_lk.lock();
-    pid = _processes.insert_unique(process());
-    _processes[pid] = process{.pid = pid,
-                              .ppid = _current_task->value().pid,
-                              .priority = DEFAULT_USER_SPACE_PROCESS_PRIORITY,
-                              .system = false,
-                              .cr3 = memory::paging_manager::get_physical_address((uint64_t)pml4t),
-                              .pml4t = pml4t,
-                              .program_break_start = 0,
-                              .program_break_end = 0,
-                              .threads = structures::unique_vector(),
-                              .child_processes = structures::vector<uint64_t>(),
-                              .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
-                              .name = exec.name,
-                              .segments = structures::vector<segment>(),
-                              .terminated = false};
+    if (pid < 0) {
+        pid = _processes.insert_unique(process());
+        _processes[pid] =
+            process{.pid = (uint64_t)pid,
+                    .ppid = _current_task->value().pid,
+                    .priority = DEFAULT_USER_SPACE_PROCESS_PRIORITY,
+                    .system = false,
+                    .cr3 = memory::paging_manager::get_physical_address((uint64_t)pml4t),
+                    .pml4t = pml4t,
+                    .program_break_start = 0,
+                    .program_break_end = 0,
+                    .threads = structures::unique_vector(),
+                    .child_processes = structures::vector<uint64_t>(),
+                    .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
+                    .name = exec.name,
+                    .segments = structures::vector<segment>(),
+                    .terminated = false,
+                    .new_exec_process = false};
 
-    // Add the process as a child process for the current process
-    _processes[_current_task->value().pid].child_processes += pid;
+        // Add the process as a child process for the current process
+        _processes[_current_task->value().pid].child_processes += pid;
+    } else {
+        _processes[pid].cr3 = memory::paging_manager::get_physical_address((uint64_t)pml4t);
+        _processes[pid].pml4t = pml4t;
+        _processes[pid].program_break_start = 0;
+        _processes[pid].program_break_end = 0;
+        _processes[pid].threads = structures::unique_vector();
+        _processes[pid].child_processes = structures::vector<uint64_t>();
+        _processes[pid].name = exec.name;
+        _processes[pid].terminated = false;
+    }
     int_lk.unlock();
 
     // Allocate kernel stack for main process task
@@ -1108,7 +1075,7 @@ uint64_t influx::threading::scheduler::start_process(influx::threading::executab
 
     // Create main task for the process
     task = new tcb(thread{.tid = _processes[pid].threads.insert_unique(),
-                          .pid = pid,
+                          .pid = (uint64_t)pid,
                           .context = context,
                           .kernel_stack = kernel_stack,
                           .user_stack = user_stack,
@@ -1130,6 +1097,103 @@ uint64_t influx::threading::scheduler::start_process(influx::threading::executab
     queue_task(task);
 
     return pid;
+}
+
+void influx::threading::scheduler::clean_process(uint64_t pid, bool erase,
+                                                 bool close_file_descriptors) {
+    interrupts_lock int_lk(false);
+
+    tcb *start_node = nullptr, *currnet_node = nullptr;
+    bool waited = false;
+
+    process &process = _processes[pid];
+
+    if (!process.system) {
+        // Free PML4T
+        memory::virtual_allocator::free(process.pml4t, PAGE_SIZE);
+    }
+
+    // Move all child processes to init's child processes
+    int_lk.lock();
+    for (const auto &child_pid : process.child_processes) {
+        // If it was already terminated (zombie process), remove it from the list
+        if (_processes[child_pid].terminated) {
+            _processes.erase(child_pid);
+        } else {
+            _processes[INIT_PROCESS_PID].child_processes += child_pid;
+            _processes[child_pid].ppid = INIT_PROCESS_PID;
+        }
+    }
+
+    // Don't check for waiting tasks if not erasing process
+    if (erase) {
+        // Get the start node of the priority queue of the parent process
+        start_node = _priority_queues[_processes[process.ppid].priority].start;
+        currnet_node = start_node;
+
+        // Search for the tasks of the parent process
+        if (currnet_node != nullptr) {
+            do {
+                // If the task belongs to the parent process and it's waiting for a
+                // child process, check if the process is the wanted process
+                if (pid == process.ppid &&
+                    currnet_node->value().state == thread_state::waiting_for_child) {
+                    if (currnet_node->value().child_wait_pid == (int64_t)pid ||
+                        currnet_node->value().child_wait_pid == WAIT_FOR_ANY_PROCESS) {
+                        // Set the pid of the process that released it
+                        currnet_node->value().child_wait_pid = pid;
+
+                        // Remove the child as a child process
+                        _processes[process.ppid].child_processes.erase(
+                            algorithm::find(_processes[process.ppid].child_processes.begin(),
+                                            _processes[process.ppid].child_processes.end(), pid));
+
+                        // Release interrupts lock
+                        int_lk.unlock();
+
+                        // Unblock the task
+                        unblock_task(currnet_node);
+
+                        // Mark the process as waited
+                        waited = true;
+                        break;
+                    }
+                }
+
+                // Move to next node
+                currnet_node = currnet_node->next();
+            } while (currnet_node != start_node);
+        }
+    }
+
+    // Unlock interrupts lock
+    if (!waited) {
+        int_lk.unlock();
+    }
+
+    // Close all file descriptors
+    if (close_file_descriptors) {
+        for (const auto &file_descriptor : process.file_descriptors) {
+            kernel::vfs()->close_open_file(file_descriptor.second);
+        }
+    }
+
+    // Lock interrupts lock
+    int_lk.lock();
+
+    // If the process was waited or it was executed by init process, delete the process
+    // object
+    if (erase && (waited || process.ppid == INIT_PROCESS_PID)) {
+        _processes[process.ppid].child_processes.erase(
+            algorithm::find(_processes[process.ppid].child_processes.begin(),
+                            _processes[process.ppid].child_processes.end(), pid));
+        _processes.erase(pid);
+
+        _log("Process '%s' (PID: %d) has exited.\n", process.name.c_str(), pid);
+    } else {
+        // Set the process as terminated and waiting to be deleted (zombie process)
+        process.terminated = true;
+    }
 }
 
 void influx::threading::scheduler::queue_task(influx::threading::tcb *task) {

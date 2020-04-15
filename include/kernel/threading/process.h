@@ -35,6 +35,7 @@ struct process {
     structures::vector<segment> segments;
 
     bool terminated;
+    bool new_exec_process;
 
     inline bool operator==(const process& p) const { return pid == p.pid && name == p.name; };
     inline bool operator!=(const process& p) const { return !(*this == p); }

@@ -139,33 +139,13 @@ int64_t influx::vfs::vfs::close(size_t fd) {
     open_file file;
     error err;
 
-    threading::unique_lock vnodes_lk(_vnodes_mutex);
-
     // Try to get the open file object
     if ((err = get_open_file_for_fd(fd, file)) != error::success) {
         return err;
     }
 
-    // Create a ref of the vnode
-    vnode& vn = _vnodes[file.vnode_index];
-
-    // Decrease the amount of open files for the file
-    vn.amount_of_open_files--;
-
-    // If there are no open files for the file, free it
-    if (vn.amount_of_open_files == 0) {
-        // Check if the file need to be deleted, unlink it
-        if (vn.deleted && _deleted_vnodes_paths.count(file.vnode_index) == 1) {
-            vn.fs->unlink_file(_deleted_vnodes_paths[file.vnode_index]);
-            _deleted_vnodes_paths.erase(file.vnode_index);
-        }
-
-        // Erase the vnode object
-        _vnodes.erase(file.vnode_index);
-    }
-
-    // Unlock vnodes lock
-    vnodes_lk.unlock();
+    // Close the file
+    close_open_file(file);
 
     // Remove the file descriptor
     kernel::scheduler()->remove_file_descriptor(fd);
@@ -531,4 +511,26 @@ influx::vfs::filesystem* influx::vfs::vfs::get_fs_for_file(const influx::vfs::pa
     }
 
     return best_fs_match.fs;
+}
+
+void influx::vfs::vfs::close_open_file(const influx::vfs::open_file& file) {
+    threading::unique_lock vnodes_lk(_vnodes_mutex);
+
+    // Create a ref of the vnode
+    vnode& vn = _vnodes[file.vnode_index];
+
+    // Decrease the amount of open files for the file
+    vn.amount_of_open_files--;
+
+    // If there are no open files for the file, free it
+    if (vn.amount_of_open_files == 0) {
+        // Check if the file need to be deleted, unlink it
+        if (vn.deleted && _deleted_vnodes_paths.count(file.vnode_index) == 1) {
+            vn.fs->unlink_file(_deleted_vnodes_paths[file.vnode_index]);
+            _deleted_vnodes_paths.erase(file.vnode_index);
+        }
+
+        // Erase the vnode object
+        _vnodes.erase(file.vnode_index);
+    }
 }

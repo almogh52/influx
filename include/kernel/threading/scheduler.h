@@ -102,7 +102,8 @@ class scheduler {
     void tasks_clean_task();
     void idle_task();
 
-    uint64_t start_process(executable &exec);
+    uint64_t start_process(executable &exec, int64_t pid = -1);
+    void clean_process(uint64_t pid, bool erase, bool close_file_descriptors);
 
     tcb *get_current_task() const;
     uint64_t get_stack_pointer() const;

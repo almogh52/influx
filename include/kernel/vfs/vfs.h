@@ -6,6 +6,7 @@
 #include <kernel/structures/unique_hash_map.h>
 #include <kernel/structures/vector.h>
 #include <kernel/threading/mutex.h>
+#include <kernel/threading/scheduler.h>
 #include <kernel/vfs/error.h>
 #include <kernel/vfs/fs_mount.h>
 #include <kernel/vfs/fs_type.h>
@@ -62,6 +63,10 @@ class vfs {
         structures::pair<uint64_t, structures::reference_wrapper<vnode>>& vn);
 
     filesystem* get_fs_for_file(const path& file_path);
+
+    void close_open_file(const open_file& file);
+
+    friend class influx::threading::scheduler;
 };
 };  // namespace vfs
 };  // namespace influx
