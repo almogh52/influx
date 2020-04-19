@@ -34,6 +34,8 @@ struct process {
 
     structures::vector<segment> segments;
 
+    uint8_t exit_code;
+
     bool terminated;
     bool new_exec_process;
 

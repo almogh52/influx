@@ -210,6 +210,7 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
                               .name = "kernel",
                               .segments = structures::vector<segment>(),
+                              .exit_code = 0,
                               .terminated = false,
                               .new_exec_process = false});
 
@@ -276,6 +277,7 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
                               .name = "init",
                               .segments = structures::vector<segment>(),
+                              .exit_code = 0,
                               .terminated = false,
                               .new_exec_process = false});
 
@@ -645,6 +647,21 @@ void influx::threading::scheduler::unblock_task(influx::threading::tcb *task) {
             task_priority_queue.next_task = task;
         }
     }
+}
+
+void influx::threading::scheduler::exit(uint8_t code) {
+    interrupts_lock int_lk;
+    process &process = _processes[_current_task->value().pid];
+    int_lk.unlock();
+
+    // Kill all tasks of the process
+    kill_all_tasks(_current_task->value().pid);
+
+    // Set the error code
+    process.exit_code = code;
+
+    // Kill the current task
+    kill_current_task();
 }
 
 uint64_t influx::threading::scheduler::exec(
@@ -1037,6 +1054,7 @@ uint64_t influx::threading::scheduler::start_process(influx::threading::executab
                     .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
                     .name = exec.name,
                     .segments = structures::vector<segment>(),
+                    .exit_code = 0,
                     .terminated = false,
                     .new_exec_process = false};
 
@@ -1189,11 +1207,65 @@ void influx::threading::scheduler::clean_process(uint64_t pid, bool erase,
                             _processes[process.ppid].child_processes.end(), pid));
         _processes.erase(pid);
 
-        _log("Process '%s' (PID: %d) has exited.\n", process.name.c_str(), pid);
+        _log("Process '%s' (PID: %d) has exited with code %d.\n", process.name.c_str(), pid,
+             process.exit_code);
     } else {
         // Set the process as terminated and waiting to be deleted (zombie process)
         process.terminated = true;
     }
+}
+
+void influx::threading::scheduler::kill_all_tasks(uint64_t pid) {
+    interrupts_lock int_lk;
+
+    kassert(_processes.count(pid));
+    process &process = _processes[pid];
+    priority_tcb_queue &process_priority_queue = _priority_queues[process.priority];
+
+    tcb *current_node = process_priority_queue.start, *prev_node = nullptr;
+
+    // While we didn't reach the end of the priority queue
+    do {
+        // If the current node is for the wanted process and it's not the current task, remove it
+        if (current_node->value().pid == pid && current_node != _current_task) {
+            // If it's the last node in the list, set the list start as null
+            if (current_node->prev() == current_node->next()) {
+                process_priority_queue.start = nullptr;
+                break;
+            } else {
+                // Remove the node from the list
+                current_node->prev()->next() = current_node->next();
+
+                // Change the start of the list if it's the node
+                if (current_node == process_priority_queue.start) {
+                    process_priority_queue.start = current_node->next();
+                }
+
+                // Change the next task of the list if it's the node
+                if (current_node == process_priority_queue.next_task) {
+                    update_priority_queue_next_task(process.priority);
+                }
+            }
+
+            // Free the kernel stack
+            memory::virtual_allocator::free(current_node->value().kernel_stack,
+                                            DEFAULT_KERNEL_STACK_SIZE);
+
+            // Erase the thread id from the threads vector
+            process.threads.erase(algorithm::find(process.threads.begin(), process.threads.end(),
+                                                  current_node->value().tid));
+
+            // Move to the next node
+            prev_node = current_node;
+            current_node = current_node->next();
+
+            // Delete the task
+            delete prev_node;
+        } else {
+            // Move to the next node
+            current_node = current_node->next();
+        }
+    } while (current_node != process_priority_queue.start);
 }
 
 void influx::threading::scheduler::queue_task(influx::threading::tcb *task) {

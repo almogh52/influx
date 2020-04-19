@@ -52,6 +52,7 @@ class scheduler {
     void sleep(uint64_t ms);
     int64_t wait_for_child(int64_t child_pid);
 
+    void exit(uint8_t code);
     void kill_current_task();
 
     void block_task(tcb *task);
@@ -104,6 +105,7 @@ class scheduler {
 
     uint64_t start_process(executable &exec, int64_t pid = -1);
     void clean_process(uint64_t pid, bool erase, bool close_file_descriptors);
+    void kill_all_tasks(uint64_t pid);
 
     tcb *get_current_task() const;
     uint64_t get_stack_pointer() const;
