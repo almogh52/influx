@@ -35,6 +35,7 @@ cp build/EFI/boot/$OS_NAME-bootstrap.bin iso/boot/$OS_NAME-bootstrap.bin
 # Copy the kernel executable from the build dir
 echo -e '\033[0;36mCopying kernel executable..\033[0m'
 cp build/EFI/boot/$OS_NAME-kernel.bin iso/boot/$OS_NAME-kernel.bin
+x86_64-elf-strip --strip-unneeded iso/boot/$OS_NAME-kernel.bin
 
 # Copy the grub dir
 echo -e '\033[0;36mCopying grub configuration folder..\033[0m'
