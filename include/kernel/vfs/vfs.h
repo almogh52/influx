@@ -29,6 +29,7 @@ class vfs {
     int64_t close(size_t fd);
 
     int64_t stat(size_t fd, file_info& info);
+    int64_t stat(const path& file_path, file_info& info);
 
     int64_t seek(size_t fd, int64_t offset, seek_type type);
     int64_t read(size_t fd, void* buf, size_t count);

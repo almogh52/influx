@@ -103,7 +103,7 @@ int64_t influx::vfs::vfs::open(const influx::vfs::path& file_path, influx::vfs::
     // Verify file type
     if (file.type == file_type::regular && (flags & open_flags::directory)) {
         delete (uint32_t*)fs_file_data;
-        return error::file_not_found;
+        return error::file_is_not_directory;
     } else if (file.type == file_type::directory && (flags & open_flags::write)) {
         delete (uint32_t*)fs_file_data;
         return error::file_is_directory;
@@ -170,6 +170,31 @@ int64_t influx::vfs::vfs::stat(size_t fd, influx::vfs::file_info& info) {
     vnodes_lk.unlock();
 
     return 0;
+}
+
+int64_t influx::vfs::vfs::stat(const influx::vfs::path& file_path, influx::vfs::file_info& info) {
+    filesystem* fs = get_fs_for_file(file_path);
+    void* fs_file_data = nullptr;
+
+    error err;
+
+    // If no filesystem contains this file path
+    if (fs == nullptr) {
+        return error::file_not_found;
+    }
+
+    // If the file wasn't found in the filesystem
+    if ((fs_file_data = fs->get_fs_file_data(file_path)) == nullptr) {
+        return error::file_not_found;
+    }
+
+    // Read file info from filesystem
+    err = fs->get_file_info(fs_file_data, info);
+
+    // Delete the fs file data
+    delete (uint32_t*)fs_file_data;
+
+    return err;
 }
 
 int64_t influx::vfs::vfs::seek(size_t fd, int64_t offset, influx::vfs::seek_type type) {
