@@ -98,10 +98,6 @@ bool influx::memory::paging_manager::map_page(uint64_t page_base_address, uint64
             buf.ptr = (uint8_t *)buf.ptr + AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pdpe_t);
             buf.size -= AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pdpe_t);
         } else {
-            // Unmap the temp mapping
-            unmap_temp_mapping(page_base_address, buf_physical_address,
-                               buf.size + buf_physical_offset, true);
-
             return false;
         }
 
@@ -129,10 +125,6 @@ bool influx::memory::paging_manager::map_page(uint64_t page_base_address, uint64
             buf.ptr = (uint8_t *)buf.ptr + AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pde_t);
             buf.size -= AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pde_t);
         } else {
-            // Unmap the temp mapping
-            unmap_temp_mapping(page_base_address, buf_physical_address,
-                               buf.size + buf_physical_offset, true);
-
             return false;
         }
 
@@ -160,10 +152,6 @@ bool influx::memory::paging_manager::map_page(uint64_t page_base_address, uint64
             buf.ptr = (uint8_t *)buf.ptr + AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pte_t);
             buf.size -= AMOUNT_OF_PAGE_TABLE_ENTRIES * sizeof(pte_t);
         } else {
-            // Unmap the temp mapping
-            unmap_temp_mapping(page_base_address, buf_physical_address,
-                               buf.size + buf_physical_offset, true);
-
             return false;
         }
 
@@ -444,6 +432,26 @@ void influx::memory::paging_manager::set_pte_permissions(uint64_t virtual_addres
         // Invalidate the page to refresh it
         invalidate_page(virtual_address);
     }
+}
+
+protection_flags_t influx::memory::paging_manager::get_pte_permissions(uint64_t virtual_address) {
+    pml4e_t *pml4e = get_pml4e(virtual_address);
+    pdpe_t *pdpe = get_pdpe(virtual_address);
+    pde_t *pde = get_pde(virtual_address);
+    pte *pte = get_pte(virtual_address);
+
+    // If the PTE is present
+    if (pml4e->present && pdpe->present && pde->present) {
+        if (pte->present == false) {
+            return PROT_NONE;
+        } else if (pte->read_write == READ_WRITE_ACCESS) {
+            return PROT_READ | PROT_WRITE;
+        } else if (pte->read_write == READ_ONLY_ACCESS) {
+            return PROT_READ;
+        }
+    }
+
+    return PROT_NONE;
 }
 
 bool influx::memory::paging_manager::allocate_structures_buffer() {

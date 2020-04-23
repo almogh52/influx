@@ -42,6 +42,7 @@ class paging_manager {
 
     static void set_pte_permissions(uint64_t virtual_address, protection_flags_t pflags,
                                     bool user_access = false);
+    static protection_flags_t get_pte_permissions(uint64_t virtual_address);
 
    private:
     inline static char _structures_mapping_temp_buffer[PAGE_SIZE] __attribute__((aligned(0x1000)));
