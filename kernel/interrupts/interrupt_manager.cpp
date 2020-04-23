@@ -26,7 +26,7 @@ void influx::interrupts::isr_handler(influx::interrupts::regs *context) {
 
 void influx::interrupts::exception_interrupt_handler(influx::interrupts::regs *context) {
     // Disable interrupts
-    __asm__ __volatile__ ("cli");
+    __asm__ __volatile__("cli");
 
     logger log("Exception Interrupt");
     log("CPU Exception (%x) occurred with code %x in address %p.\n", context->isr_number,
@@ -97,6 +97,13 @@ void influx::interrupts::interrupt_manager::set_interrupt_service_routine(uint8_
     // Set the ISR handler
     isrs[interrupt_index] = isr;
     _log("ISR (%p) has been set for interrupt %x.\n", isr, interrupt_index);
+}
+
+void influx::interrupts::interrupt_manager::set_interrupt_privilege_level(uint8_t interrupt_index,
+                                                                          uint8_t privilege_level) {
+    _idt[interrupt_index].privilege_level = privilege_level & 0b11;
+    _log("Privilege level of %d has been set for interrupt %x.\n", privilege_level,
+         interrupt_index);
 }
 
 void influx::interrupts::interrupt_manager::set_irq_handler(uint8_t irq,

@@ -31,6 +31,7 @@ class interrupt_manager {
     interrupt_manager();
 
     void set_interrupt_service_routine(uint8_t interrupt_index, uint64_t isr);
+    void set_interrupt_privilege_level(uint8_t interrupt_index, uint8_t privilege_level);
     void set_irq_handler(uint8_t irq, uint64_t irq_handler_address, void *irq_handler_data);
 
     void enable_interrupts() const;
