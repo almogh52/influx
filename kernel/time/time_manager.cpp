@@ -34,6 +34,10 @@ uint64_t influx::time::time_manager::unix_timestamp_ms() const {
     return (uint64_t)(_unix_timestamp * 1000);
 }
 
+influx::time::timeval influx::time::time_manager::get_timeval() const {
+    return timeval{.seconds = unix_timestamp(), .useconds = unix_timestamp_ms() * 1000};
+}
+
 uint64_t influx::time::time_manager::timer_frequency() const {
     return _timer_driver->timer_frequency();
 }

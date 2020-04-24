@@ -1,4 +1,5 @@
 #pragma once
+#include <kernel/time/timeval.h>
 #include <kernel/vfs/file_info.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -15,6 +16,8 @@ int64_t lseek(size_t fd, int64_t offset, uint8_t whence);
 int64_t read(size_t fd, void *buf, size_t count);
 int64_t unlink(const char *file_path);
 int64_t write(size_t fd, const void *buf, size_t count);
+int64_t gettimeofday(time::timeval *tv, void *tz);
+int64_t gethostname(char *name, uint64_t len);
 };  // namespace handlers
 };  // namespace syscalls
 };  // namespace influx

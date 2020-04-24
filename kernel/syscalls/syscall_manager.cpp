@@ -93,6 +93,12 @@ int64_t influx::syscalls::syscall_manager::handle_syscall(influx::syscalls::sysc
             // TODO: Implement
             return -EINVAL;
 
+        case syscall::gettimeofday:
+            return handlers::gettimeofday((time::timeval *)arg1, (void *)arg2);
+
+        case syscall::gethostname:
+            return handlers::gethostname((char *)arg1, arg2);
+
         default:
             return -EINVAL;
     }
