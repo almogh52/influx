@@ -1,23 +1,26 @@
 #include <kernel/logger.h>
 
-#include <kernel/console/console.h>
 #include <kernel/format.h>
 #include <kernel/kernel.h>
+#include <kernel/tty/tty_manager.h>
 
 influx::logger::logger(influx::structures::string module_name, console_color log_color)
     : _module_name(module_name), _log_color(log_color) {}
 
 void influx::logger::vlog(const char *fmt, va_list args) const {
     structures::string time = format_time();
+    structures::string formatted_str =
+        vformat(format("[%S] [\033[%d%S\033[0] %s", &time, _log_color, &_module_name, fmt), args);
 
-    console::vprint(format("[%S] [\033[%d%S\033[0] %s", &time, _log_color, &_module_name, fmt),
-                    args);
+    kernel::tty_manager()->get_tty(KERNEL_TTY).stdout_write(formatted_str);
 }
 
 void influx::logger::log(influx::structures::string str) const {
     structures::string time = format_time();
+    structures::string formatted_str =
+        format("[%S] [\033[%d%S\033[0] %S\n", &time, _log_color, &_module_name, &str);
 
-    console::print("[%S] [\033[%d%S\033[0] %S\n", &time, _log_color, &_module_name, &str);
+    kernel::tty_manager()->get_tty(KERNEL_TTY).stdout_write(formatted_str);
 }
 
 void influx::logger::log(const char *fmt, ...) const {

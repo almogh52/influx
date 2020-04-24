@@ -24,6 +24,10 @@ void influx::kernel::early_kmain(const boot_info info) {
     // Init global constructors
     _init();
 
+    // Init tty manager
+    _tty_manager = new tty::tty_manager();
+    _tty_manager->init();
+
     // Init early console
     console::set_console(new early_console());
 }
@@ -57,6 +61,11 @@ void influx::kernel::kmain(const boot_info info) {
     log("Loading scheduler..\n");
     _scheduler = new threading::scheduler(info.tss_address);
     log("Scheduler loaded.\n");
+
+    // Init syscall manager
+    log("Loading syscall manager..\n");
+    _syscall_manager = new syscalls::syscall_manager();
+    log("Syscall manager loaded.\n");
 
     // Init VFS
     drivers::ata::ata *ata = (drivers::ata::ata *)_driver_manager->get_driver("ATA");

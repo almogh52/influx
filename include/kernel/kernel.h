@@ -4,6 +4,7 @@
 #include <kernel/syscalls/syscall_manager.h>
 #include <kernel/threading/scheduler.h>
 #include <kernel/time/time_manager.h>
+#include <kernel/tty/tty_manager.h>
 #include <kernel/vfs/vfs.h>
 #include <sys/boot_info.h>
 
@@ -21,6 +22,7 @@ class kernel {
     inline static threading::scheduler *scheduler() { return _scheduler; }
     inline static syscalls::syscall_manager *syscall_manager() { return _syscall_manager; }
     inline static vfs::vfs *vfs() { return _vfs; }
+    inline static tty::tty_manager *tty_manager() { return _tty_manager; }
 
    private:
     inline static interrupts::interrupt_manager *_interrupt_manager = nullptr;
@@ -29,6 +31,7 @@ class kernel {
     inline static threading::scheduler *_scheduler = nullptr;
     inline static syscalls::syscall_manager *_syscall_manager = nullptr;
     inline static vfs::vfs *_vfs = nullptr;
+    inline static tty::tty_manager *_tty_manager = nullptr;
 
     static void early_kmain(const boot_info info);
     static void kmain(const boot_info info);

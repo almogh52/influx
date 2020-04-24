@@ -22,15 +22,8 @@ class gfx_console : public console {
 
     virtual bool load();
 
-    virtual void stdout_putchar(char c);
-    virtual void stdout_write(structures::string &str);
-    virtual void stdout_clear();
-
-    inline virtual void stderr_putchar(char c) { stdout_putchar(c); }
-    inline virtual void stderr_write(structures::string &str) { stdout_write(str); }
-    inline virtual void stderr_clear() { stderr_clear(); }
-
-    inline virtual bool save_history() const { return false; }
+    virtual void print(const structures::string &str);
+    virtual void clear();
 
    private:
     logger _log;
@@ -46,6 +39,8 @@ class gfx_console : public console {
 
     void scroll();
     void new_line();
+
+    void putchar(char c);
 
     void set_foreground_color(console_color color) const;
 };

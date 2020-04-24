@@ -70,7 +70,7 @@ bool influx::gfx_console::load() {
     return true;
 }
 
-void influx::gfx_console::stdout_putchar(char c) {
+void influx::gfx_console::putchar(char c) {
     threading::unique_lock lk(_mutex, threading::defer_lock);
 
     // If the scheduler has started, lock the mutex
@@ -93,7 +93,7 @@ void influx::gfx_console::stdout_putchar(char c) {
     }
 }
 
-void influx::gfx_console::stdout_write(influx::structures::string &str) {
+void influx::gfx_console::print(const influx::structures::string &str) {
     console_color color;
     size_t str_len = str.length();
 
@@ -110,12 +110,12 @@ void influx::gfx_console::stdout_write(influx::structures::string &str) {
             // Skip those characters
             i += 2;
         } else {
-            stdout_putchar(str[i]);
+            putchar(str[i]);
         }
     }
 }
 
-void influx::gfx_console::stdout_clear() {
+void influx::gfx_console::clear() {
     // Clear the video memory
     memory::utils::memset(_framebuffer, 0,
                           _framebuffer_height * _framebuffer_width * (_framebuffer_bpp / 8));
