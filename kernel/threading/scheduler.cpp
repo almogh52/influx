@@ -817,6 +817,7 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
     }
 
     // Create main task for the process
+    int_lk.lock();
     task = new tcb(thread{.tid = _processes[pid].threads.insert_unique(),
                           .pid = pid,
                           .context = context,
@@ -827,6 +828,7 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
                           .quantum = 0,
                           .sleep_quantum = 0,
                           .child_wait_pid = 0});
+    int_lk.unlock();
 
     // Set the RIP to return to when the thread is selected
     *(uint64_t *)((uint8_t *)kernel_stack + DEFAULT_KERNEL_STACK_SIZE - sizeof(uint64_t)) =
@@ -840,6 +842,10 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
 
     // Queue the task
     queue_task(task);
+
+    // Reschedule to another task to prevent a deadlock issue
+    // TODO: Find the deadlock and fix it
+    reschedule();
 
     return pid;
 }
