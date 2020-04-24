@@ -786,6 +786,7 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
     process_fork.pml4t = pml4t;
     process_fork.threads = structures::unique_vector();
     process_fork.child_processes = structures::vector<uint64_t>();
+    process_fork.ppid = process_fork.pid;
 
     // Create the fork process
     int_lk.lock();
@@ -794,7 +795,7 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
     _processes[pid] = process_fork;
 
     // Add the process as a child process for the parent process
-    _processes[process_fork.ppid].child_processes += pid;
+    _processes[_current_task->value().pid].child_processes += pid;
     int_lk.unlock();
 
     // Allocate kernel stack for main process task
