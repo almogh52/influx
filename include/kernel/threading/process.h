@@ -34,6 +34,7 @@ struct process {
 
     structures::vector<segment> segments;
 
+    uint64_t tty;
     uint8_t exit_code;
 
     bool terminated;

@@ -6,11 +6,6 @@
 int64_t influx::syscalls::handlers::write(size_t fd, const void *buf, size_t count) {
     int64_t write;
 
-    // Verify valid file descriptor
-    if (fd < 3) {
-        return -EBADF;
-    }
-
     // Check valid buffer
     if (!utils::is_buffer_in_user_memory(buf, count, PROT_READ)) {
         return -EFAULT;

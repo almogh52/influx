@@ -210,6 +210,7 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
                               .name = "kernel",
                               .segments = structures::vector<segment>(),
+                              .tty = KERNEL_TTY,
                               .exit_code = 0,
                               .terminated = false,
                               .new_exec_process = false});
@@ -277,6 +278,7 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
                               .name = "init",
                               .segments = structures::vector<segment>(),
+                              .tty = INIT_PROCESS_TTY,
                               .exit_code = 0,
                               .terminated = false,
                               .new_exec_process = false});
@@ -1061,6 +1063,7 @@ uint64_t influx::threading::scheduler::start_process(influx::threading::executab
                     .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
                     .name = exec.name,
                     .segments = structures::vector<segment>(),
+                    .tty = _processes[_current_task->value().pid].tty,
                     .exit_code = 0,
                     .terminated = false,
                     .new_exec_process = false};
@@ -1077,6 +1080,20 @@ uint64_t influx::threading::scheduler::start_process(influx::threading::executab
         _processes[pid].name = exec.name;
         _processes[pid].terminated = false;
     }
+
+    // Create file descriptors for stdin, stdout and stderr
+    _processes[pid].file_descriptors.insert_unique(
+        vfs::open_file{.vnode_index = kernel::tty_manager()->get_tty_vnode(_processes[pid].tty),
+                       .position = 0,
+                       .flags = vfs::open_flags::read});
+    _processes[pid].file_descriptors.insert_unique(
+        vfs::open_file{.vnode_index = kernel::tty_manager()->get_tty_vnode(_processes[pid].tty),
+                       .position = 0,
+                       .flags = vfs::open_flags::write});
+    _processes[pid].file_descriptors.insert_unique(
+        vfs::open_file{.vnode_index = kernel::tty_manager()->get_tty_vnode(_processes[pid].tty),
+                       .position = 0,
+                       .flags = vfs::open_flags::write});
     int_lk.unlock();
 
     // Allocate kernel stack for main process task

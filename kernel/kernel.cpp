@@ -68,12 +68,15 @@ void influx::kernel::kmain(const boot_info info) {
     log("Syscall manager loaded.\n");
 
     // Init VFS
+    log("Loading VFS and mounting default drive..\n");
     drivers::ata::ata *ata = (drivers::ata::ata *)_driver_manager->get_driver("ATA");
     _vfs = new vfs::vfs();
+    _tty_manager->create_tty_vnodes();
     if (!_vfs->mount(vfs::fs_type::ext2, vfs::path("/"),
                      drivers::ata::drive_slice(ata, ata->drives()[0], 0))) {
         kpanic("Unable to mount main drive!\n");
     }
+    log("VFS loaded and default drive mounted on '/'.\n");
 
     // Kill this task since it's no necessary
     log("Kernel initialization complete.\n");

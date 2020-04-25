@@ -1,6 +1,8 @@
 #include <kernel/tty/tty_manager.h>
 
+#include <kernel/kernel.h>
 #include <kernel/threading/lock_guard.h>
+#include <kernel/tty/tty_filesystem.h>
 
 influx::tty::tty_manager::tty_manager() : _active_tty(0) {}
 
@@ -12,6 +14,32 @@ void influx::tty::tty_manager::init() {
 
     // Activate tty1
     _ttys[0].activate();
+}
+
+void influx::tty::tty_manager::reload() {
+    // Reload active TTY
+    active_tty().deactivate();
+    active_tty().activate();
+}
+
+void influx::tty::tty_manager::create_tty_vnodes() {
+    threading::lock_guard lk(kernel::vfs()->_vnodes_mutex);
+
+    vfs::filesystem *fs = new tty_filesystem();
+
+    void *fs_file_info = nullptr;
+    vfs::file_info file;
+
+    structures::pair<uint64_t, structures::reference_wrapper<vfs::vnode>> vnode(
+        0, kernel::vfs()->_vnodes.empty_item());
+
+    // Create vnode for each TTY
+    for (uint64_t tty = 1; tty <= AMOUNT_OF_TTYS; tty++) {
+        fs_file_info = new uint64_t(tty);
+        fs->get_file_info(fs_file_info, file);
+        kernel::vfs()->create_vnode_for_file(fs, fs_file_info, file, vnode);
+        _ttys_vnodes.push_back(vnode.first);
+    }
 }
 
 influx::tty::tty &influx::tty::tty_manager::active_tty() {
@@ -36,9 +64,4 @@ void influx::tty::tty_manager::set_active_tty(uint64_t tty) {
 }
 
 influx::tty::tty &influx::tty::tty_manager::get_tty(uint64_t tty) { return _ttys[tty - 1]; }
-
-void influx::tty::tty_manager::reload() {
-    // Reload active TTY
-    active_tty().deactivate();
-    active_tty().activate();
-}
+uint64_t influx::tty::tty_manager::get_tty_vnode(uint64_t tty) { return _ttys_vnodes[tty - 1]; }

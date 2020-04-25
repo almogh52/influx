@@ -7,6 +7,7 @@
 #include <kernel/threading/thread.h>
 
 #define INIT_PROCESS_PID 1
+#define INIT_PROCESS_TTY 2
 
 namespace influx {
 namespace threading {

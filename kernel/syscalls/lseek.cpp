@@ -32,11 +32,6 @@ int64_t influx::syscalls::handlers::lseek(size_t fd, int64_t offset, uint8_t whe
         return -EINVAL;
     }
 
-    // Verify valid file descriptor
-    if (fd < 3) {
-        return -EBADF;
-    }
-
     // Change the file position
     pos = kernel::vfs()->seek(fd, offset, seek);
 

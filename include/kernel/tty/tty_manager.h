@@ -14,18 +14,21 @@ class tty_manager {
     tty_manager();
 
     void init();
+    void reload();
+    void create_tty_vnodes();
 
     tty& active_tty();
     void set_active_tty(uint64_t tty);
     tty& get_tty(uint64_t tty);
 
-    void reload();
+    uint64_t get_tty_vnode(uint64_t tty);
 
    private:
     uint64_t _active_tty;
     threading::mutex _active_tty_mutex;
 
     structures::vector<tty> _ttys;
+    structures::vector<uint64_t> _ttys_vnodes;
 };
 };  // namespace tty
 };  // namespace influx

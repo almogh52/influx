@@ -7,6 +7,7 @@
 #include <kernel/structures/vector.h>
 #include <kernel/threading/mutex.h>
 #include <kernel/threading/scheduler.h>
+#include <kernel/tty/tty_manager.h>
 #include <kernel/vfs/error.h>
 #include <kernel/vfs/fs_mount.h>
 #include <kernel/vfs/fs_type.h>
@@ -67,6 +68,7 @@ class vfs {
 
     void close_open_file(const open_file& file);
 
+    friend class influx::tty::tty_manager;
     friend class influx::threading::scheduler;
 };
 };  // namespace vfs
