@@ -180,7 +180,7 @@ void influx::tty::tty::input_thread() {
                 }
 
                 // If the key isn't invalid, print it
-                if (key && key != '\b') {
+                if (key) {
                     structures::string str(&key, 1);
                     stdout_write(str);
                 }

@@ -84,6 +84,24 @@ void influx::gfx_console::putchar(char c) {
         return;
     }
 
+    // If the character is for deleting a character
+    if (c == '\b') {
+        // If not in the start of the line
+        if (ssfn_x > 0) {
+            ssfn_x -= GLYPH_WIDTH;
+
+            // Clear the glyph
+            for (uint64_t x = ssfn_x; x < ssfn_x + GLYPH_WIDTH; x++) {
+                for (uint64_t y = ssfn_y; y < ssfn_y + GLYPH_HEIGHT; y++) {
+                    for (uint64_t i = 0; i < ssfn_dst_pitch / ssfn_dst_w; i++) {
+                        *(ssfn_dst_ptr + y * ssfn_dst_pitch + x * (ssfn_dst_pitch / ssfn_dst_w) +
+                          i) = 0;
+                    }
+                }
+            }
+        }
+    }
+
     // Print the character
     ssfn_putc(c);
 
