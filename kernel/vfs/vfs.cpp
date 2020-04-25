@@ -488,7 +488,8 @@ influx::vfs::error influx::vfs::vfs::get_vnode_for_file(
     // For each vnode pair, check if it
     for (auto& vnode_pair : _vnodes) {
         // If the vnode fs file data matches return it's index
-        if (fs->compare_fs_file_data(fs_file_data, vnode_pair.second.fs_data)) {
+        if (vnode_pair.second.fs == fs &&
+            fs->compare_fs_file_data(fs_file_data, vnode_pair.second.fs_data)) {
             vn = structures::pair<uint64_t, structures::reference_wrapper<vnode>>(
                 vnode_pair.first, _vnodes[vnode_pair.first]);
             return error::success;
