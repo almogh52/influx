@@ -24,6 +24,9 @@ class early_console : public console {
     virtual void print(const structures::string &str);
     virtual void clear();
 
+    inline virtual uint64_t text_columns() const { return AMOUNT_OF_COLUMNS; }
+    inline virtual uint64_t text_rows() const { return AMOUNT_OF_LINES; }
+
     static vma_region get_vma_region();
 
    private:

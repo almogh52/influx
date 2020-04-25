@@ -15,6 +15,9 @@ class console {
     virtual void print(const structures::string &str) = 0;
     virtual void clear() = 0;
 
+    virtual uint64_t text_columns() const = 0;
+    virtual uint64_t text_rows() const = 0;
+
    private:
     inline static logger _log = logger("Console Manager", console_color::green);
     inline static threading::mutex _console_mutex;

@@ -86,6 +86,7 @@ class tty {
     threading::condition_variable _raw_input_cv;
 
     void input_thread();
+    void print_stdout_buffer();
 
     friend class tty_manager;
 };

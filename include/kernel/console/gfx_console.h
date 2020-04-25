@@ -25,6 +25,9 @@ class gfx_console : public console {
     virtual void print(const structures::string &str);
     virtual void clear();
 
+    inline virtual uint64_t text_columns() const { return _framebuffer_width / GLYPH_WIDTH; }
+    inline virtual uint64_t text_rows() const { return _framebuffer_height / GLYPH_HEIGHT; }
+
    private:
     logger _log;
 

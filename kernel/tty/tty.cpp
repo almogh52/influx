@@ -45,10 +45,8 @@ void influx::tty::tty::activate() {
         // Clear the current console
         console::get_console()->clear();
 
-        // Write the stdout history
-        for (const auto &str : _stdout_buffer) {
-            console::get_console()->print(str);
-        }
+        // Print stdout buffer
+        print_stdout_buffer();
     }
 
     // Unlock mutexes
@@ -214,5 +212,48 @@ void influx::tty::tty::input_thread() {
 
         // Wait for new input
         _raw_input_cv.wait(lk);
+    }
+}
+
+void influx::tty::tty::print_stdout_buffer() {
+    const auto count_char = [](structures::string &str, char c) {
+        uint64_t count = 0;
+
+        for (uint64_t i = 0; i < str.size(); i++) {
+            if (str[i] == c) {
+                count++;
+            }
+        }
+
+        return count;
+    };
+
+    const uint64_t max_characters =
+        console::get_console()->text_rows() * console::get_console()->text_columns();
+    const uint64_t max_rows = console::get_console()->text_rows();
+
+    uint64_t current_characters = 0, current_rows = 0, str_rows = 0;
+
+    structures::string buffer;
+
+    // Create the buffer from the last of the stdout buffer
+    if (!_stdout_buffer.empty()) {
+        for (auto str = _stdout_buffer.end() - 1; str >= _stdout_buffer.begin(); str--) {
+            // Calculate the string impact on the buffer
+            str_rows = count_char(*str, '\n');
+            current_characters += str->size() - str_rows;
+            current_rows += str_rows;
+
+            // Add the string to the buffer
+            buffer = *str + buffer;
+
+            // Check if reached the max of the console
+            if (current_characters >= max_characters || current_rows >= (max_rows - 1)) {
+                break;
+            }
+        }
+
+        // Write the stdout buffer
+        console::get_console()->print(buffer);
     }
 }
