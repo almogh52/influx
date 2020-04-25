@@ -4,6 +4,7 @@
 #include <kernel/console/console.h>
 #include <kernel/kernel.h>
 #include <kernel/memory/utils.h>
+#include <kernel/threading/interrupts_lock.h>
 #include <kernel/threading/lock_guard.h>
 #include <kernel/threading/unique_lock.h>
 
@@ -23,7 +24,12 @@ void influx::tty::tty::activate() {
         while (true) {
             if (_stdin_mutex.try_lock()) {
                 if (_stdout_mutex.try_lock()) {
-                    break;
+                    if (_raw_input_mutex.try_lock()) {
+                        break;
+                    } else {
+                        _stdout_mutex.unlock();
+                        _stdin_mutex.unlock();
+                    }
                 } else {
                     _stdin_mutex.unlock();
                 }
@@ -49,6 +55,7 @@ void influx::tty::tty::activate() {
     if (kernel::scheduler() != nullptr && kernel::scheduler()->started()) {
         _stdin_mutex.unlock();
         _stdout_mutex.unlock();
+        _raw_input_mutex.unlock();
     }
 }
 
@@ -57,7 +64,12 @@ void influx::tty::tty::deactivate() {
     while (true) {
         if (_stdin_mutex.try_lock()) {
             if (_stdout_mutex.try_lock()) {
-                break;
+                if (_raw_input_mutex.try_lock()) {
+                    break;
+                } else {
+                    _stdout_mutex.unlock();
+                    _stdin_mutex.unlock();
+                }
             } else {
                 _stdin_mutex.unlock();
             }
@@ -70,6 +82,7 @@ void influx::tty::tty::deactivate() {
     // Unlock mutexes
     _stdin_mutex.unlock();
     _stdout_mutex.unlock();
+    _raw_input_mutex.unlock();
 }
 
 uint64_t influx::tty::tty::stdin_read(char *buf, size_t count) {
@@ -99,8 +112,8 @@ uint64_t influx::tty::tty::stdin_read(char *buf, size_t count) {
         memory::utils::memcpy(buf, _stdin_buffer.begin(), amount);
 
         // Resize the vector
-        _stdin_buffer = structures::vector<char>(
-            _stdin_buffer.begin() + amount, _stdin_buffer.end());
+        _stdin_buffer =
+            structures::vector<char>(_stdin_buffer.begin() + amount, _stdin_buffer.end());
 
         // If there is more in the buffer, notify another
         if (!_stdin_buffer.empty()) {
@@ -160,11 +173,13 @@ void influx::tty::tty::input_thread() {
                 right_shift = !key_evt.released;
             } else if (key_evt.code == key_code::LEFT_SHIFT) {
                 left_shift = !key_evt.released;
-            } else if (key_evt.released && ctrl && alt && key_evt.code >= key_code::F1 && key_evt.code <= key_code::F12) {
+            } else if (key_evt.released && ctrl && alt && key_evt.code >= key_code::F1 &&
+                       key_evt.code <= key_code::F12) {
                 // Change active TTY
-                kernel::tty_manager()->set_active_tty((uint64_t)key_evt.code - (uint64_t)key_code::F1 + 1);
-            }
-            else if (!key_evt.released) {  // Key pressed
+                lk.unlock();
+                kernel::tty_manager()->set_active_tty((uint64_t)key_evt.code -
+                                                      (uint64_t)key_code::F1 + 1);
+            } else if (!key_evt.released) {  // Key pressed
                 key = (right_shift || left_shift) ? shifted_qwertz[key_evt.raw_key]
                                                   : qwertz[key_evt.raw_key];
 
