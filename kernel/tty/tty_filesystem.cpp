@@ -64,7 +64,7 @@ influx::vfs::error influx::tty::tty_filesystem::get_file_info(void *fs_file_info
     }
 
     file.type = vfs::file_type::character_device;
-    file.size = 0;
+    file.size = UINT64_MAX;
     file.blocks = 0;
     file.permissions.read = true;
     file.permissions.write = true;

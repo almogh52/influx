@@ -29,4 +29,7 @@ influx::key_event influx::drivers::ps2_keyboard::key_to_key_event(uint8_t key) {
 void influx::drivers::ps2_keyboard_irq(influx::interrupts::regs *context,
                                        influx::drivers::ps2_keyboard *key_drv) {
     uint8_t key = ports::in<uint8_t>(PS2_DATA_PORT);
+
+    // Handle input in TTY
+    kernel::tty_manager()->handle_input(key_drv->key_to_key_event(key));
 }

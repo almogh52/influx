@@ -2,9 +2,11 @@
 
 #include <kernel/kernel.h>
 #include <kernel/threading/lock_guard.h>
+#include <kernel/threading/unique_lock.h>
 #include <kernel/tty/tty_filesystem.h>
+#include <kernel/utils.h>
 
-influx::tty::tty_manager::tty_manager() : _active_tty(0) {}
+influx::tty::tty_manager::tty_manager() : _active_tty(KERNEL_TTY - 1) {}
 
 void influx::tty::tty_manager::init() {
     // Create ttys
@@ -13,13 +15,21 @@ void influx::tty::tty_manager::init() {
     }
 
     // Activate tty1
-    _ttys[0].activate();
+    _ttys[KERNEL_TTY - 1].activate();
 }
 
 void influx::tty::tty_manager::reload() {
     // Reload active TTY
     active_tty().deactivate();
     active_tty().activate();
+}
+
+void influx::tty::tty_manager::start_input_threads() {
+    // Start the kernel thread for the input of each tty
+    for (auto &tty_obj : _ttys) {
+        kernel::scheduler()->create_kernel_thread(
+            utils::method_function_wrapper<tty, &tty::input_thread>, &tty_obj);
+    }
 }
 
 void influx::tty::tty_manager::create_tty_vnodes() {
@@ -51,7 +61,7 @@ void influx::tty::tty_manager::set_active_tty(uint64_t tty) {
     threading::lock_guard lk(_active_tty_mutex);
 
     // Check valid TTY
-    if (tty > AMOUNT_OF_TTYS || tty < 1) {
+    if (tty == _active_tty + 1 || tty > AMOUNT_OF_TTYS || tty < 1) {
         return;
     }
 
@@ -65,3 +75,15 @@ void influx::tty::tty_manager::set_active_tty(uint64_t tty) {
 
 influx::tty::tty &influx::tty::tty_manager::get_tty(uint64_t tty) { return _ttys[tty - 1]; }
 uint64_t influx::tty::tty_manager::get_tty_vnode(uint64_t tty) { return _ttys_vnodes[tty - 1]; }
+
+void influx::tty::tty_manager::handle_input(influx::key_event key_evt) {
+    tty &active = active_tty();
+
+    threading::lock_guard lk(active._raw_input_mutex);
+
+    // Push the key event to the input buffer
+    active._raw_input_buffer.push_back(key_evt);
+
+    // Notify the input thread
+    active._raw_input_cv.notify_one();
+}
