@@ -15,6 +15,7 @@ void influx::tty::tty_manager::init() {
     }
 
     // Activate tty1
+    _ttys[KERNEL_TTY - 1].set_stdin_state(false);
     _ttys[KERNEL_TTY - 1].activate();
 }
 

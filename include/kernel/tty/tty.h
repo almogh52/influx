@@ -3,13 +3,14 @@
 #include <kernel/structures/string.h>
 #include <kernel/structures/vector.h>
 #include <kernel/threading/condition_variable.h>
+#include <kernel/threading/lock_guard.h>
 #include <kernel/threading/mutex.h>
 
 namespace influx {
 namespace tty {
 class tty_manager;
 
-constexpr char qwertz[128] = {
+constexpr char qwerty[128] = {
     0,    27,  '1', '2', '3',  '4', '5', '6', '7',  '8',                /* 9 */
     '9',  '0', '-', '=', '\b',                                          /* Backspace */
     '\t',                                                               /* Tab */
@@ -33,7 +34,7 @@ constexpr char qwertz[128] = {
     0, /* All other keys are undefined */
 };
 
-constexpr char shifted_qwertz[128] = {
+constexpr char shifted_qwerty[128] = {
     0,    27,  '!', '@', '#',  '$', '%', '^', '&',  '*',              /* 9 */
     '(',  ')', '_', '+', '\b',                                        /* Backspace */
     '\t',                                                             /* Tab */
@@ -70,9 +71,24 @@ class tty {
     void stdout_write(structures::string& str);
     inline void stderr_write(structures::string& str) { stdout_write(str); }
 
+    inline void set_canonical_state(bool canonical) {
+        threading::lock_guard lk(_raw_input_mutex);
+        _canonical = canonical;
+    }
+    inline void set_stdin_state(bool enabled) {
+        threading::lock_guard lk(_raw_input_mutex);
+        _stdin_enabled = enabled;
+    }
+    inline void set_print_stdin_state(bool print) {
+        threading::lock_guard lk(_raw_input_mutex);
+        _print_stdin = print;
+    }
+
    private:
     bool _active;
     bool _canonical;
+    bool _stdin_enabled;
+    bool _print_stdin;
 
     threading::condition_variable _stdin_cv;
     threading::mutex _stdin_mutex;

@@ -5,13 +5,15 @@
 #include <kernel/kernel.h>
 #include <kernel/memory/utils.h>
 #include <kernel/threading/interrupts_lock.h>
-#include <kernel/threading/lock_guard.h>
 #include <kernel/threading/unique_lock.h>
 
-influx::tty::tty::tty(bool active) : _active(active), _canonical(true) {}
+influx::tty::tty::tty(bool active)
+    : _active(active), _canonical(true), _stdin_enabled(true), _print_stdin(true) {}
 
 influx::tty::tty &influx::tty::tty::operator=(const influx::tty::tty &other) {
     _canonical = other._canonical;
+    _stdin_enabled = other._stdin_enabled;
+    _print_stdin = other._print_stdin;
     _stdin_buffer = other._stdin_buffer;
     _stdout_buffer = other._stdout_buffer;
 
@@ -177,9 +179,9 @@ void influx::tty::tty::input_thread() {
                 lk.unlock();
                 kernel::tty_manager()->set_active_tty((uint64_t)key_evt.code -
                                                       (uint64_t)key_code::F1 + 1);
-            } else if (!key_evt.released) {  // Key pressed
-                key = (right_shift || left_shift) ? shifted_qwertz[key_evt.raw_key]
-                                                  : qwertz[key_evt.raw_key];
+            } else if (!key_evt.released && _stdin_enabled) {  // Key pressed
+                key = (right_shift || left_shift) ? shifted_qwerty[key_evt.raw_key]
+                                                  : qwerty[key_evt.raw_key];
 
                 // Insert to stdin buffer
                 {
@@ -193,7 +195,7 @@ void influx::tty::tty::input_thread() {
                 }
 
                 // If the key isn't invalid, print it
-                if (key) {
+                if (key && _print_stdin) {
                     structures::string str(&key, 1);
                     stdout_write(str);
                 }
