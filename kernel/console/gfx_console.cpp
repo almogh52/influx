@@ -119,6 +119,10 @@ void influx::gfx_console::clear() {
     // Clear the video memory
     memory::utils::memset(_framebuffer, 0,
                           _framebuffer_height * _framebuffer_width * (_framebuffer_bpp / 8));
+
+    // Reset X and Y
+    ssfn_x = 0;
+    ssfn_y = 0;
 }
 
 void influx::gfx_console::scroll() {
