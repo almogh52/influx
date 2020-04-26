@@ -42,7 +42,7 @@ int64_t influx::syscalls::syscall_manager::handle_syscall(influx::syscalls::sysc
             return kernel::scheduler()->fork(*context);
 
         case syscall::fstat:
-            return handlers::fstat(arg1, (vfs::file_info *)arg2);
+            return handlers::fstat(arg1, (stat *)arg2);
 
         case syscall::getpid:
             return kernel::scheduler()->get_current_process_id();
@@ -73,7 +73,7 @@ int64_t influx::syscalls::syscall_manager::handle_syscall(influx::syscalls::sysc
             return tmp == 0 ? -ENOMEM : tmp;
 
         case syscall::stat:
-            return handlers::stat((const char *)arg1, (vfs::file_info *)arg2);
+            return handlers::stat((const char *)arg1, (stat *)arg2);
 
         case syscall::times:
             // TODO: Implement

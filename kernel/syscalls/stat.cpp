@@ -3,18 +3,25 @@
 #include <kernel/syscalls/handlers.h>
 #include <kernel/syscalls/utils.h>
 
-int64_t influx::syscalls::handlers::stat(const char *file_path, influx::vfs::file_info *file_info) {
+influx::syscalls::stat convert_file_info_to_stat(influx::vfs::file_info &info);
+
+int64_t influx::syscalls::handlers::stat(const char *file_path, influx::syscalls::stat *stat) {
+    vfs::file_info info;
     vfs::error err;
 
     // Check valid file path and file info
     if (!utils::is_string_in_user_memory(file_path) ||
-        !utils::is_buffer_in_user_memory(file_info, sizeof(vfs::file_info),
-                                         PROT_READ | PROT_WRITE)) {
+        !utils::is_buffer_in_user_memory(stat, sizeof(stat), PROT_READ | PROT_WRITE)) {
         return -EFAULT;
     }
 
     // Try to get the stat of the file
-    err = (vfs::error)kernel::vfs()->stat(file_path, *file_info);
+    err = (vfs::error)kernel::vfs()->stat(file_path, info);
+
+    // Convert file info to stat struct
+    if (err == vfs::error::success) {
+        *stat = convert_file_info_to_stat(info);
+    }
 
     return utils::convert_vfs_error(err);
 }

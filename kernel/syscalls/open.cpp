@@ -1,6 +1,7 @@
 #include <kernel/kernel.h>
 #include <kernel/syscalls/error.h>
 #include <kernel/syscalls/handlers.h>
+#include <kernel/syscalls/stat.h>
 #include <kernel/syscalls/utils.h>
 
 #define O_RDONLY 0x0000 /* open for reading only */
@@ -9,27 +10,6 @@
 #define O_APPEND 0x0008 /* set append mode */
 #define O_CREAT 0x0200  /* create if nonexistant */
 #define O_DIRECTORY 0x100000
-
-/* File mode */
-/* Read, write, execute/search by owner */
-#define S_IRWXU 0000700 /* [XSI] RWX mask for owner */
-#define S_IRUSR 0000400 /* [XSI] R for owner */
-#define S_IWUSR 0000200 /* [XSI] W for owner */
-#define S_IXUSR 0000100 /* [XSI] X for owner */
-/* Read, write, execute/search by group */
-#define S_IRWXG 0000070 /* [XSI] RWX mask for group */
-#define S_IRGRP 0000040 /* [XSI] R for group */
-#define S_IWGRP 0000020 /* [XSI] W for group */
-#define S_IXGRP 0000010 /* [XSI] X for group */
-/* Read, write, execute/search by others */
-#define S_IRWXO 0000007 /* [XSI] RWX mask for other */
-#define S_IROTH 0000004 /* [XSI] R for other */
-#define S_IWOTH 0000002 /* [XSI] W for other */
-#define S_IXOTH 0000001 /* [XSI] X for other */
-
-#define S_ISUID 0004000 /* [XSI] set user id on execution */
-#define S_ISGID 0002000 /* [XSI] set group id on execution */
-#define S_ISVTX 0001000 /* [XSI] directory restrcted delete */
 
 influx::vfs::open_flags convert_flags(int flags) {
     influx::vfs::open_flags f = (influx::vfs::open_flags)0;
