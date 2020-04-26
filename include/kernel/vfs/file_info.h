@@ -5,6 +5,7 @@
 namespace influx {
 namespace vfs {
 struct file_info {
+    uint64_t inode;
     file_type type;
     uint64_t size;
     uint64_t blocks;  // 512 bytes blocks

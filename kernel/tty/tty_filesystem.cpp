@@ -63,6 +63,7 @@ influx::vfs::error influx::tty::tty_filesystem::get_file_info(void *fs_file_info
         return vfs::error::invalid_file;
     }
 
+    file.inode = *tty;
     file.type = vfs::file_type::character_device;
     file.size = UINT64_MAX;
     file.blocks = 0;

@@ -151,6 +151,7 @@ influx::vfs::error influx::fs::ext2::get_file_info(void *fs_file_info,
     }
 
     // Set the properties of the file
+    file.inode = *(uint32_t *)fs_file_info;
     file.type = file_type_for_inode(inode);
     file.size = inode->size;
     file.blocks = inode->disk_sectors_count;
