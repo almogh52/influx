@@ -45,6 +45,7 @@ influx::vfs::error influx::tty::tty_filesystem::write(void *fs_file_info, const 
 
     // Write to the tty
     kernel::tty_manager()->get_tty(*tty).stdout_write(str);
+    amount_written = count;
 
     // Update last access time
     threading::lock_guard lk(_tty_access_times_mutex);
