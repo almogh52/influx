@@ -4,6 +4,8 @@
 #include <kernel/structures/unique_hash_map.h>
 #include <kernel/structures/unique_vector.h>
 #include <kernel/structures/vector.h>
+#include <kernel/threading/signal.h>
+#include <kernel/threading/signal_action.h>
 #include <kernel/vfs/open_file.h>
 #include <memory/paging.h>
 #include <stdint.h>
@@ -33,6 +35,9 @@ struct process {
     structures::string name;
 
     structures::vector<segment> segments;
+
+    structures::vector<signal_action> signal_dispositions;
+    structures::vector<signal_info> pending_std_signals;
 
     uint64_t tty;
     uint8_t exit_code;

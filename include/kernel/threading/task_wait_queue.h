@@ -14,6 +14,8 @@ class task_wait_queue {
     tcb *dequeue();
     structures::vector<tcb *> dequeue_all();
 
+    void remove_task(tcb *task);
+
     bool empty();
 
    private:

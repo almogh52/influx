@@ -210,6 +210,8 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
                               .name = "kernel",
                               .segments = structures::vector<segment>(),
+                              .signal_dispositions = create_default_signal_dispositions(),
+                              .pending_std_signals = structures::vector<signal_info>(),
                               .tty = KERNEL_TTY,
                               .exit_code = 0,
                               .terminated = false,
@@ -227,7 +229,14 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                        .state = thread_state::running,
                        .quantum = 0,
                        .sleep_quantum = 0,
-                       .child_wait_pid = 0});
+                       .child_wait_pid = 0,
+                       .signal_interruptible = false,
+                       .signal_interrupted = false,
+                       .sig_queue = structures::vector<signal_info>(),
+                       .current_sig = SIGINVL,
+                       .sig_mask = 0,
+                       .old_interrupt_regs = {},
+                       .old_sig_mask = 0});
     _priority_queues[MAX_PRIORITY_LEVEL].next_task = nullptr;
     _priority_queues[MAX_PRIORITY_LEVEL].start->prev() = _priority_queues[MAX_PRIORITY_LEVEL].start;
     _priority_queues[MAX_PRIORITY_LEVEL].start->next() = _priority_queues[MAX_PRIORITY_LEVEL].start;
@@ -244,7 +253,14 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                                 .state = thread_state::ready,
                                 .quantum = 0,
                                 .sleep_quantum = 0,
-                                .child_wait_pid = 0});
+                                .child_wait_pid = 0,
+                                .signal_interruptible = false,
+                                .signal_interrupted = false,
+                                .sig_queue = structures::vector<signal_info>(),
+                                .current_sig = SIGINVL,
+                                .sig_mask = 0,
+                                .old_interrupt_regs = {},
+                                .old_sig_mask = 0});
     _idle_task->value().context =
         (regs *)((uint8_t *)_idle_task->value().kernel_stack + DEFAULT_KERNEL_STACK_SIZE -
                  sizeof(regs) - sizeof(uint64_t));  // Set context pointer
@@ -278,6 +294,8 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
                               .name = "init",
                               .segments = structures::vector<segment>(),
+                              .signal_dispositions = create_default_signal_dispositions(),
+                              .pending_std_signals = structures::vector<signal_info>(),
                               .tty = INIT_PROCESS_TTY,
                               .exit_code = 0,
                               .terminated = false,
@@ -319,7 +337,14 @@ influx::threading::tcb *influx::threading::scheduler::create_kernel_thread(void 
                                    .state = blocked ? thread_state::blocked : thread_state::ready,
                                    .quantum = 0,
                                    .sleep_quantum = 0,
-                                   .child_wait_pid = 0});
+                                   .child_wait_pid = 0,
+                                   .signal_interruptible = false,
+                                   .signal_interrupted = false,
+                                   .sig_queue = structures::vector<signal_info>(),
+                                   .current_sig = SIGINVL,
+                                   .sig_mask = 0,
+                                   .old_interrupt_regs = {},
+                                   .old_sig_mask = 0});
     int_lk.unlock();
 
     _log("Creating kernel thread with function %p and data %p..\n", func, data);
@@ -789,6 +814,7 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
     process_fork.threads = structures::unique_vector();
     process_fork.child_processes = structures::vector<uint64_t>();
     process_fork.ppid = process_fork.pid;
+    process_fork.pending_std_signals = structures::vector<signal_info>();
 
     // Create the fork process
     int_lk.lock();
@@ -830,7 +856,14 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
                           .state = thread_state::ready,
                           .quantum = 0,
                           .sleep_quantum = 0,
-                          .child_wait_pid = 0});
+                          .child_wait_pid = 0,
+                          .signal_interruptible = false,
+                          .signal_interrupted = false,
+                          .sig_queue = structures::vector<signal_info>(),
+                          .current_sig = SIGINVL,
+                          .sig_mask = _current_task->value().sig_mask,
+                          .old_interrupt_regs = {},
+                          .old_sig_mask = 0});
     int_lk.unlock();
 
     // Set the RIP to return to when the thread is selected
@@ -902,6 +935,77 @@ uint64_t influx::threading::scheduler::sbrk(int64_t inc) {
     task_process.program_break_end += inc;
 
     return task_process.program_break_end - inc;
+}
+
+void influx::threading::scheduler::set_signal_action(uint64_t sig,
+                                                     influx::threading::signal_action action) {
+    interrupts_lock int_lk;
+
+    // Can't catch SIGKILL and SIGSTOP
+    if (sig == SIGKILL || sig == SIGSTOP || sig < 1 || sig >= SIGSTD_N) {
+        return;
+    }
+
+    // Verify that there is a restorer in case of a handler
+    if (action.handler.raw > 1 && action.restorer == nullptr) {
+        return;
+    }
+
+    // Set signal disposition
+    _processes[_current_task->value().pid].signal_dispositions[sig] = action;
+}
+
+bool influx::threading::scheduler::send_signal(int64_t pid, int64_t tid,
+                                               influx::threading::signal_info sig_info) {
+    interrupts_lock int_lk(false);
+    structures::vector<uint64_t> prcoesses;
+
+    // Send to all process in process group
+    if (pid == 0) {
+        // TODO: Implement
+        return false;
+    }
+    // Send to all process in a specific process group
+    else if (pid < -1) {
+        // TODO: Implement
+        return false;
+    } else if (pid == INIT_PROCESS_PID) {
+        return false;
+    }
+
+    // Send signal to all processes
+    if (pid == -1) {
+        // Create a list of all processes
+        int_lk.lock();
+        for (auto &proc : _processes) {
+            // If the proccess isn't the kernel, the init process or the calling process
+            if (proc.first != KERNEL_PID && proc.first != INIT_PROCESS_PID &&
+                proc.first != _current_task->value().pid) {
+                prcoesses.push_back(proc.first);
+            }
+        }
+        int_lk.unlock();
+
+        // For each process, send the signal
+        for (const auto &pid : prcoesses) {
+            send_signal_to_process(pid, -1, sig_info);
+        }
+    } else {
+        // Check that process and the thread exists
+        int_lk.lock();
+        if (_processes.count(pid) == 0 ||
+            (tid != -1 &&
+             algorithm::find(_processes[pid].threads.begin(), _processes[pid].threads.end(),
+                             (uint64_t)tid) == _processes[pid].threads.end())) {
+            return false;
+        }
+        int_lk.unlock();
+
+        // Send the signal to the process
+        send_signal_to_process((uint64_t)pid, tid, sig_info);
+    }
+
+    return true;
 }
 
 influx::threading::tcb *influx::threading::scheduler::get_current_task() const {
@@ -1063,6 +1167,8 @@ uint64_t influx::threading::scheduler::start_process(influx::threading::executab
                     .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
                     .name = exec.name,
                     .segments = structures::vector<segment>(),
+                    .signal_dispositions = create_default_signal_dispositions(),
+                    .pending_std_signals = structures::vector<signal_info>(),
                     .tty = _processes[_current_task->value().pid].tty,
                     .exit_code = 0,
                     .terminated = false,
@@ -1079,6 +1185,8 @@ uint64_t influx::threading::scheduler::start_process(influx::threading::executab
         _processes[pid].child_processes = structures::vector<uint64_t>();
         _processes[pid].name = exec.name;
         _processes[pid].terminated = false;
+        _processes[pid].signal_dispositions = create_default_signal_dispositions();
+        _processes[pid].pending_std_signals = structures::vector<signal_info>();
     }
 
     // Create file descriptors for stdin, stdout and stderr
@@ -1125,7 +1233,14 @@ uint64_t influx::threading::scheduler::start_process(influx::threading::executab
                           .state = thread_state::ready,
                           .quantum = 0,
                           .sleep_quantum = 0,
-                          .child_wait_pid = 0});
+                          .child_wait_pid = 0,
+                          .signal_interruptible = false,
+                          .signal_interrupted = false,
+                          .sig_queue = structures::vector<signal_info>(),
+                          .current_sig = SIGINVL,
+                          .sig_mask = _current_task->value().sig_mask,
+                          .old_interrupt_regs = {},
+                          .old_sig_mask = 0});
 
     // Set the RIP to return to when the thread is selected
     *(uint64_t *)((uint8_t *)kernel_stack + DEFAULT_KERNEL_STACK_SIZE - sizeof(uint64_t)) =
@@ -1398,4 +1513,206 @@ influx::structures::pair<const char **, const char **> influx::threading::schedu
     offset += (env_ptrs.size() + 1) * sizeof(const char *);  // Increase offset
 
     return ptrs;
+}
+
+influx::structures::vector<influx::threading::signal_action>
+influx::threading::scheduler::create_default_signal_dispositions() const {
+    structures::vector<signal_action> signal_dispositions;
+
+    // Create default dispositions for each signal
+    for (uint64_t i = 0; i < SIGSTD_N; i++) {
+        signal_dispositions.push_back(signal_action{
+            .handler = signal_handler{.raw = SIG_DFL}, .mask = 0, .flags = 0, .restorer = nullptr});
+    }
+
+    return signal_dispositions;
+}
+
+void influx::threading::scheduler::prepare_signal_handle(influx::threading::tcb *task,
+                                                         influx::threading::signal_info sig_info) {
+    kassert(task->value().current_sig != SIGINVL);
+
+    uint64_t user_stack_start = DEFAULT_USER_STACK_ADDRESS - task->value().args_size;
+
+    uint64_t *kernel_stack_ptr =
+        task == _current_task ? (uint64_t *)get_stack_pointer() : (uint64_t *)task->value().context;
+    interrupts::regs *regs = nullptr;
+
+    // Find the interrupt regs
+    while (*kernel_stack_ptr != 0x1B || *(kernel_stack_ptr + 3) != 0x23) {
+        kernel_stack_ptr++;
+    }
+
+    // Calc the interrupt regs pointer
+    regs =
+        (interrupts::regs *)(kernel_stack_ptr - (sizeof(interrupts::regs) / sizeof(uint64_t) - 4));
+
+    // Set the RIP to the handler function and save the old RIP
+    task->value().old_interrupt_regs = *regs;
+    regs->rip = _processes[task->value().pid].signal_dispositions[sig_info.sig].handler.raw;
+
+    // Copy the signal info structure to the stack
+    regs->rsp -= sizeof(signal_info);
+    memory::utils::memcpy(
+        (void *)((uint64_t)task->value().user_stack + (regs->rsp - user_stack_start)), &sig_info,
+        sizeof(signal_info));
+
+    // Set the parameters for the handler function
+    regs->rdi = sig_info.sig;
+    regs->rsi = regs->rsp;
+    regs->rdx = 0;  // TODO: Implement user context
+
+    // Set the restorer function in the user stack
+    regs->rsp -= sizeof(uint64_t);
+    *((uint64_t *)((uint64_t)task->value().user_stack + (regs->rsp - user_stack_start))) =
+        (uint64_t)_processes[task->value().pid].signal_dispositions[sig_info.sig].restorer;
+}
+
+void influx::threading::scheduler::send_signal_to_process(uint64_t pid, int64_t tid,
+                                                          influx::threading::signal_info sig_info) {
+    interrupts_lock int_lk;
+    kassert(_processes.count(pid) != 0);
+
+    process &process = _processes[pid];
+    priority_tcb_queue &process_priority_queue = _priority_queues[process.priority];
+
+    tcb *current_node = process_priority_queue.start;
+
+    // If the process is a zombie process, add the signal to it's pending signals
+    if (process.terminated == true) {
+        process.pending_std_signals += sig_info;
+        return;
+    }
+
+    // If there isn't a wanted thread
+    if (tid == -1) {
+        // Search for the main thread
+        do {
+            if (current_node->value().pid == pid && current_node->value().tid == 0) {
+                break;
+            }
+
+            // Move to the next node
+            current_node = current_node->next();
+        } while (current_node != process_priority_queue.start);
+
+        // If the main thread can't handle the signal
+        if (current_node->value().pid != pid || current_node->value().tid != 0 ||
+            (current_node->value().sig_mask & (1 << sig_info.sig)) ||
+            current_node->value().current_sig != SIGINVL) {
+            // Reset current node
+            current_node = process_priority_queue.start;
+
+            // Search for a thread that can handle the signal
+            do {
+                if (current_node->value().pid == pid &&
+                    !(current_node->value().sig_mask & (1 << sig_info.sig)) &&
+                    current_node->value().current_sig == SIGINVL) {
+                    break;
+                }
+
+                // Move to the next node
+                current_node = current_node->next();
+            } while (current_node != process_priority_queue.start);
+
+            // If the node can't handle the signal
+            if (current_node->value().pid != pid ||
+                (current_node->value().sig_mask & (1 << sig_info.sig)) ||
+                current_node->value().current_sig != SIGINVL) {
+                current_node = nullptr;
+            }
+        }
+
+        // If no thread can handle the signal, queue it
+        if (current_node == nullptr) {
+            process.pending_std_signals += sig_info;
+        } else {
+            send_signal_to_task(current_node, sig_info);
+        }
+    } else {
+        // Search for the thread
+        do {
+            // Check if it's the wanted thread
+            if (current_node->value().pid == pid && current_node->value().tid == (uint64_t)tid) {
+                // If the thread blocks the signal or is busy with another signal
+                if ((current_node->value().sig_mask & (1 << sig_info.sig)) ||
+                    current_node->value().current_sig != SIGINVL) {
+                    current_node->value().sig_queue += sig_info;
+                } else {
+                    send_signal_to_task(current_node, sig_info);
+                }
+            }
+
+            // Move to the next node
+            current_node = current_node->next();
+        } while (current_node != process_priority_queue.start);
+    }
+}
+
+void influx::threading::scheduler::send_signal_to_task(influx::threading::tcb *task,
+                                                       influx::threading::signal_info sig_info) {
+    // ** Interrupts should be locked here **
+    kassert(task->value().current_sig == SIGINVL);
+
+    process &process = _processes[task->value().pid];
+
+    // Set the current signal
+    task->value().current_sig = sig_info.sig;
+
+    // Save the current signal mask and mask it using the signal's disposition mask
+    task->value().old_sig_mask = task->value().sig_mask;
+    task->value().sig_mask |= process.signal_dispositions[sig_info.sig].mask;
+
+    // Prepare the signal handler
+    prepare_signal_handle(task, sig_info);
+
+    // If the task is interruptible and it's blocked, interrupt it and unblock it
+    if (task->value().signal_interruptible && task->value().state == thread_state::blocked) {
+        task->value().signal_interrupted = true;
+        unblock_task(task);
+    }
+}
+
+void influx::threading::scheduler::handle_signal_return(influx::interrupts::regs *context) {
+    interrupts_lock int_lk(false);
+    kassert(_current_task->value().current_sig != SIGINVL);
+
+    signal_info sig_info;
+    sig_info.sig = SIGINVL;
+
+    // Restore old regs
+    *context = _current_task->value().old_interrupt_regs;
+
+    // Restore old signal mask
+    _current_task->value().sig_mask = _current_task->value().old_sig_mask;
+
+    // Set the current signal as invalid
+    int_lk.lock();  // We lock here to make sure no other signal is being sent to this task yet
+    _current_task->value().current_sig = SIGINVL;
+
+    // If there is a signal waiting in the thread signal queue or in the process signal queue,
+    // handle it
+    process &process = _processes[_current_task->value().pid];
+    if (!_current_task->value().sig_queue.empty() &&
+        !(_current_task->value().sig_mask & (1 << _current_task->value().sig_queue.back().sig))) {
+        sig_info = _current_task->value().sig_queue.back();
+        _current_task->value().sig_queue.pop_back();
+    } else if (!process.pending_std_signals.empty() &&
+               !(_current_task->value().sig_mask & (1 << process.pending_std_signals.back().sig))) {
+        sig_info = process.pending_std_signals.back();
+        process.pending_std_signals.pop_back();
+    }
+
+    // If there is another signal to handle, prepare the signal handler
+    if (sig_info.sig != SIGINVL) {
+        // Set the current signal
+        _current_task->value().current_sig = sig_info.sig;
+
+        // Save the current signal mask and mask it using the signal's disposition mask
+        _current_task->value().old_sig_mask = _current_task->value().sig_mask;
+        _current_task->value().sig_mask |= process.signal_dispositions[sig_info.sig].mask;
+
+        // Prepare the signal handler
+        prepare_signal_handle(_current_task, sig_info);
+    }
 }

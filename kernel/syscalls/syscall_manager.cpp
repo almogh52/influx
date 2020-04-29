@@ -6,9 +6,16 @@
 #include <kernel/syscalls/handlers.h>
 
 void influx::syscalls::syscall_interrupt_handler(influx::interrupts::regs *context) {
+    threading::signal before_signal = kernel::syscall_manager()->get_signal();
+
     // Handle the syscall and return result in RAX
     context->rax = kernel::syscall_manager()->handle_syscall(
         (syscall)context->rax, context->rdx, context->rdi, context->rsi, context->r10, context);
+
+    // If the syscall interrupted (the signal had changed during execution), save the return code
+    if (before_signal != kernel::syscall_manager()->get_signal() && before_signal == SIGINVL) {
+        kernel::syscall_manager()->save_return_value(context->rax);
+    }
 }
 
 influx::syscalls::syscall_manager::syscall_manager()
@@ -102,4 +109,12 @@ int64_t influx::syscalls::syscall_manager::handle_syscall(influx::syscalls::sysc
         default:
             return -EINVAL;
     }
+}
+
+influx::threading::signal influx::syscalls::syscall_manager::get_signal() const {
+    return kernel::scheduler()->get_current_task()->value().current_sig;
+}
+
+void influx::syscalls::syscall_manager::save_return_value(uint64_t value) const {
+    kernel::scheduler()->get_current_task()->value().old_interrupt_regs.rax = value;
 }

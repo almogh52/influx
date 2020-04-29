@@ -5,6 +5,7 @@
 #include <kernel/memory/memory.h>
 #include <kernel/structures/unique_hash_map.h>
 #include <kernel/structures/vector.h>
+#include <kernel/syscalls/syscall_manager.h>
 #include <kernel/threading/init_process.h>
 #include <kernel/threading/process.h>
 #include <kernel/threading/thread.h>
@@ -65,6 +66,10 @@ class scheduler {
     uint64_t fork(interrupts::regs old_context);
     uint64_t sbrk(int64_t inc);
 
+    void set_signal_action(uint64_t sig, signal_action action);
+    bool send_signal(int64_t pid, int64_t tid, signal_info sig_info);
+    void handle_signal_return(interrupts::regs *context);
+
     uint64_t get_current_task_id() const;
     uint64_t get_current_process_id() const;
 
@@ -114,12 +119,19 @@ class scheduler {
     structures::pair<const char **, const char **> copy_argv_envp(executable &exec,
                                                                   uint64_t address);
 
+    structures::vector<signal_action> create_default_signal_dispositions() const;
+
+    void prepare_signal_handle(tcb *task, signal_info sig_info);
+    void send_signal_to_process(uint64_t pid, int64_t tid, signal_info sig_info);
+    void send_signal_to_task(tcb *task, signal_info sig_info);
+
     friend void new_user_process_wrapper(executable *exec);
 
     friend class mutex;
     friend class condition_variable;
     friend class irq_notifier;
     friend class init_process;
+    friend class syscalls::syscall_manager;
 };
 };  // namespace threading
 };  // namespace influx

@@ -2,6 +2,7 @@
 #include <kernel/interrupts/interrupt_regs.h>
 #include <kernel/logger.h>
 #include <kernel/syscalls/syscall.h>
+#include <kernel/threading/signal.h>
 
 #define SYSCALL_INTERRUPT 0x80
 
@@ -18,6 +19,9 @@ class syscall_manager {
 
     int64_t handle_syscall(syscall syscall, uint64_t arg1, uint64_t arg2, uint64_t arg3,
                            uint64_t arg4, interrupts::regs *context);
+
+    threading::signal get_signal() const;
+    void save_return_value(uint64_t value) const;
 
     friend void syscall_interrupt_handler(interrupts::regs *context);
 };
