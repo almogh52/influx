@@ -185,6 +185,11 @@ void influx::threading::new_fork_process_wrapper(
     scheduler_utils::return_to_fork_process(old_context_var);
 }
 
+void influx::threading::terminate_thread() {
+    // Kill the current task
+    kernel::scheduler()->kill_current_task();
+}
+
 influx::threading::scheduler::scheduler(uint64_t tss_addr)
     : _log("Scheduler", console_color::blue),
       _started(false),
@@ -213,6 +218,7 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .signal_dispositions = create_default_signal_dispositions(),
                               .pending_std_signals = structures::vector<signal_info>(),
                               .tty = KERNEL_TTY,
+                              .kill_signal = SIGINVL,
                               .exit_code = 0,
                               .terminated = false,
                               .new_exec_process = false});
@@ -297,6 +303,7 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .signal_dispositions = create_default_signal_dispositions(),
                               .pending_std_signals = structures::vector<signal_info>(),
                               .tty = INIT_PROCESS_TTY,
+                              .kill_signal = SIGINVL,
                               .exit_code = 0,
                               .terminated = false,
                               .new_exec_process = false});
@@ -1077,8 +1084,12 @@ void influx::threading::scheduler::tasks_clean_task() {
             int_lk.unlock();
 
             // Free the task kernel stack
-            // NOTE: User stack is already released by paging manager
             memory::virtual_allocator::free(task->value().kernel_stack, DEFAULT_KERNEL_STACK_SIZE);
+
+            // Free the task user stack
+            if (task->value().user_stack != nullptr) {
+                memory::virtual_allocator::free(task->value().user_stack, DEFAULT_USER_STACK_SIZE);
+            }
 
             // Remove the thread from the threads list of the process
             if (!task_process.new_exec_process) {
@@ -1170,6 +1181,7 @@ uint64_t influx::threading::scheduler::start_process(influx::threading::executab
                     .signal_dispositions = create_default_signal_dispositions(),
                     .pending_std_signals = structures::vector<signal_info>(),
                     .tty = _processes[_current_task->value().pid].tty,
+                    .kill_signal = SIGINVL,
                     .exit_code = 0,
                     .terminated = false,
                     .new_exec_process = false};
@@ -1346,8 +1358,14 @@ void influx::threading::scheduler::clean_process(uint64_t pid, bool erase,
                             _processes[process.ppid].child_processes.end(), pid));
         _processes.erase(pid);
 
-        _log("Process '%s' (PID: %d) has exited with code %d.\n", process.name.c_str(), pid,
-             process.exit_code);
+        // If the process was killed with a signal
+        if (process.kill_signal != SIGINVL) {
+            _log("Process '%s' (PID: %d) was killed using signal %d.\n", process.name.c_str(), pid,
+                 process.kill_signal);
+        } else {
+            _log("Process '%s' (PID: %d) has exited with code %d.\n", process.name.c_str(), pid,
+                 process.exit_code);
+        }
     } else {
         // Set the process as terminated and waiting to be deleted (zombie process)
         process.terminated = true;
@@ -1361,50 +1379,42 @@ void influx::threading::scheduler::kill_all_tasks(uint64_t pid) {
     process &process = _processes[pid];
     priority_tcb_queue &process_priority_queue = _priority_queues[process.priority];
 
-    tcb *current_node = process_priority_queue.start, *prev_node = nullptr;
+    tcb *current_node = process_priority_queue.start;
+
+    interrupts::regs *task_regs = nullptr;
 
     // While we didn't reach the end of the priority queue
     do {
-        // If the current node is for the wanted process and it's not the current task, remove it
+        // If the current node is for the wanted process and it's not the current task, set it to be
+        // terminated
         if (current_node->value().pid == pid && current_node != _current_task) {
-            // If it's the last node in the list, set the list start as null
-            if (current_node->prev() == current_node->next()) {
-                process_priority_queue.start = nullptr;
-                break;
-            } else {
-                // Remove the node from the list
-                current_node->prev()->next() = current_node->next();
+            // Get the interrupt regs of the task
+            task_regs = get_task_interrupt_regs(current_node);
 
-                // Change the start of the list if it's the node
-                if (current_node == process_priority_queue.start) {
-                    process_priority_queue.start = current_node->next();
-                }
-
-                // Change the next task of the list if it's the node
-                if (current_node == process_priority_queue.next_task) {
-                    update_priority_queue_next_task(process.priority);
-                }
-            }
-
-            // Free the kernel stack
-            memory::virtual_allocator::free(current_node->value().kernel_stack,
-                                            DEFAULT_KERNEL_STACK_SIZE);
-
-            // Erase the thread id from the threads vector
-            process.threads.erase(algorithm::find(process.threads.begin(), process.threads.end(),
-                                                  current_node->value().tid));
-
-            // Move to the next node
-            prev_node = current_node;
-            current_node = current_node->next();
-
-            // Delete the task
-            delete prev_node;
-        } else {
-            // Move to the next node
-            current_node = current_node->next();
+            // Change interrupt return to terminate thread function of the scheduler
+            task_regs->cs = 0x8;
+            task_regs->ss = 0x10;
+            task_regs->rsp =
+                (uint64_t)current_node->value().kernel_stack + DEFAULT_KERNEL_STACK_SIZE;
+            task_regs->rip = (uint64_t)terminate_thread;
         }
+
+        // Move to the next node
+        current_node = current_node->next();
     } while (current_node != process_priority_queue.start);
+}
+
+void influx::threading::scheduler::kill_with_signal(uint64_t pid, influx::threading::signal sig) {
+    interrupts_lock int_lk(false);
+
+    // Set the process as terminated and set the kill signal
+    int_lk.lock();
+    _processes[pid].terminated = true;
+    _processes[pid].kill_signal = sig;
+    int_lk.unlock();
+
+    // Kill all the tasks of the process
+    kill_all_tasks(pid);
 }
 
 void influx::threading::scheduler::queue_task(influx::threading::tcb *task) {
@@ -1534,18 +1544,7 @@ void influx::threading::scheduler::prepare_signal_handle(influx::threading::tcb 
 
     uint64_t user_stack_start = DEFAULT_USER_STACK_ADDRESS - task->value().args_size;
 
-    uint64_t *kernel_stack_ptr =
-        task == _current_task ? (uint64_t *)get_stack_pointer() : (uint64_t *)task->value().context;
-    interrupts::regs *regs = nullptr;
-
-    // Find the interrupt regs
-    while (*kernel_stack_ptr != 0x1B || *(kernel_stack_ptr + 3) != 0x23) {
-        kernel_stack_ptr++;
-    }
-
-    // Calc the interrupt regs pointer
-    regs =
-        (interrupts::regs *)(kernel_stack_ptr - (sizeof(interrupts::regs) / sizeof(uint64_t) - 4));
+    interrupts::regs *regs = get_task_interrupt_regs(task);
 
     // Set the RIP to the handler function and save the old RIP
     task->value().old_interrupt_regs = *regs;
@@ -1577,6 +1576,19 @@ void influx::threading::scheduler::send_signal_to_process(uint64_t pid, int64_t 
     priority_tcb_queue &process_priority_queue = _priority_queues[process.priority];
 
     tcb *current_node = process_priority_queue.start;
+
+    // SIGKILL and SIGSTOP has no handlers, only default
+    if (sig_info.sig == SIGKILL || sig_info.sig == SIGSTOP) {
+        // TODO: Implement SIGSTOP
+
+        // If the process isn't terminated, terminate it
+        if (!process.terminated) {
+            int_lk.unlock();
+            kill_with_signal(pid, sig_info.sig);
+        }
+
+        return;
+    }
 
     // If the process is a zombie process, add the signal to it's pending signals
     if (process.terminated == true) {
@@ -1715,4 +1727,19 @@ void influx::threading::scheduler::handle_signal_return(influx::interrupts::regs
         // Prepare the signal handler
         prepare_signal_handle(_current_task, sig_info);
     }
+}
+
+influx::interrupts::regs *influx::threading::scheduler::get_task_interrupt_regs(
+    influx::threading::tcb *task) {
+    uint64_t *kernel_stack_ptr =
+        task == _current_task ? (uint64_t *)get_stack_pointer() : (uint64_t *)task->value().context;
+
+    // Find the interrupt regs
+    while (*kernel_stack_ptr != 0x1B || *(kernel_stack_ptr + 3) != 0x23) {
+        kernel_stack_ptr++;
+    }
+
+    // Calc the interrupt regs pointer
+    return (interrupts::regs *)(kernel_stack_ptr -
+                                (sizeof(interrupts::regs) / sizeof(uint64_t) - 4));
 }

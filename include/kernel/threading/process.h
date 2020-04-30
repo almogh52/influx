@@ -40,6 +40,8 @@ struct process {
     structures::vector<signal_info> pending_std_signals;
 
     uint64_t tty;
+
+    signal kill_signal;
     uint8_t exit_code;
 
     bool terminated;

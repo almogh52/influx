@@ -38,6 +38,7 @@ void new_kernel_thread_wrapper(void (*func)(void *), void *data);
 void new_user_process_wrapper(executable *exec);
 void new_fork_process_wrapper(structures::vector<file_segment> *segments,
                               interrupts::regs *old_context);
+void terminate_thread();
 
 class scheduler {
    public:
@@ -111,6 +112,7 @@ class scheduler {
     uint64_t start_process(executable &exec, int64_t pid = -1);
     void clean_process(uint64_t pid, bool erase, bool close_file_descriptors);
     void kill_all_tasks(uint64_t pid);
+    void kill_with_signal(uint64_t pid, signal sig);
 
     tcb *get_current_task() const;
     uint64_t get_stack_pointer() const;
@@ -124,6 +126,8 @@ class scheduler {
     void prepare_signal_handle(tcb *task, signal_info sig_info);
     void send_signal_to_process(uint64_t pid, int64_t tid, signal_info sig_info);
     void send_signal_to_task(tcb *task, signal_info sig_info);
+
+    interrupts::regs *get_task_interrupt_regs(tcb *task);
 
     friend void new_user_process_wrapper(executable *exec);
 
