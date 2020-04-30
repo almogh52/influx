@@ -126,6 +126,7 @@ class scheduler {
     void prepare_signal_handle(tcb *task, signal_info sig_info);
     void send_signal_to_process(uint64_t pid, int64_t tid, signal_info sig_info);
     void send_signal_to_task(tcb *task, signal_info sig_info);
+    void default_signal_handler(process &process, signal_info sig_info);
 
     interrupts::regs *get_task_interrupt_regs(tcb *task);
 

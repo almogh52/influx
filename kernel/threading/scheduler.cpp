@@ -1577,16 +1577,17 @@ void influx::threading::scheduler::send_signal_to_process(uint64_t pid, int64_t 
 
     tcb *current_node = process_priority_queue.start;
 
-    // SIGKILL and SIGSTOP has no handlers, only default
-    if (sig_info.sig == SIGKILL || sig_info.sig == SIGSTOP) {
-        // TODO: Implement SIGSTOP
+    // If the signal is the kill or stop signal or the handler is the default signal, call the
+    // default handler
+    if (sig_info.sig == SIGKILL || sig_info.sig == SIGSTOP ||
+        process.signal_dispositions[sig_info.sig].handler.raw == SIG_DFL) {
+        int_lk.unlock();
+        default_signal_handler(process, sig_info);
+        return;
+    }
 
-        // If the process isn't terminated, terminate it
-        if (!process.terminated) {
-            int_lk.unlock();
-            kill_with_signal(pid, sig_info.sig);
-        }
-
+    // If the handler for the signal is to ignore the signal, ignore it
+    if (process.signal_dispositions[sig_info.sig].handler.raw == SIG_IGN) {
         return;
     }
 
@@ -1682,6 +1683,29 @@ void influx::threading::scheduler::send_signal_to_task(influx::threading::tcb *t
     if (task->value().signal_interruptible && task->value().state == thread_state::blocked) {
         task->value().signal_interrupted = true;
         unblock_task(task);
+    }
+}
+
+void influx::threading::scheduler::default_signal_handler(influx::threading::process &process,
+                                                          influx::threading::signal_info sig_info) {
+    // TODO: Implement process stopping and cotinuing (SIGSTOP, SIGCONT ...)
+
+    // Default signal action for ignoring
+    if (sig_info.sig == SIGCHLD || sig_info.sig == SIGURG || sig_info.sig == SIGWINCH) {
+        return;
+    }
+
+    // Dump core
+    if (sig_info.sig == SIGABRT || sig_info.sig == SIGBUS || sig_info.sig == SIGFPE ||
+        sig_info.sig == SIGILL || sig_info.sig == SIGIOT || sig_info.sig == SIGQUIT ||
+        sig_info.sig == SIGSEGV || sig_info.sig == SIGSYS || sig_info.sig == SIGTRAP ||
+        sig_info.sig == SIGXCPU || sig_info.sig == SIGXFSZ) {
+        // TODO: Implement core dump
+    }
+
+    // If the process isn't terminated, terminate it
+    if (!process.terminated) {
+        kill_with_signal(process.pid, sig_info.sig);
     }
 }
 
