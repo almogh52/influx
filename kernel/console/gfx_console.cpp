@@ -71,12 +71,7 @@ bool influx::gfx_console::load() {
 }
 
 void influx::gfx_console::putchar(char c) {
-    threading::unique_lock lk(_mutex, threading::defer_lock);
-
-    // If the scheduler has started, lock the mutex
-    if (kernel::scheduler() != nullptr && kernel::scheduler()->started()) {
-        lk.lock();
-    }
+    threading::unique_lock lk(_mutex);
 
     // If the character is for a new line
     if (c == '\n' || c == '\r') {

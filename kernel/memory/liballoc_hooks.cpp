@@ -3,6 +3,7 @@
 #include <kernel/memory/virtual_allocator.h>
 #include <kernel/threading/mutex.h>
 #include <kernel/threading/scheduler.h>
+#include <kernel/threading/scheduler_started.h>
 #include <memory/paging.h>
 #include <stdint.h>
 
@@ -11,12 +12,12 @@ influx::threading::mutex liballoc_mutex;
 
 extern "C" int liballoc_lock() {
     // If the scheduler has started
-    if (influx::kernel::scheduler() != nullptr && influx::kernel::scheduler()->started()) {
+    if (influx::threading::scheduler_started) {
         liballoc_mutex.lock();
     } else {
-        while (!__sync_bool_compare_and_swap(&liballoc_early_mutex, 0, 1)) {
-            __sync_synchronize();
-        }
+        while (!__sync_bool_compare_and_swap(&liballoc_early_mutex, 0, 1))
+            ;
+        __sync_synchronize();
     }
 
     return 0;
@@ -24,7 +25,7 @@ extern "C" int liballoc_lock() {
 
 extern "C" int liballoc_unlock() {
     // If the scheduler has started
-    if (influx::kernel::scheduler() != nullptr && influx::kernel::scheduler()->started()) {
+    if (influx::threading::scheduler_started) {
         liballoc_mutex.unlock();
     } else {
         // Release the mutex

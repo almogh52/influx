@@ -22,19 +22,17 @@ influx::tty::tty &influx::tty::tty::operator=(const influx::tty::tty &other) {
 
 void influx::tty::tty::activate() {
     // Try to lock both stdin mutex and stdout mutex
-    if (kernel::scheduler() != nullptr && kernel::scheduler()->started()) {
-        while (true) {
-            if (_stdin_mutex.try_lock()) {
-                if (_stdout_mutex.try_lock()) {
-                    if (_raw_input_mutex.try_lock()) {
-                        break;
-                    } else {
-                        _stdout_mutex.unlock();
-                        _stdin_mutex.unlock();
-                    }
+    while (true) {
+        if (_stdin_mutex.try_lock()) {
+            if (_stdout_mutex.try_lock()) {
+                if (_raw_input_mutex.try_lock()) {
+                    break;
                 } else {
+                    _stdout_mutex.unlock();
                     _stdin_mutex.unlock();
                 }
+            } else {
+                _stdin_mutex.unlock();
             }
         }
     }
@@ -52,11 +50,9 @@ void influx::tty::tty::activate() {
     }
 
     // Unlock mutexes
-    if (kernel::scheduler() != nullptr && kernel::scheduler()->started()) {
-        _stdin_mutex.unlock();
-        _stdout_mutex.unlock();
-        _raw_input_mutex.unlock();
-    }
+    _stdin_mutex.unlock();
+    _stdout_mutex.unlock();
+    _raw_input_mutex.unlock();
 }
 
 void influx::tty::tty::deactivate() {
