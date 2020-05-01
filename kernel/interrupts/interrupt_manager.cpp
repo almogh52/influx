@@ -10,6 +10,8 @@
 #include <kernel/memory/virtual_allocator.h>
 #include <kernel/ports.h>
 
+#include <kernel/threading/scheduler_started.h>
+
 #define SET_ISR(n, t) set_isr(n, (uint64_t)isr_##n, t)
 
 #define ADD_IRQ_HANDLER(number) \
@@ -18,10 +20,26 @@
 uint64_t isrs[AMOUNT_OF_INTERRUPT_DESCRIPTORS];
 
 void influx::interrupts::isr_handler(influx::interrupts::regs *context) {
+    bool blocked =
+        threading::scheduler_started &&
+        kernel::scheduler()->get_current_task()->value().state != threading::thread_state::running;
+
+    // Unblock the task
+    if (blocked) {
+        kernel::scheduler()->unblock_task(kernel::scheduler()->get_current_task());
+    }
+
     // If the ISR isn't null, call it
     if (isrs[context->isr_number] != 0) {
         ((void (*)(regs *))isrs[context->isr_number])(context);
     }
+
+    // Re-block task after ISR
+    /*if (blocked && kernel::scheduler()->get_current_task()->value().reblock_after_isr == true) {
+        kernel::scheduler()->block_current_task();
+    } else if (kernel::scheduler()->get_current_task()->value().reblock_after_isr == false) {
+        kernel::scheduler()->get_current_task()->value().reblock_after_isr = true;
+    }*/
 }
 
 void influx::interrupts::exception_interrupt_handler(influx::interrupts::regs *context) {

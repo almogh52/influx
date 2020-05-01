@@ -27,11 +27,40 @@ influx::syscalls::syscall_manager::syscall_manager()
     kernel::interrupt_manager()->set_interrupt_privilege_level(SYSCALL_INTERRUPT, 3);
 }
 
+void idk(void *idk2) {
+    influx::threading::signal_info sig_info;
+
+    sig_info.sig = SIGSEGV;
+    sig_info.value_int = 5;
+
+    influx::logger l("sdsd");
+    l("%d\n", *(uint64_t *)idk2);
+
+    influx::kernel::scheduler()->sleep(2000);
+    influx::kernel::scheduler()->send_signal(*(uint64_t *)idk2, -1, sig_info);
+}
+
 int64_t influx::syscalls::syscall_manager::handle_syscall(influx::syscalls::syscall syscall,
                                                           uint64_t arg1, uint64_t arg2,
                                                           uint64_t arg3, uint64_t arg4,
                                                           influx::interrupts::regs *context) {
     uint64_t tmp = 0;
+
+    if ((uint64_t)syscall == 0xFF) {
+        threading::signal_action act;
+
+        act.handler.action_func = (void (*)(int, influx::threading::signal_info *, void *))arg1;
+        act.mask = 0;
+        act.restorer = (void (*)())arg2;
+        act.flags = 0;
+
+        kernel::scheduler()->set_signal_action(SIGSEGV, act);
+        kernel::scheduler()->create_kernel_thread(
+            idk, new uint64_t(kernel::scheduler()->get_current_process_id()));
+    } else if ((uint64_t)syscall == 0xFFFF) {
+        kernel::scheduler()->handle_signal_return(context);
+        return context->rax;
+    }
 
     // Call the syscall handler for the wanted syscall
     switch (syscall) {

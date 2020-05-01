@@ -44,8 +44,6 @@ class scheduler {
    public:
     scheduler(uint64_t tss_addr);
 
-    bool started() const;
-
     tcb *create_kernel_thread(void (*func)(), void *data = nullptr, bool blocked = false,
                               uint64_t pid = KERNEL_PID);
     tcb *create_kernel_thread(void (*func)(void *), void *data, bool blocked = false,
@@ -57,6 +55,7 @@ class scheduler {
     void exit(uint8_t code);
     void kill_current_task();
 
+    tcb *get_current_task() const;
     void block_task(tcb *task);
     void block_current_task();
     void unblock_task(tcb *task);
@@ -74,6 +73,8 @@ class scheduler {
     uint64_t get_current_task_id() const;
     uint64_t get_current_process_id() const;
 
+    bool interrupted() const;
+
     uint64_t add_file_descriptor(const vfs::open_file &file);
     vfs::error get_file_descriptor(uint64_t fd, vfs::open_file &file);
     void update_file_descriptor(uint64_t fd, vfs::open_file &file);
@@ -81,8 +82,6 @@ class scheduler {
 
    private:
     logger _log;
-
-    bool _started;
 
     structures::unique_hash_map<process> _processes;
     structures::vector<priority_tcb_queue> _priority_queues;
@@ -114,7 +113,6 @@ class scheduler {
     void kill_all_tasks(uint64_t pid);
     void kill_with_signal(uint64_t pid, signal sig);
 
-    tcb *get_current_task() const;
     uint64_t get_stack_pointer() const;
 
     uint64_t pages_for_argv_envp(executable &exec);

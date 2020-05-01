@@ -11,18 +11,23 @@
 influx::threading::irq_notifier::irq_notifier() : _notified(false), _task(nullptr) {}
 
 void influx::threading::irq_notifier::notify() noexcept {
-    // Interrupts should be disabled by ISR
+    interrupts_lock lk;
 
     // If the wait queue is empty, set notified as true
     if (_task == nullptr) {
         _notified = true;
     } else if (_task != kernel::scheduler()->get_current_task()) {
+        // Unblock the waiting task
+        lk.unlock();
         kernel::scheduler()->unblock_task(_task);
+
+        // Set the waiting task as null
+        lk.lock();
         _task = nullptr;
     } else {
-		_task->value().state = thread_state::running;
-		_task = nullptr;
-	}
+        _task->value().reblock_after_isr = false;
+        _task = nullptr;
+    }
 }
 
 void influx::threading::irq_notifier::wait() {
@@ -30,10 +35,42 @@ void influx::threading::irq_notifier::wait() {
 
     // If the IRQ didn't notify yet, wait for notify
     if (!_notified) {
+        // Save the waiting task
         _task = kernel::scheduler()->get_current_task();
-        kernel::scheduler()->block_task(_task);
+
+        // Unlock interrupts and block the current task
+        kernel::scheduler()->block_current_task();
         lk.unlock();
     } else {
         _notified = false;
     }
+}
+
+bool influx::threading::irq_notifier::wait_interruptible() {
+    interrupts_lock lk;
+
+    // If the IRQ didn't notify yet, wait for notify
+    if (!_notified) {
+        // Save the waiting task
+        _task = kernel::scheduler()->get_current_task();
+
+        // Set the task as interruptible
+        _task->value().signal_interruptible = true;
+
+        // Unlock interrupts and block the current task
+        kernel::scheduler()->block_current_task();
+        lk.unlock();
+
+        // Set the task as uninterruptible
+        kernel::scheduler()->get_current_task()->value().signal_interruptible = false;
+
+        // If the task was interrupted by a signal return false
+        if (kernel::scheduler()->get_current_task()->value().signal_interrupted) {
+            return false;
+        }
+    } else {
+        _notified = false;
+    }
+
+    return true;
 }

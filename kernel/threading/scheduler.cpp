@@ -6,6 +6,7 @@
 #include <kernel/memory/paging_manager.h>
 #include <kernel/memory/virtual_allocator.h>
 #include <kernel/threading/interrupts_lock.h>
+#include <kernel/threading/scheduler_started.h>
 #include <kernel/threading/scheduler_utils.h>
 #include <kernel/time/time_manager.h>
 #include <kernel/utils.h>
@@ -192,7 +193,6 @@ void influx::threading::terminate_thread() {
 
 influx::threading::scheduler::scheduler(uint64_t tss_addr)
     : _log("Scheduler", console_color::blue),
-      _started(false),
       _priority_queues(MAX_PRIORITY_LEVEL + 1),
       _current_task(nullptr),
       _max_quantum((kernel::time_manager()->timer_frequency() / 1000) * TASK_MAX_TIME_SLICE),
@@ -236,6 +236,7 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                        .quantum = 0,
                        .sleep_quantum = 0,
                        .child_wait_pid = 0,
+                       .reblock_after_isr = true,
                        .signal_interruptible = false,
                        .signal_interrupted = false,
                        .sig_queue = structures::vector<signal_info>(),
@@ -260,6 +261,7 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                                 .quantum = 0,
                                 .sleep_quantum = 0,
                                 .child_wait_pid = 0,
+                                .reblock_after_isr = true,
                                 .signal_interruptible = false,
                                 .signal_interrupted = false,
                                 .sig_queue = structures::vector<signal_info>(),
@@ -318,10 +320,8 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
         utils::method_function_wrapper<scheduler, &scheduler::tick_handler>, this);
 
     // Set the scheduler as started
-    _started = true;
+    scheduler_started = true;
 }
-
-bool influx::threading::scheduler::started() const { return _started; }
 
 influx::threading::tcb *influx::threading::scheduler::create_kernel_thread(void (*func)(),
                                                                            void *data, bool blocked,
@@ -345,6 +345,7 @@ influx::threading::tcb *influx::threading::scheduler::create_kernel_thread(void 
                                    .quantum = 0,
                                    .sleep_quantum = 0,
                                    .child_wait_pid = 0,
+                                   .reblock_after_isr = true,
                                    .signal_interruptible = false,
                                    .signal_interrupted = false,
                                    .sig_queue = structures::vector<signal_info>(),
@@ -864,6 +865,7 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
                           .quantum = 0,
                           .sleep_quantum = 0,
                           .child_wait_pid = 0,
+                          .reblock_after_isr = true,
                           .signal_interruptible = false,
                           .signal_interrupted = false,
                           .sig_queue = structures::vector<signal_info>(),
@@ -1027,6 +1029,10 @@ uint64_t influx::threading::scheduler::get_current_process_id() const {
     return _current_task->value().pid;
 }
 
+bool influx::threading::scheduler::interrupted() const {
+    return _current_task->value().signal_interrupted;
+}
+
 uint64_t influx::threading::scheduler::add_file_descriptor(const influx::vfs::open_file &file) {
     interrupts_lock int_lk;
     process &process = _processes[_current_task->value().pid];
@@ -1122,11 +1128,8 @@ void influx::threading::scheduler::tasks_clean_task() {
 }
 
 void influx::threading::scheduler::idle_task() {
-    // Enable interrupts
-    kernel::interrupt_manager()->enable_interrupts();
-
     while (true) {
-        __asm__ __volatile__("hlt");  // Wait for interrupt
+        __asm__ __volatile__("sti; hlt");  // Wait for interrupt
 
         // Try to reschedule to another task since probably some task is available
         reschedule();
@@ -1246,6 +1249,7 @@ uint64_t influx::threading::scheduler::start_process(influx::threading::executab
                           .quantum = 0,
                           .sleep_quantum = 0,
                           .child_wait_pid = 0,
+                          .reblock_after_isr = true,
                           .signal_interruptible = false,
                           .signal_interrupted = false,
                           .sig_queue = structures::vector<signal_info>(),

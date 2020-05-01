@@ -37,6 +37,9 @@ int64_t influx::syscalls::utils::convert_vfs_error(influx::vfs::error err) {
         case vfs::error::invalid_position:
             return -EINVAL;
 
+        case vfs::error::interrupted:
+            return -EINTR;
+
         case vfs::error::unknown_error:
         case vfs::error::io_error:
         default:

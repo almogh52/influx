@@ -24,8 +24,9 @@ class ata : public driver {
 
     virtual bool load();
 
-    bool access_drive_sectors(const drive &drive, access_type access_type, uint32_t lba,
-                              uint16_t amount_of_sectors, uint16_t *data);
+    uint16_t access_drive_sectors(const drive &drive, access_type access_type, uint32_t lba,
+                                  uint16_t amount_of_sectors, uint16_t *data,
+                                  bool interruptible = false);
 
     const structures::vector<drive> drives() const { return _drives; };
 
@@ -42,8 +43,8 @@ class ata : public driver {
 
     threading::irq_notifier _primary_irq_notifier, _secondary_irq_notifier;
 
-    void wait_for_primary_irq();
-    void wait_for_secondary_irq();
+    bool wait_for_primary_irq(bool interruptible);
+    bool wait_for_secondary_irq(bool interruptible);
 
     void detect_drives();
 

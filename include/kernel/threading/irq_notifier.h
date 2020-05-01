@@ -11,6 +11,7 @@ class irq_notifier {
 
     void notify() noexcept;
     void wait();
+    bool wait_interruptible();
 
    private:
     bool _notified;
