@@ -34,9 +34,7 @@ class tty_manager {
     structures::vector<tty> _ttys;
     structures::vector<uint64_t> _ttys_vnodes;
 
-    void handle_input(key_event key_evt);
-
-    friend void drivers::ps2_keyboard_irq(influx::interrupts::regs* context, drivers::ps2_keyboard* key_drv);
+    void raw_input_thread();
 };
 };  // namespace tty
 };  // namespace influx

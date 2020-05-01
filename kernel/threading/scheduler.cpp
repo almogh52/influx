@@ -236,7 +236,6 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                        .quantum = 0,
                        .sleep_quantum = 0,
                        .child_wait_pid = 0,
-                       .reblock_after_isr = true,
                        .signal_interruptible = false,
                        .signal_interrupted = false,
                        .sig_queue = structures::vector<signal_info>(),
@@ -261,7 +260,6 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                                 .quantum = 0,
                                 .sleep_quantum = 0,
                                 .child_wait_pid = 0,
-                                .reblock_after_isr = true,
                                 .signal_interruptible = false,
                                 .signal_interrupted = false,
                                 .sig_queue = structures::vector<signal_info>(),
@@ -345,7 +343,6 @@ influx::threading::tcb *influx::threading::scheduler::create_kernel_thread(void 
                                    .quantum = 0,
                                    .sleep_quantum = 0,
                                    .child_wait_pid = 0,
-                                   .reblock_after_isr = true,
                                    .signal_interruptible = false,
                                    .signal_interrupted = false,
                                    .sig_queue = structures::vector<signal_info>(),
@@ -354,8 +351,6 @@ influx::threading::tcb *influx::threading::scheduler::create_kernel_thread(void 
                                    .old_interrupt_regs = {},
                                    .old_sig_mask = 0});
     int_lk.unlock();
-
-    _log("Creating kernel thread with function %p and data %p..\n", func, data);
 
     // Set the RIP to return to when the thread is selected
     *(uint64_t *)((uint8_t *)stack + DEFAULT_KERNEL_STACK_SIZE - sizeof(uint64_t)) =
@@ -865,7 +860,6 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
                           .quantum = 0,
                           .sleep_quantum = 0,
                           .child_wait_pid = 0,
-                          .reblock_after_isr = true,
                           .signal_interruptible = false,
                           .signal_interrupted = false,
                           .sig_queue = structures::vector<signal_info>(),
@@ -1249,7 +1243,6 @@ uint64_t influx::threading::scheduler::start_process(influx::threading::executab
                           .quantum = 0,
                           .sleep_quantum = 0,
                           .child_wait_pid = 0,
-                          .reblock_after_isr = true,
                           .signal_interruptible = false,
                           .signal_interrupted = false,
                           .sig_queue = structures::vector<signal_info>(),
@@ -1426,8 +1419,6 @@ void influx::threading::scheduler::queue_task(influx::threading::tcb *task) {
 
     process &new_task_process = _processes[task->value().pid];
     priority_tcb_queue &new_task_priority_queue = _priority_queues[new_task_process.priority];
-
-    _log("Queuing task %p..\n", task);
 
     // If the queue linked list is empty
     if (new_task_priority_queue.start == nullptr) {
@@ -1683,9 +1674,11 @@ void influx::threading::scheduler::send_signal_to_task(influx::threading::tcb *t
     // Prepare the signal handler
     prepare_signal_handle(task, sig_info);
 
+    // Set the task as interrupted
+    task->value().signal_interrupted = true;
+
     // If the task is interruptible and it's blocked, interrupt it and unblock it
     if (task->value().signal_interruptible && task->value().state == thread_state::blocked) {
-        task->value().signal_interrupted = true;
         unblock_task(task);
     }
 }
@@ -1725,6 +1718,9 @@ void influx::threading::scheduler::handle_signal_return(influx::interrupts::regs
 
     // Restore old signal mask
     _current_task->value().sig_mask = _current_task->value().old_sig_mask;
+
+    // Set the task as not interrupted
+    _current_task->value().signal_interrupted = false;
 
     // Set the current signal as invalid
     int_lk.lock();  // We lock here to make sure no other signal is being sent to this task yet

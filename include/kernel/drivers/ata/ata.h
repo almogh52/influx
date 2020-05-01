@@ -8,7 +8,6 @@
 #include <kernel/interrupts/interrupt_regs.h>
 #include <kernel/structures/string.h>
 #include <kernel/structures/vector.h>
-#include <kernel/threading/irq_notifier.h>
 #include <kernel/threading/mutex.h>
 
 #define MAX_ATA_STRING_LENGTH 100
@@ -30,18 +29,11 @@ class ata : public driver {
 
     const structures::vector<drive> drives() const { return _drives; };
 
-    friend void primary_irq(influx::interrupts::regs *context, ata *ata);
-    friend void secondary_irq(influx::interrupts::regs *context, ata *ata);
-
    private:
     threading::mutex _mutex;
 
     drive _selected_drive;
     structures::vector<drive> _drives;
-
-    uint32_t _primary_irq_called, _secondary_irq_called;
-
-    threading::irq_notifier _primary_irq_notifier, _secondary_irq_notifier;
 
     bool wait_for_primary_irq(bool interruptible);
     bool wait_for_secondary_irq(bool interruptible);
@@ -58,9 +50,6 @@ class ata : public driver {
     status_register read_status_register_with_mask(const bus &controller, uint8_t mask,
                                                    uint8_t value, uint64_t amount_of_tries) const;
 };
-
-void primary_irq(influx::interrupts::regs *context, ata *ata);
-void secondary_irq(influx::interrupts::regs *context, ata *ata);
 };  // namespace ata
 };  // namespace drivers
 };  // namespace influx

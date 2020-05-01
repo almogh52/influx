@@ -2,6 +2,7 @@
 
 #include <kernel/algorithm.h>
 #include <kernel/assert.h>
+#include <kernel/kernel.h>
 #include <kernel/memory/heap.h>
 #include <kernel/memory/utils.h>
 
@@ -36,6 +37,11 @@ uint64_t influx::drivers::ata::drive_slice::read(uint64_t address, uint64_t amou
     for (uint16_t i = 0; i < (sector_count / MAX_ATA_SECTOR_ACCESS) +
                                  (sector_count % MAX_ATA_SECTOR_ACCESS ? 1 : 0);
          i++) {
+        // If the task was interrupted, break
+        if (kernel::scheduler()->interrupted() && interruptible) {
+            break;
+        }
+
         // Read the sectors from the drive
         current_sector_count = algorithm::min<uint16_t>(
             MAX_ATA_SECTOR_ACCESS, (uint16_t)(sector_count - (i * MAX_ATA_SECTOR_ACCESS)));
@@ -110,6 +116,11 @@ uint64_t influx::drivers::ata::drive_slice::write(uint64_t address, uint64_t amo
     for (uint16_t i = 0; i < (sector_count / MAX_ATA_SECTOR_ACCESS) +
                                  (sector_count % MAX_ATA_SECTOR_ACCESS ? 1 : 0);
          i++) {
+        // If the task was interrupted, break
+        if (kernel::scheduler()->interrupted() && interruptible) {
+            break;
+        }
+
         // Write the sectors to the drive
         current_sector_count = algorithm::min<uint16_t>(
             MAX_ATA_SECTOR_ACCESS, (uint16_t)(sector_count - (i * MAX_ATA_SECTOR_ACCESS)));

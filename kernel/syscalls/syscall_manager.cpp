@@ -36,7 +36,7 @@ void idk(void *idk2) {
     influx::logger l("sdsd");
     l("%d\n", *(uint64_t *)idk2);
 
-    influx::kernel::scheduler()->sleep(2000);
+    influx::kernel::scheduler()->sleep(500);
     influx::kernel::scheduler()->send_signal(*(uint64_t *)idk2, -1, sig_info);
 }
 

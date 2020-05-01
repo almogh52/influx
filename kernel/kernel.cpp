@@ -60,6 +60,7 @@ void influx::kernel::kmain(const boot_info info) {
     // Init scheduler
     log("Loading scheduler..\n");
     _scheduler = new threading::scheduler(info.tss_address);
+    _interrupt_manager->start_irq_notify_thread();
     _tty_manager->start_input_threads();
     log("Scheduler loaded.\n");
 

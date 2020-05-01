@@ -1,7 +1,6 @@
 #pragma once
 #include <kernel/drivers/time/cmos.h>
 #include <kernel/drivers/time/timer_driver.h>
-#include <kernel/structures/vector.h>
 #include <kernel/time/timeval.h>
 #include <stdint.h>
 
@@ -34,7 +33,7 @@ class time_manager {
 
     double _unix_timestamp;
 
-    structures::vector<tick_handler> _tick_handlers;
+    tick_handler _tick_handler;
 };
 };  // namespace time
 };  // namespace influx

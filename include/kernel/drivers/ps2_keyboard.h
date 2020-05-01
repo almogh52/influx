@@ -114,12 +114,10 @@ class ps2_keyboard : public driver {
 
     virtual bool load();
 
+    key_event wait_for_key_event();
+
    private:
     key_event key_to_key_event(uint8_t key);
-
-    friend void ps2_keyboard_irq(influx::interrupts::regs *context, ps2_keyboard *key_drv);
 };
-
-void ps2_keyboard_irq(influx::interrupts::regs *context, ps2_keyboard *key_drv);
 };  // namespace drivers
 };  // namespace influx

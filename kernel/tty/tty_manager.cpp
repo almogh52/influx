@@ -31,6 +31,10 @@ void influx::tty::tty_manager::start_input_threads() {
         kernel::scheduler()->create_kernel_thread(
             utils::method_function_wrapper<tty, &tty::input_thread>, &tty_obj);
     }
+
+    // Create the kernel thread for the raw input thread
+    kernel::scheduler()->create_kernel_thread(
+        utils::method_function_wrapper<tty_manager, &tty_manager::raw_input_thread>, this);
 }
 
 void influx::tty::tty_manager::create_tty_vnodes() {
@@ -77,14 +81,22 @@ void influx::tty::tty_manager::set_active_tty(uint64_t tty) {
 influx::tty::tty &influx::tty::tty_manager::get_tty(uint64_t tty) { return _ttys[tty - 1]; }
 uint64_t influx::tty::tty_manager::get_tty_vnode(uint64_t tty) { return _ttys_vnodes[tty - 1]; }
 
-void influx::tty::tty_manager::handle_input(influx::key_event key_evt) {
-    tty &active = active_tty();
+void influx::tty::tty_manager::raw_input_thread() {
+    drivers::ps2_keyboard *drv =
+        (drivers::ps2_keyboard *)kernel::driver_manager()->get_driver("PS/2 Keyboard");
+    key_event key_evt;
 
-    threading::lock_guard lk(active._raw_input_mutex);
+    while (true) {
+        // Get key event
+        key_evt = drv->wait_for_key_event();
 
-    // Push the key event to the input buffer
-    active._raw_input_buffer.push_back(key_evt);
+        tty &active = active_tty();
+        threading::lock_guard lk(active._raw_input_mutex);
 
-    // Notify the input thread
-    active._raw_input_cv.notify_one();
+        // Push the key event to the input buffer
+        active._raw_input_buffer.push_back(key_evt);
+
+        // Notify the input thread
+        active._raw_input_cv.notify_one();
+    }
 }

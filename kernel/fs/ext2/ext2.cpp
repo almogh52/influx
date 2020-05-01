@@ -741,7 +741,7 @@ influx::structures::dynamic_buffer influx::fs::ext2::read_file(influx::fs::ext2_
 
     // For each complete block, read it
     if (!failed && first_block_read_amount != amount) {
-        while (current_block != last_block) {
+        while (current_block != last_block && !kernel::scheduler()->interrupted()) {
             if (current_block != EXT2_INVALID_BLOCK) {
                 if ((current_read = _drive.read(current_block * _block_size, _block_size,
                                                 buf.data() + (current_offset - offset), true)) !=
@@ -760,7 +760,7 @@ influx::structures::dynamic_buffer influx::fs::ext2::read_file(influx::fs::ext2_
     }
 
     // Read the last block remainder
-    if (!failed && last_block != first_block) {
+    if (!failed && last_block != first_block && !kernel::scheduler()->interrupted()) {
         if (last_block != EXT2_INVALID_BLOCK) {
             if ((current_read = _drive.read(last_block * _block_size, last_block_read_amount,
                                             buf.data() + (amount - last_block_read_amount),
@@ -801,7 +801,7 @@ uint64_t influx::fs::ext2::write_file(influx::fs::ext2_inode *inode, uint64_t of
     }
 
     // While we didn't write the entire data
-    while (current_offset < amount) {
+    while (current_offset < amount && !kernel::scheduler()->interrupted()) {
         // Get(allocate if needed) the block for the current offset
         current_block = get_block_for_offset(inode, offset + current_offset, true);
         if (current_block == EXT2_INVALID_BLOCK) {

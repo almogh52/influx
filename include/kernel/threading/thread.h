@@ -27,8 +27,6 @@ struct thread {
 
     int64_t child_wait_pid;
 
-    bool reblock_after_isr;
-
     bool signal_interruptible;
     bool signal_interrupted;
 
