@@ -148,6 +148,11 @@ void influx::threading::new_fork_process_wrapper(
     // Re-enable interrupts since they were disabled in the reschedule function
     kernel::interrupt_manager()->enable_interrupts();
 
+    uint64_t user_stack_virtual_address =
+        (uint64_t)kernel::scheduler()->_current_task->value().user_stack;
+
+    uint64_t argv_envp_pages = kernel::scheduler()->_current_task->value().args_size / PAGE_SIZE;
+
     // Create a stack copy of the old context
     interrupts::regs old_context_var = *old_context;
 
@@ -181,6 +186,23 @@ void influx::threading::new_fork_process_wrapper(
 
     // Free segments vector and old context
     delete segments;
+
+    // Map user stack
+    for (uint64_t stack_offset = 0; stack_offset < DEFAULT_USER_STACK_SIZE;
+         stack_offset += PAGE_SIZE) {
+        if (!memory::paging_manager::map_page(
+                DEFAULT_USER_STACK_ADDRESS + stack_offset - (argv_envp_pages * PAGE_SIZE),
+                memory::paging_manager::get_physical_address(user_stack_virtual_address +
+                                                             stack_offset) /
+                    PAGE_SIZE)) {
+            kernel::scheduler()->kill_current_task();
+        }
+
+        // Set R/W permission and DPL of ring 3
+        memory::paging_manager::set_pte_permissions(
+            DEFAULT_USER_STACK_ADDRESS + stack_offset - (argv_envp_pages * PAGE_SIZE),
+            PROT_READ | PROT_WRITE, true);
+    }
 
     // Return to the new process
     scheduler_utils::return_to_fork_process(old_context_var);
@@ -799,16 +821,6 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
                           process_fork.program_break_end - process_fork.program_break_start);
     segments += seg;
 
-    // Create a copy of the user stack
-    seg = file_segment{
-        .virtual_address = DEFAULT_USER_STACK_ADDRESS - _current_task->value().args_size,
-        .data = structures::dynamic_buffer(DEFAULT_USER_STACK_SIZE),
-        .protection = PROT_READ | PROT_WRITE};
-    memory::utils::memcpy(seg.data.data(),
-                          (void *)(DEFAULT_USER_STACK_ADDRESS - _current_task->value().args_size),
-                          DEFAULT_USER_STACK_SIZE);
-    segments += seg;
-
     // Create a copy of the args
     seg =
         file_segment{.virtual_address = USERLAND_MEMORY_BARRIER - _current_task->value().args_size,
@@ -858,6 +870,7 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
         _processes.erase(pid);
         return 0;
     }
+    memory::utils::memcpy(user_stack, _current_task->value().user_stack, DEFAULT_USER_STACK_SIZE);
 
     // Create main task for the process
     int_lk.lock();
@@ -866,7 +879,7 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
                           .context = context,
                           .kernel_stack = kernel_stack,
                           .user_stack = user_stack,
-                          .args_size = 0,
+                          .args_size = _current_task->value().args_size,
                           .state = thread_state::ready,
                           .quantum = 0,
                           .sleep_quantum = 0,

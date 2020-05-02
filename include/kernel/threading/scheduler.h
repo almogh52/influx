@@ -131,6 +131,8 @@ class scheduler {
     interrupts::regs *get_task_interrupt_regs(tcb *task);
 
     friend void new_user_process_wrapper(executable *exec);
+    friend void new_fork_process_wrapper(structures::vector<file_segment> *segments,
+                                         interrupts::regs *old_context);
 
     friend class mutex;
     friend class condition_variable;
