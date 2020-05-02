@@ -7,10 +7,11 @@
 #include <kernel/threading/interrupts_lock.h>
 #include <kernel/threading/unique_lock.h>
 
-influx::tty::tty::tty(bool active)
-    : _active(active), _canonical(true), _stdin_enabled(true), _print_stdin(true) {}
+influx::tty::tty::tty(uint64_t tty, bool active)
+    : _tty(tty), _active(active), _canonical(true), _stdin_enabled(true), _print_stdin(true) {}
 
 influx::tty::tty &influx::tty::tty::operator=(const influx::tty::tty &other) {
+    _tty = other._tty;
     _canonical = other._canonical;
     _stdin_enabled = other._stdin_enabled;
     _print_stdin = other._print_stdin;
@@ -180,6 +181,19 @@ void influx::tty::tty::input_thread() {
                 lk.unlock();
                 kernel::tty_manager()->set_active_tty((uint64_t)key_evt.code -
                                                       (uint64_t)key_code::F1 + 1);
+            } else if (!key_evt.released && _stdin_enabled && ctrl && key_evt.code == key_code::C) {
+                // Print new line
+                structures::string str("\n");
+                stdout_write(str);
+
+                // Clean buffer
+                {
+                    threading::lock_guard stdin_lk(_stdin_mutex);
+                    _stdin_buffer.clear();
+                }
+
+                // Send SIGINT to all processes
+                kernel::scheduler()->send_sigint_to_tty(_tty);
             } else if (!key_evt.released && _stdin_enabled) {  // Key pressed
                 key = (right_shift || left_shift) ? shifted_qwerty[key_evt.raw_key]
                                                   : qwerty[key_evt.raw_key];

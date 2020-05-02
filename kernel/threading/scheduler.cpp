@@ -1405,6 +1405,17 @@ void influx::threading::scheduler::kill_all_tasks(uint64_t pid) {
             task_regs->rsp =
                 (uint64_t)current_node->value().kernel_stack + DEFAULT_KERNEL_STACK_SIZE;
             task_regs->rip = (uint64_t)terminate_thread;
+
+            // Set the task as interrupted
+            current_node->value().signal_interrupted = true;
+
+            // If the task is interruptible and it's blocked, interrupt it and unblock it
+            if (current_node->value().signal_interruptible &&
+                (current_node->value().state == thread_state::blocked ||
+                 current_node->value().state == thread_state::sleeping ||
+                 current_node->value().state == thread_state::waiting_for_child)) {
+                unblock_task(current_node);
+            }
         }
 
         // Move to the next node
@@ -1764,6 +1775,36 @@ void influx::threading::scheduler::handle_signal_return(influx::interrupts::regs
 
         // Prepare the signal handler
         prepare_signal_handle(_current_task, sig_info);
+    }
+}
+
+void influx::threading::scheduler::send_sigint_to_tty(uint64_t tty) {
+    structures::vector<uint64_t> tty_processes;
+
+    signal_info sig_info = {.sig = SIGINT,
+                            .error = 0,
+                            .code = 0,
+                            .pid = KERNEL_PID,
+                            .uid = 0,
+                            .status = 0,
+                            .addr = nullptr,
+                            .value_int = 0,
+                            .value_ptr = 0,
+                            .pad = {0}};
+
+    interrupts_lock int_lk;
+
+    // Get all processes of TTY
+    for (auto &process : _processes) {
+        if (process.second.tty == tty) {
+            tty_processes.push_back(process.first);
+        }
+    }
+    int_lk.unlock();
+
+    // Send SIGINT to each process
+    for (const auto &pid : tty_processes) {
+        send_signal_to_process(pid, -1, sig_info);
     }
 }
 

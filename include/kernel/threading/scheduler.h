@@ -70,6 +70,8 @@ class scheduler {
     bool send_signal(int64_t pid, int64_t tid, signal_info sig_info);
     void handle_signal_return(interrupts::regs *context);
 
+    void send_sigint_to_tty(uint64_t tty);
+
     uint64_t get_current_task_id() const;
     uint64_t get_current_process_id() const;
 

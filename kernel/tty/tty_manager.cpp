@@ -11,7 +11,7 @@ influx::tty::tty_manager::tty_manager() : _active_tty(KERNEL_TTY - 1) {}
 void influx::tty::tty_manager::init() {
     // Create ttys
     for (uint64_t i = 1; i <= AMOUNT_OF_TTYS; i++) {
-        _ttys.push_back(tty(false));
+        _ttys.push_back(tty(i, false));
     }
 
     // Activate tty1

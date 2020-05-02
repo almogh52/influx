@@ -60,7 +60,7 @@ constexpr char shifted_qwerty[128] = {
 
 class tty {
    public:
-    tty(bool active);
+    tty(uint64_t tty, bool active);
 
     tty& operator=(const tty& other);
 
@@ -85,6 +85,8 @@ class tty {
     }
 
    private:
+    uint64_t _tty;
+
     bool _active;
     bool _canonical;
     bool _stdin_enabled;
