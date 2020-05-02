@@ -24,6 +24,9 @@ influx::vfs::error influx::tty::tty_filesystem::read(void *fs_file_info, char *b
 
     // Read from the tty
     amount_read = kernel::tty_manager()->get_tty(*tty).stdin_read(buffer, count);
+    if (amount_read == 0) {
+        return vfs::error::interrupted;
+    }
 
     // Update last access time
     threading::lock_guard lk(_tty_access_times_mutex);

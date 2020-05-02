@@ -94,7 +94,10 @@ uint64_t influx::tty::tty::stdin_read(char *buf, size_t count) {
 
         // If the new line wasn't found
         if (newline_char == _stdin_buffer.end()) {
-            _stdin_cv.wait(lk);
+            // Wait for new input
+            if (!_stdin_cv.wait_interruptible(lk)) {
+                return 0;
+            }
         }
 
         // Try to find again the newline character
@@ -119,7 +122,9 @@ uint64_t influx::tty::tty::stdin_read(char *buf, size_t count) {
         // If the buffer is empty, wait for new input
         if (_stdin_buffer.empty()) {
             // Wait for new input
-            _stdin_cv.wait(lk);
+            if (!_stdin_cv.wait_interruptible(lk)) {
+                return 0;
+            }
         }
 
         // Copy the string
