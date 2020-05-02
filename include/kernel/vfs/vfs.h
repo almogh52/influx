@@ -42,6 +42,8 @@ class vfs {
 
     int64_t unlink(const path& file_path);
 
+    filesystem* get_filesystem(size_t fd);
+
     void fork_file_descriptors(structures::unique_hash_map<open_file>& file_descriptors);
 
     static uint64_t dirent_size_for_dir_entry(dir_entry& entry);

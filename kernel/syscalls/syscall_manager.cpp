@@ -55,8 +55,7 @@ int64_t influx::syscalls::syscall_manager::handle_syscall(influx::syscalls::sysc
             return kernel::scheduler()->get_current_process_id();
 
         case syscall::isatty:
-            // TODO: Implement
-            return 1;
+            return handlers::isatty(arg1);
 
         case syscall::kill:
             // TODO: Implement

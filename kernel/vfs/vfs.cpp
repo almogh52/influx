@@ -460,6 +460,24 @@ int64_t influx::vfs::vfs::unlink(const influx::vfs::path& file_path) {
     return error::success;
 }
 
+influx::vfs::filesystem* influx::vfs::vfs::get_filesystem(size_t fd) {
+    open_file file;
+
+    error err;
+
+    threading::unique_lock vnodes_lk(_vnodes_mutex);
+
+    // Try to get the open file object
+    if ((err = get_open_file_for_fd(fd, file)) != error::success) {
+        return nullptr;
+    }
+
+    // Create a ref of the vnode
+    vnode& vn = _vnodes[file.vnode_index];
+
+    return vn.fs;
+}
+
 void influx::vfs::vfs::fork_file_descriptors(
     influx::structures::unique_hash_map<influx::vfs::open_file>& file_descriptors) {
     threading::lock_guard lk(_vnodes_mutex);

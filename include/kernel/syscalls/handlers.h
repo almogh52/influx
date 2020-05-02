@@ -19,6 +19,7 @@ int64_t unlink(const char *file_path);
 int64_t write(size_t fd, const void *buf, size_t count);
 int64_t gettimeofday(time::timeval *tv, void *tz);
 int64_t gethostname(char *name, uint64_t len);
+int64_t isatty(size_t fd);
 };  // namespace handlers
 };  // namespace syscalls
 };  // namespace influx
