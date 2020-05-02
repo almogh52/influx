@@ -79,7 +79,7 @@ LDFLAGS                 += -L${LIBGCC_DIR}
 LDFLAGS                 += -lgcc
 
 # Build Configuration
-BUILD_DIR               := build
+BUILD_DIR               := build/kernel
 OBJ_DIR                 := $(BUILD_DIR)/obj
 SYSROOT_DIR             := $(BUILD_DIR)/sysroot
 EFI_DIR                 := $(BUILD_DIR)/EFI
