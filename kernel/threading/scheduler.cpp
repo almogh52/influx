@@ -610,6 +610,9 @@ int64_t influx::threading::scheduler::wait_for_child(int64_t child_pid) {
     // Set the child pid that the task is waiting for
     _current_task->value().child_wait_pid = child_pid;
 
+    // Set the task as interruptible
+    _current_task->value().signal_interruptible = true;
+
     // Set the task's state to waiting
     _current_task->value().state = thread_state::waiting_for_child;
 
@@ -621,6 +624,11 @@ int64_t influx::threading::scheduler::wait_for_child(int64_t child_pid) {
 
     // Re-schedule to another task
     reschedule();
+
+    // If the task was interrupted
+    if (_current_task->value().signal_interrupted) {
+        return -1;
+    }
 
     return _current_task->value().child_wait_pid;
 }
