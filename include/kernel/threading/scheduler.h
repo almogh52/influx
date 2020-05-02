@@ -49,7 +49,7 @@ class scheduler {
     tcb *create_kernel_thread(void (*func)(void *), void *data, bool blocked = false,
                               uint64_t pid = KERNEL_PID);
 
-    void sleep(uint64_t ms);
+    uint64_t sleep(uint64_t ms);
     int64_t wait_for_child(int64_t child_pid);
 
     void exit(uint8_t code);

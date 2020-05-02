@@ -503,13 +503,16 @@ void influx::threading::scheduler::update_tasks_sleep_quantum() {
     }
 }
 
-void influx::threading::scheduler::sleep(uint64_t ms) {
+uint64_t influx::threading::scheduler::sleep(uint64_t ms) {
     kassert(ms != 0);
 
     interrupts_lock int_lk;
 
     process &current_process = _processes[_current_task->value().pid];
     priority_tcb_queue &task_priority_queue = _priority_queues[current_process.priority];
+
+    // Set the task as interruptible
+    _current_task->value().signal_interruptible = true;
 
     // Set the task's sleep quantum
     _current_task->value().sleep_quantum = ms * (kernel::time_manager()->timer_frequency() / 1000);
@@ -525,6 +528,13 @@ void influx::threading::scheduler::sleep(uint64_t ms) {
 
     // Re-schedule to another task
     reschedule();
+
+    // Set the task as not interruptible
+    _current_task->value().signal_interruptible = false;
+
+    // Return the remaining ms
+    return _current_task->value().sleep_quantum /
+           (kernel::time_manager()->timer_frequency() / 1000);
 }
 
 int64_t influx::threading::scheduler::wait_for_child(int64_t child_pid) {
@@ -667,6 +677,7 @@ void influx::threading::scheduler::unblock_task(influx::threading::tcb *task) {
 
     // If the task is blocked
     if (task->value().state == thread_state::blocked ||
+        task->value().state == thread_state::sleeping ||
         task->value().state == thread_state::waiting_for_child) {
         // Update the state of the task to ready
         task->value().state = thread_state::ready;
@@ -1678,7 +1689,10 @@ void influx::threading::scheduler::send_signal_to_task(influx::threading::tcb *t
     task->value().signal_interrupted = true;
 
     // If the task is interruptible and it's blocked, interrupt it and unblock it
-    if (task->value().signal_interruptible && task->value().state == thread_state::blocked) {
+    if (task->value().signal_interruptible &&
+        (task->value().state == thread_state::blocked ||
+         task->value().state == thread_state::sleeping ||
+         task->value().state == thread_state::waiting_for_child)) {
         unblock_task(task);
     }
 }
