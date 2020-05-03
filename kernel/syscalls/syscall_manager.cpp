@@ -58,8 +58,7 @@ int64_t influx::syscalls::syscall_manager::handle_syscall(influx::syscalls::sysc
             return handlers::isatty(arg1);
 
         case syscall::kill:
-            // TODO: Implement
-            return -EINVAL;
+            return handlers::kill(arg1, arg2, (threading::signal)arg3);
 
         case syscall::link:
             // TODO: Implement
@@ -96,15 +95,20 @@ int64_t influx::syscalls::syscall_manager::handle_syscall(influx::syscalls::sysc
         case syscall::write:
             return handlers::write(arg1, (const void *)arg2, arg3);
 
-        case syscall::signal:
-            // TODO: Implement
-            return -EINVAL;
+        case syscall::sigaction:
+            return handlers::sigaction((threading::signal)arg1,
+                                       (const threading::signal_action *)arg2,
+                                       (threading::signal_action *)arg3);
 
         case syscall::gettimeofday:
             return handlers::gettimeofday((time::timeval *)arg1, (void *)arg2);
 
         case syscall::gethostname:
             return handlers::gethostname((char *)arg1, arg2);
+
+        case syscall::sigreturn:
+            kernel::scheduler()->handle_signal_return(context);
+            return context->rax;
 
         default:
             return -EINVAL;

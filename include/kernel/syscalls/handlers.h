@@ -1,5 +1,7 @@
 #pragma once
 #include <kernel/syscalls/stat.h>
+#include <kernel/threading/signal.h>
+#include <kernel/threading/signal_action.h>
 #include <kernel/time/timeval.h>
 #include <kernel/vfs/file_info.h>
 #include <stddef.h>
@@ -20,6 +22,9 @@ int64_t write(size_t fd, const void *buf, size_t count);
 int64_t gettimeofday(time::timeval *tv, void *tz);
 int64_t gethostname(char *name, uint64_t len);
 int64_t isatty(size_t fd);
+int64_t kill(int64_t pid, int64_t tid, threading::signal sig);
+int64_t sigaction(threading::signal signum, const threading::signal_action *act,
+                  threading::signal_action *oldact);
 };  // namespace handlers
 };  // namespace syscalls
 };  // namespace influx

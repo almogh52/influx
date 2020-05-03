@@ -972,7 +972,13 @@ uint64_t influx::threading::scheduler::sbrk(int64_t inc) {
     return task_process.program_break_end - inc;
 }
 
-void influx::threading::scheduler::set_signal_action(uint64_t sig,
+influx::threading::signal_action influx::threading::scheduler::get_signal_action(
+    influx::threading::signal sig) {
+    interrupts_lock int_lk;
+    return _processes[_current_task->value().pid].signal_dispositions[sig];
+}
+
+void influx::threading::scheduler::set_signal_action(influx::threading::signal sig,
                                                      influx::threading::signal_action action) {
     interrupts_lock int_lk;
 
@@ -1022,8 +1028,10 @@ bool influx::threading::scheduler::send_signal(int64_t pid, int64_t tid,
         int_lk.unlock();
 
         // For each process, send the signal
-        for (const auto &pid : prcoesses) {
-            send_signal_to_process(pid, -1, sig_info);
+        if (sig_info.sig != 0) {
+            for (const auto &pid : prcoesses) {
+                send_signal_to_process(pid, -1, sig_info);
+            }
         }
     } else {
         // Check that process and the thread exists
@@ -1037,7 +1045,9 @@ bool influx::threading::scheduler::send_signal(int64_t pid, int64_t tid,
         int_lk.unlock();
 
         // Send the signal to the process
-        send_signal_to_process((uint64_t)pid, tid, sig_info);
+        if (sig_info.sig != 0) {
+            send_signal_to_process((uint64_t)pid, tid, sig_info);
+        }
     }
 
     return true;
@@ -1614,6 +1624,11 @@ void influx::threading::scheduler::send_signal_to_process(uint64_t pid, int64_t 
     priority_tcb_queue &process_priority_queue = _priority_queues[process.priority];
 
     tcb *current_node = process_priority_queue.start;
+
+    // Check valid process id
+    if (pid == 0 || pid == INIT_PROCESS_PID) {
+        return;
+    }
 
     // If the signal is the kill or stop signal or the handler is the default signal, call the
     // default handler

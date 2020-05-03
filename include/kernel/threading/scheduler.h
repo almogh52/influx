@@ -66,7 +66,8 @@ class scheduler {
     uint64_t fork(interrupts::regs old_context);
     uint64_t sbrk(int64_t inc);
 
-    void set_signal_action(uint64_t sig, signal_action action);
+    signal_action get_signal_action(signal sig);
+    void set_signal_action(signal sig, signal_action action);
     bool send_signal(int64_t pid, int64_t tid, signal_info sig_info);
     void handle_signal_return(interrupts::regs *context);
 

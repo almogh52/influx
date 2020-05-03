@@ -21,9 +21,10 @@ enum class syscall {
     unlink,
     wait,
     write,
-    signal,
+    sigaction,
     gettimeofday,
-    gethostname
+    gethostname,
+    sigreturn
 };
 };
 };  // namespace influx
