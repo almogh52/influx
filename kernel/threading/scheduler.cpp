@@ -1599,15 +1599,17 @@ void influx::threading::scheduler::prepare_signal_handle(influx::threading::tcb 
     regs->rip = _processes[task->value().pid].signal_dispositions[sig_info.sig].handler.raw;
 
     // Copy the signal info structure to the stack
-    regs->rsp -= sizeof(signal_info);
-    memory::utils::memcpy(
-        (void *)((uint64_t)task->value().user_stack + (regs->rsp - user_stack_start)), &sig_info,
-        sizeof(signal_info));
+    if (_processes[task->value().pid].signal_dispositions[sig_info.sig].flags & SA_SIGINFO) {
+        regs->rsp -= sizeof(signal_info);
+        memory::utils::memcpy(
+            (void *)((uint64_t)task->value().user_stack + (regs->rsp - user_stack_start)),
+            &sig_info, sizeof(signal_info));
+        regs->rsi = regs->rsp;
+        regs->rdx = 0;  // TODO: Implement user context
+    }
 
     // Set the parameters for the handler function
     regs->rdi = sig_info.sig;
-    regs->rsi = regs->rsp;
-    regs->rdx = 0;  // TODO: Implement user context
 
     // Set the restorer function in the user stack
     regs->rsp -= sizeof(uint64_t);
@@ -1727,10 +1729,17 @@ void influx::threading::scheduler::send_signal_to_task(influx::threading::tcb *t
 
     // Save the current signal mask and mask it using the signal's disposition mask
     task->value().old_sig_mask = task->value().sig_mask;
-    task->value().sig_mask |= process.signal_dispositions[sig_info.sig].mask;
+    task->value().sig_mask |=
+        process.signal_dispositions[sig_info.sig].mask |
+        ((process.signal_dispositions[sig_info.sig].flags & SA_NODEFER) ? 0 : (1 << sig_info.sig));
 
     // Prepare the signal handler
     prepare_signal_handle(task, sig_info);
+
+    // Reset to default handler, if requested
+    if (process.signal_dispositions[sig_info.sig].flags & SA_RESETHAND) {
+        process.signal_dispositions[sig_info.sig].handler.raw = SIG_DFL;
+    }
 
     // Set the task as interrupted
     task->value().signal_interrupted = true;
