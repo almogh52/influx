@@ -240,8 +240,8 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .signal_dispositions = create_default_signal_dispositions(),
                               .pending_std_signals = structures::vector<signal_info>(),
                               .tty = KERNEL_TTY,
-                              .kill_signal = SIGINVL,
-                              .exit_code = 0,
+                              .exit_code = CLD_EXITED,
+                              .exit_status = 0,
                               .terminated = false,
                               .new_exec_process = false});
 
@@ -325,8 +325,8 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .signal_dispositions = create_default_signal_dispositions(),
                               .pending_std_signals = structures::vector<signal_info>(),
                               .tty = INIT_PROCESS_TTY,
-                              .kill_signal = SIGINVL,
-                              .exit_code = 0,
+                              .exit_code = CLD_EXITED,
+                              .exit_status = 0,
                               .terminated = false,
                               .new_exec_process = false});
 
@@ -572,6 +572,11 @@ int64_t influx::threading::scheduler::wait_for_child(int64_t child_pid) {
     process &current_process = _processes[_current_task->value().pid];
     priority_tcb_queue &task_priority_queue = _priority_queues[current_process.priority];
 
+    // If the task was interrupted
+    if (_current_task->value().signal_interrupted) {
+        return -1;
+    }
+
     // Verify that the current process has child processes and that the target process exists and is
     // a child of the current process
     if ((child_pid == WAIT_FOR_ANY_PROCESS && current_process.child_processes.empty()) ||
@@ -583,6 +588,15 @@ int64_t influx::threading::scheduler::wait_for_child(int64_t child_pid) {
 
     // If the child had already terminated
     if (child_pid != WAIT_FOR_ANY_PROCESS && _processes[child_pid].terminated) {
+        // If the process was killed with a signal
+        if (_processes[child_pid].exit_code != CLD_EXITED) {
+            _log("Process '%s' (PID: %d) was killed using signal %d.\n",
+                 _processes[child_pid].name.c_str(), child_pid, _processes[child_pid].exit_status);
+        } else {
+            _log("Process '%s' (PID: %d) has exited with code %d.\n",
+                 _processes[child_pid].name.c_str(), child_pid, _processes[child_pid].exit_status);
+        }
+
         // Remove the process object
         _processes.erase(child_pid);
 
@@ -596,6 +610,15 @@ int64_t influx::threading::scheduler::wait_for_child(int64_t child_pid) {
         // Search for a terminated process
         for (auto &pid : current_process.child_processes) {
             if (_processes[pid].terminated) {
+                // If the process was killed with a signal
+                if (_processes[pid].exit_code != CLD_EXITED) {
+                    _log("Process '%s' (PID: %d) was killed using signal %d.\n",
+                         _processes[pid].name.c_str(), pid, _processes[pid].exit_status);
+                } else {
+                    _log("Process '%s' (PID: %d) has exited with code %d.\n",
+                         _processes[pid].name.c_str(), pid, _processes[pid].exit_status);
+                }
+
                 // Remove the process object
                 _processes.erase(pid);
 
@@ -607,23 +630,26 @@ int64_t influx::threading::scheduler::wait_for_child(int64_t child_pid) {
         }
     }
 
-    // Set the child pid that the task is waiting for
-    _current_task->value().child_wait_pid = child_pid;
+    // If the task isn't interrupted yet
+    if (!_current_task->value().signal_interrupted) {
+        // Set the child pid that the task is waiting for
+        _current_task->value().child_wait_pid = child_pid;
 
-    // Set the task as interruptible
-    _current_task->value().signal_interruptible = true;
+        // Set the task as interruptible
+        _current_task->value().signal_interruptible = true;
 
-    // Set the task's state to waiting
-    _current_task->value().state = thread_state::waiting_for_child;
+        // Set the task's state to waiting
+        _current_task->value().state = thread_state::waiting_for_child;
 
-    // If it is the next task, set the next task as null
-    if (task_priority_queue.next_task == _current_task) {
-        task_priority_queue.next_task = nullptr;
+        // If it is the next task, set the next task as null
+        if (task_priority_queue.next_task == _current_task) {
+            task_priority_queue.next_task = nullptr;
+        }
+        int_lk.unlock();
+
+        // Re-schedule to another task
+        reschedule();
     }
-    int_lk.unlock();
-
-    // Re-schedule to another task
-    reschedule();
 
     // If the task was interrupted
     if (_current_task->value().signal_interrupted) {
@@ -729,7 +755,8 @@ void influx::threading::scheduler::exit(uint8_t code) {
     kill_all_tasks(_current_task->value().pid);
 
     // Set the error code
-    process.exit_code = code;
+    process.exit_code = CLD_EXITED;
+    process.exit_status = code;
 
     // Kill the current task
     kill_current_task();
@@ -795,7 +822,7 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
     interrupts::regs *old_context_obj = nullptr;
 
     interrupts_lock int_lk;
-    process process_fork = _processes[_current_task->value().pid];
+    process &parent_process = _processes[_current_task->value().pid];
     int_lk.unlock();
 
     // Allocate PML4T
@@ -808,7 +835,7 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
     memory::paging_manager::init_user_process_paging((uint64_t)pml4t);
 
     // Create a copy of all the segments of the current process
-    for (const auto &exec_seg : process_fork.segments) {
+    for (const auto &exec_seg : parent_process.segments) {
         seg = file_segment{.virtual_address = exec_seg.virtual_address,
                            .data = structures::dynamic_buffer(exec_seg.size),
                            .protection = exec_seg.protection};
@@ -821,12 +848,12 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
     }
 
     // Create a copy of the program break
-    seg = file_segment{.virtual_address = process_fork.program_break_start,
-                       .data = structures::dynamic_buffer(process_fork.program_break_end -
-                                                          process_fork.program_break_start),
+    seg = file_segment{.virtual_address = parent_process.program_break_start,
+                       .data = structures::dynamic_buffer(parent_process.program_break_end -
+                                                          parent_process.program_break_start),
                        .protection = PROT_READ | PROT_WRITE};
-    memory::utils::memcpy(seg.data.data(), (void *)process_fork.program_break_start,
-                          process_fork.program_break_end - process_fork.program_break_start);
+    memory::utils::memcpy(seg.data.data(), (void *)parent_process.program_break_start,
+                          parent_process.program_break_end - parent_process.program_break_start);
     segments += seg;
 
     // Create a copy of the args
@@ -840,21 +867,37 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
     segments += seg;
 
     // Fork the file descriptors
-    kernel::vfs()->fork_file_descriptors(process_fork.file_descriptors);
-
-    // Reset properties for the new process
-    process_fork.cr3 = memory::paging_manager::get_physical_address((uint64_t)pml4t);
-    process_fork.pml4t = pml4t;
-    process_fork.threads = structures::unique_vector();
-    process_fork.child_processes = structures::vector<uint64_t>();
-    process_fork.ppid = process_fork.pid;
-    process_fork.pending_std_signals = structures::vector<signal_info>();
+    kernel::vfs()->fork_file_descriptors(parent_process.file_descriptors);
 
     // Create the fork process
     int_lk.lock();
-    pid = _processes.insert_unique(process());
-    process_fork.pid = pid;
-    _processes[pid] = process_fork;
+    pid = _processes.insert_unique(
+        process{.pid = 0,
+                .ppid = parent_process.pid,
+                .priority = parent_process.priority,
+                .system = parent_process.system,
+                .cr3 = memory::paging_manager::get_physical_address((uint64_t)pml4t),
+                .pml4t = pml4t,
+                .program_break_start = parent_process.program_break_start,
+                .program_break_end = parent_process.program_break_end,
+                .threads = structures::unique_vector(),
+                .child_processes = structures::vector<uint64_t>(),
+                .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
+                .name = parent_process.name,
+                .segments = parent_process.segments,
+                .signal_dispositions = parent_process.signal_dispositions,
+                .pending_std_signals = structures::vector<signal_info>(),
+                .tty = parent_process.tty,
+                .exit_code = CLD_EXITED,
+                .exit_status = 0,
+                .terminated = false,
+                .new_exec_process = false});
+    _processes[pid].pid = pid;
+
+    // Recreate file descriptors
+    for (auto &fd : parent_process.file_descriptors) {
+        _processes[pid].file_descriptors[fd.first] = fd.second;
+    }
 
     // Add the process as a child process for the parent process
     _processes[_current_task->value().pid].child_processes += pid;
@@ -913,10 +956,6 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
 
     // Queue the task
     queue_task(task);
-
-    // Reschedule to another task to prevent a deadlock issue
-    // TODO: Find the deadlock and fix it
-    reschedule();
 
     return pid;
 }
@@ -1220,8 +1259,8 @@ uint64_t influx::threading::scheduler::start_process(influx::threading::executab
                     .signal_dispositions = create_default_signal_dispositions(),
                     .pending_std_signals = structures::vector<signal_info>(),
                     .tty = _processes[_current_task->value().pid].tty,
-                    .kill_signal = SIGINVL,
-                    .exit_code = 0,
+                    .exit_code = CLD_EXITED,
+                    .exit_status = 0,
                     .terminated = false,
                     .new_exec_process = false};
 
@@ -1241,6 +1280,9 @@ uint64_t influx::threading::scheduler::start_process(influx::threading::executab
     }
 
     // Create file descriptors for stdin, stdout and stderr
+    kernel::vfs()
+        ->_vnodes[kernel::tty_manager()->get_tty_vnode(_processes[pid].tty)]
+        .amount_of_open_files += 3;
     _processes[pid].file_descriptors.insert_unique(
         vfs::open_file{.vnode_index = kernel::tty_manager()->get_tty_vnode(_processes[pid].tty),
                        .position = 0,
@@ -1326,6 +1368,17 @@ void influx::threading::scheduler::clean_process(uint64_t pid, bool erase,
     for (const auto &child_pid : process.child_processes) {
         // If it was already terminated (zombie process), remove it from the list
         if (_processes[child_pid].terminated) {
+            // If the process was killed with a signal
+            if (_processes[child_pid].exit_code != CLD_EXITED) {
+                _log("Process '%s' (PID: %d) was killed using signal %d.\n",
+                     _processes[child_pid].name.c_str(), child_pid,
+                     _processes[child_pid].exit_status);
+            } else {
+                _log("Process '%s' (PID: %d) has exited with code %d.\n",
+                     _processes[child_pid].name.c_str(), child_pid,
+                     _processes[child_pid].exit_status);
+            }
+
             _processes.erase(child_pid);
         } else {
             _processes[INIT_PROCESS_PID].child_processes += child_pid;
@@ -1335,6 +1388,19 @@ void influx::threading::scheduler::clean_process(uint64_t pid, bool erase,
 
     // Don't check for waiting tasks if not erasing process
     if (erase) {
+        // Send SIGCHLD to parent process
+        send_signal_to_process(process.ppid, -1,
+                               signal_info{.sig = SIGCHLD,
+                                           .error = 0,
+                                           .code = process.exit_code,
+                                           .pid = process.pid,
+                                           .uid = 0,
+                                           .status = process.exit_status,
+                                           .addr = nullptr,
+                                           .value_int = 0,
+                                           .value_ptr = nullptr,
+                                           .pad = {0}});
+
         // Get the start node of the priority queue of the parent process
         start_node = _priority_queues[_processes[process.ppid].priority].start;
         currnet_node = start_node;
@@ -1391,20 +1457,21 @@ void influx::threading::scheduler::clean_process(uint64_t pid, bool erase,
 
     // If the process was waited or it was executed by init process, delete the process
     // object
-    if (erase && (waited || process.ppid == INIT_PROCESS_PID)) {
+    if (erase && (waited || process.ppid == INIT_PROCESS_PID ||
+                  (_processes[process.ppid].signal_dispositions[SIGCHLD].flags & SA_NOCLDWAIT))) {
+        // If the process was killed with a signal
+        if (process.exit_code != CLD_EXITED) {
+            _log("Process '%s' (PID: %d) was killed using signal %d.\n", process.name.c_str(), pid,
+                 process.exit_status);
+        } else {
+            _log("Process '%s' (PID: %d) has exited with code %d.\n", process.name.c_str(), pid,
+                 process.exit_status);
+        }
+
         _processes[process.ppid].child_processes.erase(
             algorithm::find(_processes[process.ppid].child_processes.begin(),
                             _processes[process.ppid].child_processes.end(), pid));
         _processes.erase(pid);
-
-        // If the process was killed with a signal
-        if (process.kill_signal != SIGINVL) {
-            _log("Process '%s' (PID: %d) was killed using signal %d.\n", process.name.c_str(), pid,
-                 process.kill_signal);
-        } else {
-            _log("Process '%s' (PID: %d) has exited with code %d.\n", process.name.c_str(), pid,
-                 process.exit_code);
-        }
     } else {
         // Set the process as terminated and waiting to be deleted (zombie process)
         process.terminated = true;
@@ -1460,7 +1527,8 @@ void influx::threading::scheduler::kill_with_signal(uint64_t pid, influx::thread
     // Set the process as terminated and set the kill signal
     int_lk.lock();
     _processes[pid].terminated = true;
-    _processes[pid].kill_signal = sig;
+    _processes[pid].exit_code = CLD_KILLED;
+    _processes[pid].exit_status = sig;
     int_lk.unlock();
 
     // Kill all the tasks of the process
@@ -1790,6 +1858,7 @@ void influx::threading::scheduler::handle_signal_return(influx::interrupts::regs
     _current_task->value().sig_mask = _current_task->value().old_sig_mask;
 
     // Set the task as not interrupted
+    _current_task->value().signal_interruptible = false;
     _current_task->value().signal_interrupted = false;
 
     // Set the current signal as invalid

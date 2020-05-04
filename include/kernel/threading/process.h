@@ -41,8 +41,8 @@ struct process {
 
     uint64_t tty;
 
-    signal kill_signal;
-    uint8_t exit_code;
+    uint64_t exit_code;
+    uint64_t exit_status;
 
     bool terminated;
     bool new_exec_process;

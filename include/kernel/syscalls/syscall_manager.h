@@ -21,6 +21,7 @@ class syscall_manager {
                            uint64_t arg4, interrupts::regs *context);
 
     threading::signal get_signal() const;
+    void reset_signal();
     void save_return_value(uint64_t value) const;
 
     friend void syscall_interrupt_handler(interrupts::regs *context);
