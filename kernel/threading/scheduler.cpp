@@ -751,15 +751,12 @@ void influx::threading::scheduler::exit(uint8_t code) {
     process &process = _processes[_current_task->value().pid];
     int_lk.unlock();
 
-    // Kill all tasks of the process
-    kill_all_tasks(_current_task->value().pid);
-
     // Set the error code
     process.exit_code = CLD_EXITED;
     process.exit_status = code;
 
-    // Kill the current task
-    kill_current_task();
+    // Kill all tasks of the process
+    kill_all_tasks(_current_task->value().pid);
 }
 
 uint64_t influx::threading::scheduler::exec(
@@ -1493,7 +1490,7 @@ void influx::threading::scheduler::kill_all_tasks(uint64_t pid) {
     do {
         // If the current node is for the wanted process and it's not the current task, set it to be
         // terminated
-        if (current_node->value().pid == pid && current_node != _current_task) {
+        if (current_node->value().pid == pid) {
             // Get the interrupt regs of the task
             task_regs = get_task_interrupt_regs(current_node);
 
@@ -1522,14 +1519,11 @@ void influx::threading::scheduler::kill_all_tasks(uint64_t pid) {
 }
 
 void influx::threading::scheduler::kill_with_signal(uint64_t pid, influx::threading::signal sig) {
-    interrupts_lock int_lk(false);
+    interrupts_lock int_lk;
 
-    // Set the process as terminated and set the kill signal
-    int_lk.lock();
-    _processes[pid].terminated = true;
+    // Set the kill signal of the process
     _processes[pid].exit_code = CLD_KILLED;
     _processes[pid].exit_status = sig;
-    int_lk.unlock();
 
     // Kill all the tasks of the process
     kill_all_tasks(pid);
