@@ -53,6 +53,7 @@ void influx::tty::tty_manager::create_tty_vnodes() {
         fs_file_info = new uint64_t(tty);
         fs->get_file_info(fs_file_info, file);
         kernel::vfs()->create_vnode_for_file(fs, fs_file_info, file, vnode);
+        vnode.second->amount_of_open_files++;
         _ttys_vnodes.push_back(vnode.first);
     }
 }
