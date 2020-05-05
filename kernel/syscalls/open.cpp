@@ -49,6 +49,7 @@ influx::vfs::file_permissions convert_permissions(int mode) {
 }
 
 int64_t influx::syscalls::handlers::open(const char *file_name, int flags, int mode) {
+    vfs::path file_path;
     vfs::open_flags open_flags = convert_flags(flags);
     vfs::file_permissions permissions = convert_permissions(mode);
 
@@ -64,8 +65,14 @@ int64_t influx::syscalls::handlers::open(const char *file_name, int flags, int m
         return -EFAULT;
     }
 
+    // If the file path is relative, try to make it absolute
+    file_path = vfs::path(file_name);
+    if (file_path.is_relative()) {
+        file_path = kernel::scheduler()->get_working_dir() + file_name;
+    }
+
     // Try to open the file
-    fd = kernel::vfs()->open(file_name, open_flags, permissions);
+    fd = kernel::vfs()->open(file_path, open_flags, permissions);
 
     // Handle errors
     if (fd < 0) {

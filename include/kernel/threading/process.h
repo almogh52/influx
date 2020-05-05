@@ -7,6 +7,7 @@
 #include <kernel/threading/signal.h>
 #include <kernel/threading/signal_action.h>
 #include <kernel/vfs/open_file.h>
+#include <kernel/vfs/path.h>
 #include <memory/paging.h>
 #include <stdint.h>
 
@@ -27,6 +28,8 @@ struct process {
 
     uint64_t program_break_start;
     uint64_t program_break_end;
+
+    vfs::path working_dir;
 
     structures::unique_vector threads;
     structures::vector<uint64_t> child_processes;

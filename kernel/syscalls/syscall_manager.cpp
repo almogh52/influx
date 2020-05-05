@@ -115,6 +115,12 @@ int64_t influx::syscalls::syscall_manager::handle_syscall(influx::syscalls::sysc
         case syscall::getdents:
             return handlers::getdents(arg1, (dirent *)arg2, arg3);
 
+        case syscall::chdir:
+            return handlers::chdir((const char *)arg1);
+
+        case syscall::getcwd:
+            return (uint64_t)handlers::getcwd((char *)arg1, arg2);
+
         default:
             return -EINVAL;
     }

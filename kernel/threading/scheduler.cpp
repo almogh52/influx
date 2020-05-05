@@ -232,6 +232,7 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .pml4t = nullptr,
                               .program_break_start = 0,
                               .program_break_end = 0,
+                              .working_dir = "/",
                               .threads = structures::unique_vector(),
                               .child_processes = structures::vector<uint64_t>(),
                               .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
@@ -317,6 +318,7 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .pml4t = nullptr,
                               .program_break_start = 0,
                               .program_break_end = 0,
+                              .working_dir = "/",
                               .threads = structures::unique_vector(),
                               .child_processes = structures::vector<uint64_t>(),
                               .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
@@ -897,6 +899,7 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
                 .pml4t = pml4t,
                 .program_break_start = parent_process.program_break_start,
                 .program_break_end = parent_process.program_break_end,
+                .working_dir = parent_process.working_dir,
                 .threads = structures::unique_vector(),
                 .child_processes = structures::vector<uint64_t>(),
                 .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
@@ -1026,6 +1029,40 @@ uint64_t influx::threading::scheduler::sbrk(int64_t inc) {
     task_process.program_break_end += inc;
 
     return task_process.program_break_end - inc;
+}
+
+influx::vfs::path influx::threading::scheduler::get_working_dir() {
+    interrupts_lock int_lk;
+    return _processes[_current_task->value().pid].working_dir;
+}
+
+int64_t influx::threading::scheduler::set_working_dir(influx::vfs::path dir) {
+    vfs::file_info info;
+    int64_t err;
+
+    interrupts_lock int_lk;
+
+    process &process = _processes[_current_task->value().pid];
+
+    // If the directory is relative, make it absolute using current working dir
+    if (dir.is_relative()) {
+        dir = process.working_dir + dir;
+    }
+
+    // Try to get the stat of the file
+    if ((err = kernel::vfs()->stat(dir, info)) != vfs::error::success) {
+        return err;
+    }
+
+    // If the file isn't a directory
+    if (info.type != vfs::file_type::directory) {
+        return vfs::error::file_is_not_directory;
+    }
+
+    // Set the new working dir
+    process.working_dir = dir;
+
+    return 0;
 }
 
 influx::threading::signal_action influx::threading::scheduler::get_signal_action(
@@ -1268,6 +1305,7 @@ uint64_t influx::threading::scheduler::start_process(influx::threading::executab
                     .pml4t = pml4t,
                     .program_break_start = 0,
                     .program_break_end = 0,
+                    .working_dir = _processes[_current_task->value().pid].working_dir,
                     .threads = structures::unique_vector(),
                     .child_processes = structures::vector<uint64_t>(),
                     .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
