@@ -1455,7 +1455,8 @@ void influx::threading::scheduler::clean_process(uint64_t pid, bool erase,
     // If the process was waited or it was executed by init process, delete the process
     // object
     if (erase && (waited || process.ppid == INIT_PROCESS_PID ||
-                  (_processes[process.ppid].signal_dispositions[SIGCHLD].flags & SA_NOCLDWAIT))) {
+                  (_processes[process.ppid].signal_dispositions[SIGCHLD].flags & SA_NOCLDWAIT) ||
+                  _processes[process.ppid].signal_dispositions[SIGCHLD].handler.raw == SIG_IGN)) {
         // If the process was killed with a signal
         if (process.exit_code != CLD_EXITED) {
             _log("Process '%s' (PID: %d) was killed using signal %d.\n", process.name.c_str(), pid,
