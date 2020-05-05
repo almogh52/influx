@@ -109,6 +109,9 @@ int64_t influx::syscalls::syscall_manager::handle_syscall(influx::syscalls::sysc
             kernel::scheduler()->handle_signal_return(context);
             return context->rax;
 
+        case syscall::sleep:
+            return handlers::sleep(arg1);
+
         default:
             return -EINVAL;
     }

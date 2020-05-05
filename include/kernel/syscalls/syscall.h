@@ -24,7 +24,8 @@ enum class syscall {
     sigaction,
     gettimeofday,
     gethostname,
-    sigreturn
+    sigreturn,
+    sleep
 };
 };
 };  // namespace influx
