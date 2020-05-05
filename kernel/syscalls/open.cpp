@@ -55,7 +55,7 @@ int64_t influx::syscalls::handlers::open(const char *file_name, int flags, int m
     int64_t fd = 0;
 
     // Verify mode
-    if (mode & ~(S_IRWXU | S_IRWXG | S_IRWXO)) {
+    if ((flags & O_CREAT) > 0 && mode & ~(S_IRWXU | S_IRWXG | S_IRWXO)) {
         return -EINVAL;
     }
 

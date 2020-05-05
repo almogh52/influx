@@ -112,6 +112,9 @@ int64_t influx::syscalls::syscall_manager::handle_syscall(influx::syscalls::sysc
         case syscall::sleep:
             return handlers::sleep(arg1);
 
+        case syscall::getdents:
+            return handlers::getdents(arg1, (dirent *)arg2, arg3);
+
         default:
             return -EINVAL;
     }

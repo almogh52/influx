@@ -1,4 +1,5 @@
 #pragma once
+#include <dirent.h>
 #include <kernel/syscalls/stat.h>
 #include <kernel/threading/signal.h>
 #include <kernel/threading/signal_action.h>
@@ -27,6 +28,7 @@ int64_t sigaction(threading::signal signum, const threading::signal_action *act,
                   threading::signal_action *oldact);
 int64_t waitpid(int64_t pid, int *wait_status, uint64_t flags);
 uint64_t sleep(uint64_t seconds);
+int64_t getdents(size_t fd, dirent *dirp, uint64_t count);
 };  // namespace handlers
 };  // namespace syscalls
 };  // namespace influx
