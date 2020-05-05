@@ -25,6 +25,7 @@ int64_t isatty(size_t fd);
 int64_t kill(int64_t pid, int64_t tid, threading::signal sig);
 int64_t sigaction(threading::signal signum, const threading::signal_action *act,
                   threading::signal_action *oldact);
+int64_t waitpid(int64_t pid, int *wait_status, uint64_t flags);
 };  // namespace handlers
 };  // namespace syscalls
 };  // namespace influx

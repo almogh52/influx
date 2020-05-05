@@ -19,7 +19,7 @@ enum class syscall {
     stat,
     times,
     unlink,
-    wait,
+    waitpid,
     write,
     sigaction,
     gettimeofday,

@@ -50,7 +50,7 @@ class scheduler {
                               uint64_t pid = KERNEL_PID);
 
     uint64_t sleep(uint64_t ms);
-    int64_t wait_for_child(int64_t child_pid);
+    int64_t wait_for_child(int64_t child_pid, uint16_t *wait_status, bool no_hang);
 
     void exit(uint8_t code);
     void kill_current_task();
@@ -130,6 +130,8 @@ class scheduler {
     void default_signal_handler(process &process, signal_info sig_info);
 
     interrupts::regs *get_task_interrupt_regs(tcb *task);
+
+    void create_wait_status(uint16_t *wait_status, process &process);
 
     friend void new_user_process_wrapper(executable *exec);
     friend void new_fork_process_wrapper(structures::vector<file_segment> *segments,

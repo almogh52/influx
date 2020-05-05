@@ -88,10 +88,8 @@ int64_t influx::syscalls::syscall_manager::handle_syscall(influx::syscalls::sysc
         case syscall::unlink:
             return handlers::unlink((const char *)arg1);
 
-        case syscall::wait:
-            tmp = (int64_t)kernel::scheduler()->wait_for_child(WAIT_FOR_ANY_PROCESS);
-            return (int64_t)tmp < 0 ? (kernel::scheduler()->interrupted() ? -EINTR : -ECHILD)
-                                    : (int64_t)tmp;
+        case syscall::waitpid:
+            return handlers::waitpid(arg1, (int *)arg2, arg3);
 
         case syscall::write:
             return handlers::write(arg1, (const void *)arg2, arg3);

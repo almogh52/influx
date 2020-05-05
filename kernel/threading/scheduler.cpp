@@ -559,7 +559,8 @@ uint64_t influx::threading::scheduler::sleep(uint64_t ms) {
            (kernel::time_manager()->timer_frequency() / 1000);
 }
 
-int64_t influx::threading::scheduler::wait_for_child(int64_t child_pid) {
+int64_t influx::threading::scheduler::wait_for_child(int64_t child_pid, uint16_t *wait_status,
+                                                     bool no_hang) {
     // ** -1 for all children **
 
     // Verify child pid
@@ -597,6 +598,9 @@ int64_t influx::threading::scheduler::wait_for_child(int64_t child_pid) {
                  _processes[child_pid].name.c_str(), child_pid, _processes[child_pid].exit_status);
         }
 
+        // Create wait status
+        create_wait_status(wait_status, _processes[child_pid]);
+
         // Remove the process object
         _processes.erase(child_pid);
 
@@ -619,6 +623,9 @@ int64_t influx::threading::scheduler::wait_for_child(int64_t child_pid) {
                          _processes[pid].name.c_str(), pid, _processes[pid].exit_status);
                 }
 
+                // Create wait status
+                create_wait_status(wait_status, _processes[pid]);
+
                 // Remove the process object
                 _processes.erase(pid);
 
@@ -628,6 +635,11 @@ int64_t influx::threading::scheduler::wait_for_child(int64_t child_pid) {
                 return pid;
             }
         }
+    }
+
+    // If no hang, return
+    if (no_hang) {
+        return 0;
     }
 
     // If the task isn't interrupted yet
@@ -655,6 +667,14 @@ int64_t influx::threading::scheduler::wait_for_child(int64_t child_pid) {
     if (_current_task->value().signal_interrupted) {
         return -1;
     }
+
+    // Create wait status
+    create_wait_status(wait_status, _processes[_current_task->value().child_wait_pid]);
+
+    // Remove process
+    int_lk.lock();
+    _processes.erase(_current_task->value().child_wait_pid);
+    int_lk.unlock();
 
     return _current_task->value().child_wait_pid;
 }
@@ -1407,7 +1427,7 @@ void influx::threading::scheduler::clean_process(uint64_t pid, bool erase,
             do {
                 // If the task belongs to the parent process and it's waiting for a
                 // child process, check if the process is the wanted process
-                if (pid == process.ppid &&
+                if (currnet_node->value().pid == process.ppid &&
                     currnet_node->value().state == thread_state::waiting_for_child) {
                     if (currnet_node->value().child_wait_pid == (int64_t)pid ||
                         currnet_node->value().child_wait_pid == WAIT_FOR_ANY_PROCESS) {
@@ -1469,7 +1489,11 @@ void influx::threading::scheduler::clean_process(uint64_t pid, bool erase,
         _processes[process.ppid].child_processes.erase(
             algorithm::find(_processes[process.ppid].child_processes.begin(),
                             _processes[process.ppid].child_processes.end(), pid));
-        _processes.erase(pid);
+        if (!waited) {
+            _processes.erase(pid);
+        } else {
+            process.terminated = true;
+        }
     } else {
         // Set the process as terminated and waiting to be deleted (zombie process)
         process.terminated = true;
@@ -1930,4 +1954,20 @@ influx::interrupts::regs *influx::threading::scheduler::get_task_interrupt_regs(
     // Calc the interrupt regs pointer
     return (interrupts::regs *)(kernel_stack_ptr -
                                 (sizeof(interrupts::regs) / sizeof(uint64_t) - 4));
+}
+
+void influx::threading::scheduler::create_wait_status(uint16_t *wait_status,
+                                                      influx::threading::process &process) {
+    kassert(process.terminated);
+
+    // If the process exited
+    if (process.exit_code == CLD_EXITED) {
+        *wait_status = (uint16_t)((process.exit_status) << 8);
+    } else if (process.exit_code == CLD_KILLED) {  // Process killed by signal
+        *wait_status = (uint16_t)process.exit_status;
+    } else if (process.exit_code == CLD_STOPPED) {  // Process stopped by signal
+        *wait_status = (uint16_t)(0x7f + ((process.exit_status) << 8));
+    } else {
+        *wait_status = 0;
+    }
 }
