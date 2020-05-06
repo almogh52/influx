@@ -31,6 +31,7 @@ uint64_t sleep(uint64_t seconds);
 int64_t getdents(size_t fd, dirent *dirp, uint64_t count);
 int64_t chdir(const char *dir_path);
 char *getcwd(char *buf, size_t size);
+int64_t mkdir(const char *dir_path, int mode);
 };  // namespace handlers
 };  // namespace syscalls
 };  // namespace influx

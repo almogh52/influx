@@ -28,7 +28,8 @@ enum class syscall {
     sleep,
     getdents,
     chdir,
-    getcwd
+    getcwd,
+    mkdir
 };
 };
 };  // namespace influx

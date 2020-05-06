@@ -121,6 +121,9 @@ int64_t influx::syscalls::syscall_manager::handle_syscall(influx::syscalls::sysc
         case syscall::getcwd:
             return (uint64_t)handlers::getcwd((char *)arg1, arg2);
 
+        case syscall::mkdir:
+            return handlers::mkdir((const char *)arg1, (int)arg2);
+
         default:
             return -EINVAL;
     }
