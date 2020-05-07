@@ -127,6 +127,15 @@ int64_t influx::syscalls::syscall_manager::handle_syscall(influx::syscalls::sysc
         case syscall::ttyname:
             return handlers::ttyname(arg1, (char *)arg2, arg3);
 
+        case syscall::getppid:
+            return kernel::scheduler()->get_current_parent_process_id();
+
+        case syscall::getuid:
+            return 0;
+
+        case syscall::geteuid:
+            return 0;
+
         default:
             return -EINVAL;
     }

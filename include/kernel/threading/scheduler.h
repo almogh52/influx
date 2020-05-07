@@ -78,6 +78,7 @@ class scheduler {
 
     uint64_t get_current_task_id() const;
     uint64_t get_current_process_id() const;
+    uint64_t get_current_parent_process_id();
 
     bool interrupted() const;
 

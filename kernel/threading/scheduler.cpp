@@ -1158,6 +1158,11 @@ uint64_t influx::threading::scheduler::get_current_process_id() const {
     return _current_task->value().pid;
 }
 
+uint64_t influx::threading::scheduler::get_current_parent_process_id() {
+    interrupts_lock int_lk;
+    return _processes[_current_task->value().pid].ppid;
+}
+
 bool influx::threading::scheduler::interrupted() const {
     return _current_task->value().signal_interrupted;
 }

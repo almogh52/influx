@@ -30,7 +30,10 @@ enum class syscall {
     chdir,
     getcwd,
     mkdir,
-    ttyname
+    ttyname,
+    getppid,
+    getuid,
+    geteuid
 };
 };
 };  // namespace influx
