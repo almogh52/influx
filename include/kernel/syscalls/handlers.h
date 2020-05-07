@@ -33,6 +33,7 @@ int64_t chdir(const char *dir_path);
 char *getcwd(char *buf, size_t size);
 int64_t mkdir(const char *dir_path, int mode);
 int64_t ttyname(size_t fd, char *buf, size_t buflen);
+int64_t dup(size_t oldfd, size_t newfd);
 };  // namespace handlers
 };  // namespace syscalls
 };  // namespace influx

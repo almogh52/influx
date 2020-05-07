@@ -131,8 +131,8 @@ int64_t influx::vfs::vfs::open(const influx::vfs::path& file_path, influx::vfs::
     vn.second->amount_of_open_files++;
 
     // Create the file descriptor and return it
-    return kernel::scheduler()->add_file_descriptor(
-        open_file{.vnode_index = vn.first, .position = 0, .flags = flags});
+    return kernel::scheduler()->add_file_descriptor(open_file{
+        .vnode_index = vn.first, .position = 0, .flags = flags, .amount_of_file_descriptors = 1});
 }
 
 int64_t influx::vfs::vfs::close(size_t fd) {
@@ -145,7 +145,9 @@ int64_t influx::vfs::vfs::close(size_t fd) {
     }
 
     // Close the file
-    close_open_file(file);
+    if (file.amount_of_file_descriptors == 1) {
+        close_open_file(file);
+    }
 
     // Remove the file descriptor
     kernel::scheduler()->remove_file_descriptor(fd);

@@ -235,7 +235,9 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .working_dir = "/",
                               .threads = structures::unique_vector(),
                               .child_processes = structures::vector<uint64_t>(),
-                              .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
+                              .open_files = structures::unique_hash_map<vfs::open_file>(),
+                              .file_descriptors = structures::unique_hash_map<vfs::file_descriptor>(
+                                  vfs::file_descriptor{.open_file_index = UINT64_MAX}),
                               .name = "kernel",
                               .segments = structures::vector<segment>(),
                               .signal_dispositions = create_default_signal_dispositions(),
@@ -321,7 +323,9 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .working_dir = "/",
                               .threads = structures::unique_vector(),
                               .child_processes = structures::vector<uint64_t>(),
-                              .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
+                              .open_files = structures::unique_hash_map<vfs::open_file>(),
+                              .file_descriptors = structures::unique_hash_map<vfs::file_descriptor>(
+                                  vfs::file_descriptor{.open_file_index = UINT64_MAX}),
                               .name = "init",
                               .segments = structures::vector<segment>(),
                               .signal_dispositions = create_default_signal_dispositions(),
@@ -886,7 +890,7 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
     segments += seg;
 
     // Fork the file descriptors
-    kernel::vfs()->fork_file_descriptors(parent_process.file_descriptors);
+    kernel::vfs()->fork_file_descriptors(parent_process.open_files);
 
     // Create the fork process
     int_lk.lock();
@@ -902,7 +906,9 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
                 .working_dir = parent_process.working_dir,
                 .threads = structures::unique_vector(),
                 .child_processes = structures::vector<uint64_t>(),
-                .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
+                .open_files = structures::unique_hash_map<vfs::open_file>(),
+                .file_descriptors = structures::unique_hash_map<vfs::file_descriptor>(
+                    vfs::file_descriptor{.open_file_index = UINT64_MAX}),
                 .name = parent_process.name,
                 .segments = parent_process.segments,
                 .signal_dispositions = parent_process.signal_dispositions,
@@ -1171,7 +1177,10 @@ uint64_t influx::threading::scheduler::add_file_descriptor(const influx::vfs::op
     interrupts_lock int_lk;
     process &process = _processes[_current_task->value().pid];
 
-    return process.file_descriptors.insert_unique(file);
+    uint64_t open_file_index = process.open_files.insert_unique(file);
+
+    return process.file_descriptors.insert_unique(
+        vfs::file_descriptor{.open_file_index = open_file_index});
 }
 
 influx::vfs::error influx::threading::scheduler::get_file_descriptor(uint64_t fd,
@@ -1185,7 +1194,7 @@ influx::vfs::error influx::threading::scheduler::get_file_descriptor(uint64_t fd
     }
 
     // Get the file
-    file = process.file_descriptors[fd];
+    file = process.open_files[process.file_descriptors[fd].open_file_index];
 
     return vfs::error::success;
 }
@@ -1195,13 +1204,47 @@ void influx::threading::scheduler::update_file_descriptor(uint64_t fd,
     interrupts_lock int_lk;
     process &process = _processes[_current_task->value().pid];
 
-    process.file_descriptors[fd] = file;
+    process.open_files[process.file_descriptors[fd].open_file_index] = file;
 }
 
 void influx::threading::scheduler::remove_file_descriptor(uint64_t fd) {
+    interrupts_lock int_lk;
     process &process = _processes[_current_task->value().pid];
 
+    // If the open file has no file descriptors, delete it
+    if (--process.open_files[process.file_descriptors[fd].open_file_index]
+              .amount_of_file_descriptors == 0) {
+        process.open_files.erase(process.file_descriptors[fd].open_file_index);
+    }
+
     process.file_descriptors.erase(fd);
+}
+
+uint64_t influx::threading::scheduler::duplicate_file_descriptor(uint64_t oldfd, int64_t newfd) {
+    interrupts_lock int_lk;
+    process &process = _processes[_current_task->value().pid];
+
+    vfs::file_descriptor file_descriptor = process.file_descriptors[oldfd];
+
+    // Increase amount of file descriptors for the open file
+    process.open_files[file_descriptor.open_file_index].amount_of_file_descriptors++;
+
+    // If no new fd was specified
+    if (newfd == -1) {
+        return process.file_descriptors.insert_unique(file_descriptor);
+    } else {
+        // If the new fd is in use, close it
+        if (process.file_descriptors.count(newfd) != 0) {
+            if (--process.open_files[process.file_descriptors[newfd].open_file_index]
+                      .amount_of_file_descriptors == 0) {
+                process.open_files.erase(process.file_descriptors[newfd].open_file_index);
+            }
+        }
+
+        process.file_descriptors[newfd] = file_descriptor;
+    }
+
+    return newfd;
 }
 
 void influx::threading::scheduler::tasks_clean_task() {
@@ -1313,7 +1356,9 @@ uint64_t influx::threading::scheduler::start_process(influx::threading::executab
                     .working_dir = _processes[_current_task->value().pid].working_dir,
                     .threads = structures::unique_vector(),
                     .child_processes = structures::vector<uint64_t>(),
-                    .file_descriptors = structures::unique_hash_map<vfs::open_file>(),
+                    .open_files = structures::unique_hash_map<vfs::open_file>(),
+                    .file_descriptors = structures::unique_hash_map<vfs::file_descriptor>(
+                        vfs::file_descriptor{.open_file_index = UINT64_MAX}),
                     .name = exec.name,
                     .segments = structures::vector<segment>(),
                     .signal_dispositions = create_default_signal_dispositions(),
@@ -1343,18 +1388,24 @@ uint64_t influx::threading::scheduler::start_process(influx::threading::executab
     kernel::vfs()
         ->_vnodes[kernel::tty_manager()->get_tty_vnode(_processes[pid].tty)]
         .amount_of_open_files += 3;
-    _processes[pid].file_descriptors.insert_unique(
+    _processes[pid].open_files.insert_unique(
         vfs::open_file{.vnode_index = kernel::tty_manager()->get_tty_vnode(_processes[pid].tty),
                        .position = 0,
-                       .flags = vfs::open_flags::read});
-    _processes[pid].file_descriptors.insert_unique(
+                       .flags = vfs::open_flags::read,
+                       .amount_of_file_descriptors = 1});
+    _processes[pid].open_files.insert_unique(
         vfs::open_file{.vnode_index = kernel::tty_manager()->get_tty_vnode(_processes[pid].tty),
                        .position = 0,
-                       .flags = vfs::open_flags::write});
-    _processes[pid].file_descriptors.insert_unique(
+                       .flags = vfs::open_flags::write,
+                       .amount_of_file_descriptors = 1});
+    _processes[pid].open_files.insert_unique(
         vfs::open_file{.vnode_index = kernel::tty_manager()->get_tty_vnode(_processes[pid].tty),
                        .position = 0,
-                       .flags = vfs::open_flags::write});
+                       .flags = vfs::open_flags::write,
+                       .amount_of_file_descriptors = 1});
+    _processes[pid].file_descriptors.insert_unique(vfs::file_descriptor{.open_file_index = 0});
+    _processes[pid].file_descriptors.insert_unique(vfs::file_descriptor{.open_file_index = 1});
+    _processes[pid].file_descriptors.insert_unique(vfs::file_descriptor{.open_file_index = 2});
     int_lk.unlock();
 
     // Allocate kernel stack for main process task
@@ -1505,9 +1556,9 @@ void influx::threading::scheduler::clean_process(uint64_t pid, bool erase,
         int_lk.unlock();
     }
 
-    // Close all file descriptors
+    // Close all open files
     if (close_file_descriptors) {
-        for (const auto &file_descriptor : process.file_descriptors) {
+        for (const auto &file_descriptor : process.open_files) {
             kernel::vfs()->close_open_file(file_descriptor.second);
         }
     }

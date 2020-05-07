@@ -7,6 +7,7 @@
 #include <kernel/threading/signal.h>
 #include <kernel/threading/signal_action.h>
 #include <kernel/vfs/open_file.h>
+#include <kernel/vfs/file_descriptor.h>
 #include <kernel/vfs/path.h>
 #include <memory/paging.h>
 #include <stdint.h>
@@ -34,7 +35,8 @@ struct process {
     structures::unique_vector threads;
     structures::vector<uint64_t> child_processes;
 
-    structures::unique_hash_map<vfs::open_file> file_descriptors;
+    structures::unique_hash_map<vfs::open_file> open_files;
+    structures::unique_hash_map<vfs::file_descriptor> file_descriptors;
     structures::string name;
 
     structures::vector<segment> segments;

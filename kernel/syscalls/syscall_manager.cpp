@@ -136,6 +136,9 @@ int64_t influx::syscalls::syscall_manager::handle_syscall(influx::syscalls::sysc
         case syscall::geteuid:
             return 0;
 
+        case syscall::dup:
+            return handlers::dup(arg1, arg2);
+
         default:
             return -EINVAL;
     }

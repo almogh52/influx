@@ -86,6 +86,7 @@ class scheduler {
     vfs::error get_file_descriptor(uint64_t fd, vfs::open_file &file);
     void update_file_descriptor(uint64_t fd, vfs::open_file &file);
     void remove_file_descriptor(uint64_t fd);
+    uint64_t duplicate_file_descriptor(uint64_t oldfd, int64_t newfd = -1);
 
    private:
     logger _log;
