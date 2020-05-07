@@ -29,7 +29,8 @@ enum class syscall {
     getdents,
     chdir,
     getcwd,
-    mkdir
+    mkdir,
+    ttyname
 };
 };
 };  // namespace influx

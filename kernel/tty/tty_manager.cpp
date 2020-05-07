@@ -1,5 +1,6 @@
 #include <kernel/tty/tty_manager.h>
 
+#include <kernel/algorithm.h>
 #include <kernel/kernel.h>
 #include <kernel/threading/lock_guard.h>
 #include <kernel/threading/unique_lock.h>
@@ -100,4 +101,11 @@ void influx::tty::tty_manager::raw_input_thread() {
         // Notify the input thread
         active._raw_input_cv.notify_one();
     }
+}
+
+influx::structures::string influx::tty::tty_manager::get_tty_name(uint64_t vnode_index) {
+    structures::vector<uint64_t>::const_pointer tty_vnode =
+        algorithm::find(_ttys_vnodes.begin(), _ttys_vnodes.end(), vnode_index);
+
+    return format("ttys%03d", (tty_vnode - _ttys_vnodes.begin()) + 1);
 }

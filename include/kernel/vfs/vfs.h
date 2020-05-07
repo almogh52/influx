@@ -43,6 +43,7 @@ class vfs {
     int64_t unlink(const path& file_path);
 
     filesystem* get_filesystem(size_t fd);
+    int64_t get_vnode_index(size_t fd);
 
     void fork_file_descriptors(structures::unique_hash_map<open_file>& file_descriptors);
 

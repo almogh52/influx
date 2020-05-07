@@ -26,6 +26,7 @@ class tty_manager {
     tty& get_tty(uint64_t tty);
 
     uint64_t get_tty_vnode(uint64_t tty);
+    structures::string get_tty_name(uint64_t vnode_index);
 
    private:
     uint64_t _active_tty;

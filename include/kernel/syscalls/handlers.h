@@ -32,6 +32,7 @@ int64_t getdents(size_t fd, dirent *dirp, uint64_t count);
 int64_t chdir(const char *dir_path);
 char *getcwd(char *buf, size_t size);
 int64_t mkdir(const char *dir_path, int mode);
+int64_t ttyname(size_t fd, char *buf, size_t buflen);
 };  // namespace handlers
 };  // namespace syscalls
 };  // namespace influx

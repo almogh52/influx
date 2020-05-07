@@ -478,6 +478,19 @@ influx::vfs::filesystem* influx::vfs::vfs::get_filesystem(size_t fd) {
     return vn.fs;
 }
 
+int64_t influx::vfs::vfs::get_vnode_index(size_t fd) {
+    open_file file;
+
+    error err;
+
+    // Try to get the open file object
+    if ((err = get_open_file_for_fd(fd, file)) != error::success) {
+        return -1;
+    }
+
+    return file.vnode_index;
+}
+
 void influx::vfs::vfs::fork_file_descriptors(
     influx::structures::unique_hash_map<influx::vfs::open_file>& file_descriptors) {
     threading::lock_guard lk(_vnodes_mutex);
