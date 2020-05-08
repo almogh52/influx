@@ -66,6 +66,8 @@ class scheduler {
     uint64_t fork(interrupts::regs old_context);
     uint64_t sbrk(int64_t inc);
 
+    uint64_t alarm(uint64_t ms);
+
     vfs::path get_working_dir();
     int64_t set_working_dir(vfs::path dir);
 
@@ -111,6 +113,7 @@ class scheduler {
     void reschedule();
     void tick_handler();
     void update_tasks_sleep_quantum();
+    void update_alarm_timers();
     void queue_task(tcb *task);
 
     void tasks_clean_task();

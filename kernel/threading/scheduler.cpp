@@ -232,6 +232,7 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .pml4t = nullptr,
                               .program_break_start = 0,
                               .program_break_end = 0,
+                              .alarm_timer = 0,
                               .working_dir = "/",
                               .threads = structures::unique_vector(),
                               .child_processes = structures::vector<uint64_t>(),
@@ -320,6 +321,7 @@ influx::threading::scheduler::scheduler(uint64_t tss_addr)
                               .pml4t = nullptr,
                               .program_break_start = 0,
                               .program_break_end = 0,
+                              .alarm_timer = 0,
                               .working_dir = "/",
                               .threads = structures::unique_vector(),
                               .child_processes = structures::vector<uint64_t>(),
@@ -488,6 +490,9 @@ void influx::threading::scheduler::tick_handler() {
     // Update sleeping tasks
     update_tasks_sleep_quantum();
 
+    // Update alarm timers
+    update_alarm_timers();
+
     // If the current task reached the max quantum, reschedule
     if (_current_task->value().quantum == _max_quantum) {
         reschedule();
@@ -528,6 +533,33 @@ void influx::threading::scheduler::update_tasks_sleep_quantum() {
             // Move to the next task
             task = task->next();
         } while (task != priority_queue.start);
+    }
+}
+
+void influx::threading::scheduler::update_alarm_timers() {
+    interrupts_lock int_lk;
+
+    // For each process
+    for (auto &process : _processes) {
+        // If an alarm timer is running
+        if (process.second.alarm_timer > 0 &&
+            (process.second.alarm_timer -= (kernel::time_manager()->timer_frequency() / 1000)) ==
+                0) {
+            // Send SIGALRM to the process
+            int_lk.unlock();
+            send_signal_to_process(process.first, -1,
+                                   signal_info{.sig = SIGALRM,
+                                               .error = 0,
+                                               .code = 0,
+                                               .pid = 0,
+                                               .uid = 0,
+                                               .status = 0,
+                                               .addr = nullptr,
+                                               .value_int = 0,
+                                               .value_ptr = 0,
+                                               .pad = {0}});
+            int_lk.lock();
+        }
     }
 }
 
@@ -903,6 +935,7 @@ uint64_t influx::threading::scheduler::fork(influx::interrupts::regs old_context
                 .pml4t = pml4t,
                 .program_break_start = parent_process.program_break_start,
                 .program_break_end = parent_process.program_break_end,
+                .alarm_timer = 0,
                 .working_dir = parent_process.working_dir,
                 .threads = structures::unique_vector(),
                 .child_processes = structures::vector<uint64_t>(),
@@ -1035,6 +1068,17 @@ uint64_t influx::threading::scheduler::sbrk(int64_t inc) {
     task_process.program_break_end += inc;
 
     return task_process.program_break_end - inc;
+}
+
+uint64_t influx::threading::scheduler::alarm(uint64_t ms) {
+    interrupts_lock int_lk;
+    process &process = _processes[_current_task->value().pid];
+
+    uint64_t old_ms = process.alarm_timer / (kernel::time_manager()->timer_frequency() / 1000);
+
+    process.alarm_timer = ms * (kernel::time_manager()->timer_frequency() / 1000);
+
+    return old_ms;
 }
 
 influx::vfs::path influx::threading::scheduler::get_working_dir() {
@@ -1353,6 +1397,7 @@ uint64_t influx::threading::scheduler::start_process(influx::threading::executab
                     .pml4t = pml4t,
                     .program_break_start = 0,
                     .program_break_end = 0,
+                    .alarm_timer = 0,
                     .working_dir = _processes[_current_task->value().pid].working_dir,
                     .threads = structures::unique_vector(),
                     .child_processes = structures::vector<uint64_t>(),

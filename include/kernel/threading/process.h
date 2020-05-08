@@ -30,6 +30,8 @@ struct process {
     uint64_t program_break_start;
     uint64_t program_break_end;
 
+    uint64_t alarm_timer;
+
     vfs::path working_dir;
 
     structures::unique_vector threads;

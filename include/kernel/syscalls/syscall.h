@@ -34,7 +34,8 @@ enum class syscall {
     getppid,
     getuid,
     geteuid,
-    dup
+    dup,
+    alarm
 };
 };
 };  // namespace influx
