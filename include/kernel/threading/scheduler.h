@@ -75,6 +75,8 @@ class scheduler {
     void set_signal_action(signal sig, signal_action action);
     bool send_signal(int64_t pid, int64_t tid, signal_info sig_info);
     void handle_signal_return(interrupts::regs *context);
+    signal_mask get_signal_mask();
+    void set_signal_mask(signal_mask mask);
 
     void send_sigint_to_tty(uint64_t tty);
 
@@ -136,6 +138,7 @@ class scheduler {
     void send_signal_to_process(uint64_t pid, int64_t tid, signal_info sig_info);
     void send_signal_to_task(tcb *task, signal_info sig_info);
     void default_signal_handler(process &process, signal_info sig_info);
+    bool get_next_signal_info(signal_info &sig_info);
 
     interrupts::regs *get_task_interrupt_regs(tcb *task);
 

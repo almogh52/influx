@@ -145,6 +145,10 @@ int64_t influx::syscalls::syscall_manager::handle_syscall(influx::syscalls::sysc
         case syscall::pipe:
             return handlers::pipe((int *)arg1);
 
+        case syscall::sigprocmask:
+            return handlers::sigprocmask((int)arg1, (const threading::signal_mask *)arg2,
+                                         (threading::signal_mask *)arg3);
+
         default:
             return -EINVAL;
     }

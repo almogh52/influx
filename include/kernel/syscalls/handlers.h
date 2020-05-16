@@ -35,6 +35,8 @@ int64_t mkdir(const char *dir_path, int mode);
 int64_t ttyname(size_t fd, char *buf, size_t buflen);
 int64_t dup(size_t oldfd, size_t newfd);
 int64_t pipe(int pipefd[2]);
+int64_t sigprocmask(uint64_t how, const threading::signal_mask *set,
+                    threading::signal_mask *oldset);
 };  // namespace handlers
 };  // namespace syscalls
 };  // namespace influx

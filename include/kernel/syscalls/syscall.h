@@ -36,7 +36,8 @@ enum class syscall {
     geteuid,
     dup,
     alarm,
-    pipe
+    pipe,
+    sigprocmask
 };
 };
 };  // namespace influx

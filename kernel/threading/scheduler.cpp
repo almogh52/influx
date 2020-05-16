@@ -2012,9 +2012,40 @@ void influx::threading::scheduler::default_signal_handler(influx::threading::pro
     }
 }
 
+bool influx::threading::scheduler::get_next_signal_info(influx::threading::signal_info &sig_info) {
+    // ** Interrupts should be locked here **
+    process &process = _processes[_current_task->value().pid];
+
+    signal_mask mask = _current_task->value().sig_mask;
+
+    // For each pending signal in the task sig queue, check if it's not blocked
+    for (auto it = _current_task->value().sig_queue.begin();
+         it != _current_task->value().sig_queue.end(); it++) {
+        if (!(mask & (1 << it->sig))) {
+            sig_info = *it;
+            _current_task->value().sig_queue.erase(it);
+            return true;
+        }
+    }
+
+    // For each pending signal in the process sig queue, check if it's not blocked
+    for (auto it = process.pending_std_signals.begin(); it != process.pending_std_signals.end();
+         it++) {
+        if (!(mask & (1 << it->sig))) {
+            sig_info = *it;
+            process.pending_std_signals.erase(it);
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void influx::threading::scheduler::handle_signal_return(influx::interrupts::regs *context) {
-    interrupts_lock int_lk(false);
+    interrupts_lock int_lk;
     kassert(_current_task->value().current_sig != SIGINVL);
+
+    process &process = _processes[_current_task->value().pid];
 
     signal_info sig_info;
     sig_info.sig = SIGINVL;
@@ -2030,24 +2061,38 @@ void influx::threading::scheduler::handle_signal_return(influx::interrupts::regs
     _current_task->value().signal_interrupted = false;
 
     // Set the current signal as invalid
-    int_lk.lock();  // We lock here to make sure no other signal is being sent to this task yet
     _current_task->value().current_sig = SIGINVL;
 
-    // If there is a signal waiting in the thread signal queue or in the process signal queue,
-    // handle it
-    process &process = _processes[_current_task->value().pid];
-    if (!_current_task->value().sig_queue.empty() &&
-        !(_current_task->value().sig_mask & (1 << _current_task->value().sig_queue.back().sig))) {
-        sig_info = _current_task->value().sig_queue.back();
-        _current_task->value().sig_queue.pop_back();
-    } else if (!process.pending_std_signals.empty() &&
-               !(_current_task->value().sig_mask & (1 << process.pending_std_signals.back().sig))) {
-        sig_info = process.pending_std_signals.back();
-        process.pending_std_signals.pop_back();
+    // If there is another signal to handle, prepare the signal handler
+    if (get_next_signal_info(sig_info)) {
+        // Set the current signal
+        _current_task->value().current_sig = sig_info.sig;
+
+        // Save the current signal mask and mask it using the signal's disposition mask
+        _current_task->value().old_sig_mask = _current_task->value().sig_mask;
+        _current_task->value().sig_mask |= process.signal_dispositions[sig_info.sig].mask;
+
+        // Prepare the signal handler
+        prepare_signal_handle(_current_task, sig_info);
     }
+}
+
+influx::threading::signal_mask influx::threading::scheduler::get_signal_mask() {
+    return _current_task->value().sig_mask;
+}
+
+void influx::threading::scheduler::set_signal_mask(influx::threading::signal_mask mask) {
+    signal_info sig_info;
+    sig_info.sig = SIGINVL;
+
+    interrupts_lock int_lk;
+    process &process = _processes[_current_task->value().pid];
+
+    // Set the new signal mask
+    _current_task->value().sig_mask = mask;
 
     // If there is another signal to handle, prepare the signal handler
-    if (sig_info.sig != SIGINVL) {
+    if (_current_task->value().current_sig == SIGINVL && get_next_signal_info(sig_info)) {
         // Set the current signal
         _current_task->value().current_sig = sig_info.sig;
 
