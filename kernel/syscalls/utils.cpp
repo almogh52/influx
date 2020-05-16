@@ -40,6 +40,12 @@ int64_t influx::syscalls::utils::convert_vfs_error(influx::vfs::error err) {
         case vfs::error::interrupted:
             return -EINTR;
 
+        case vfs::error::is_pipe:
+            return -ESPIPE;
+
+        case vfs::error::pipe_closed:
+            return -EPIPE;
+
         case vfs::error::unknown_error:
         case vfs::error::io_error:
         default:

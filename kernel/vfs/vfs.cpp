@@ -215,6 +215,11 @@ int64_t influx::vfs::vfs::seek(size_t fd, int64_t offset, influx::vfs::seek_type
     // Create a ref of the vnode
     vnode& vn = _vnodes[file.vnode_index];
 
+    // If the file is a pipe/FIFO or a socket˝
+    if (vn.file.type == file_type::fifo || vn.file.type == file_type::socket) {
+        return error::is_pipe;
+    }
+
     // Offset from beginning of the file
     if (type == seek_type::set) {
         new_position = offset;
@@ -282,8 +287,10 @@ int64_t influx::vfs::vfs::read(size_t fd, void* buf, size_t count) {
     }
 
     // Update file position
-    file.position += amount_read;
-    kernel::scheduler()->update_file_descriptor(fd, file);
+    if (!(vn.file.type == file_type::fifo || vn.file.type == file_type::socket)) {
+        file.position += amount_read;
+        kernel::scheduler()->update_file_descriptor(fd, file);
+    }
 
     // Update the file object
     if ((err = vn.fs->get_file_info(vn.fs_data, vn.file)) != error::success) {
@@ -336,8 +343,10 @@ int64_t influx::vfs::vfs::write(size_t fd, const void* buf, size_t count) {
     }
 
     // Update file position
-    file.position += amount_written;
-    kernel::scheduler()->update_file_descriptor(fd, file);
+    if (!(vn.file.type == file_type::fifo || vn.file.type == file_type::socket)) {
+        file.position += amount_written;
+        kernel::scheduler()->update_file_descriptor(fd, file);
+    }
 
     // Update the file object
     if ((err = vn.fs->get_file_info(vn.fs_data, vn.file)) != error::success) {
@@ -404,8 +413,10 @@ int64_t influx::vfs::vfs::get_dir_entries(
     }
 
     // Update file position
-    file.position += amount_read;
-    kernel::scheduler()->update_file_descriptor(fd, file);
+    if (!(vn.file.type == file_type::fifo || vn.file.type == file_type::socket)) {
+        file.position += amount_read;
+        kernel::scheduler()->update_file_descriptor(fd, file);
+    }
 
     // Update the file object
     if ((err = vn.fs->get_file_info(vn.fs_data, vn.file)) != error::success) {
@@ -577,6 +588,9 @@ void influx::vfs::vfs::close_open_file(const influx::vfs::open_file& file) {
 
     // Create a ref of the vnode
     vnode& vn = _vnodes[file.vnode_index];
+
+    // Call filesystem close function
+    vn.fs->close_open_file(file, vn.fs_data);
 
     // Decrease the amount of open files for the file
     vn.amount_of_open_files--;

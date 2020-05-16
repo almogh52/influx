@@ -142,6 +142,9 @@ int64_t influx::syscalls::syscall_manager::handle_syscall(influx::syscalls::sysc
         case syscall::alarm:
             return kernel::scheduler()->alarm(arg1 * 1000) / 1000;
 
+        case syscall::pipe:
+            return handlers::pipe((int *)arg1);
+
         default:
             return -EINVAL;
     }

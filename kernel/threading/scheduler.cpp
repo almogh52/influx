@@ -1269,9 +1269,19 @@ uint64_t influx::threading::scheduler::duplicate_file_descriptor(uint64_t oldfd,
     process &process = _processes[_current_task->value().pid];
 
     vfs::file_descriptor file_descriptor = process.file_descriptors[oldfd];
+    vfs::open_file &file = process.open_files[file_descriptor.open_file_index];
+
+    int_lk.unlock();
+    threading::unique_lock vnodes_lk(kernel::vfs()->_vnodes_mutex);
+    vfs::vnode &vn = kernel::vfs()->_vnodes[file.vnode_index];
+    vnodes_lk.unlock();
+
+    // Call filesystem duplicate function
+    vn.fs->duplicate_open_file(file, vn.fs_data);
+    int_lk.lock();
 
     // Increase amount of file descriptors for the open file
-    process.open_files[file_descriptor.open_file_index].amount_of_file_descriptors++;
+    file.amount_of_file_descriptors++;
 
     // If no new fd was specified
     if (newfd == -1) {

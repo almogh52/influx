@@ -13,6 +13,7 @@
 #include <kernel/vfs/fs_type.h>
 #include <kernel/vfs/open_file.h>
 #include <kernel/vfs/open_flags.h>
+#include <kernel/vfs/pipe_manager.h>
 #include <kernel/vfs/seek_type.h>
 #include <kernel/vfs/vnode.h>
 #include <stddef.h>
@@ -47,6 +48,8 @@ class vfs {
 
     void fork_file_descriptors(structures::unique_hash_map<open_file>& file_descriptors);
 
+    inline pipe_manager* pipe_handler() { return &_pipe_manager; };
+
     static uint64_t dirent_size_for_dir_entry(dir_entry& entry);
 
    private:
@@ -58,6 +61,8 @@ class vfs {
     structures::unique_hash_map<vnode> _vnodes;
     structures::hash_map<uint64_t, path> _deleted_vnodes_paths;
     threading::mutex _vnodes_mutex;
+
+    pipe_manager _pipe_manager;
 
     error get_open_file_for_fd(int64_t fd, open_file& file);
 
@@ -73,6 +78,7 @@ class vfs {
 
     friend class influx::tty::tty_manager;
     friend class influx::threading::scheduler;
+    friend class influx::vfs::pipe_manager;
 };
 };  // namespace vfs
 };  // namespace influx

@@ -5,6 +5,7 @@
 #include <kernel/vfs/dir_entry.h>
 #include <kernel/vfs/error.h>
 #include <kernel/vfs/file_info.h>
+#include <kernel/vfs/open_file.h>
 #include <kernel/vfs/path.h>
 
 namespace influx {
@@ -27,6 +28,8 @@ class filesystem {
                               void** fs_file_info_ptr) = 0;
     virtual error create_dir(const path& dir_path, file_permissions permissions,
                              void** fs_file_info_ptr) = 0;
+    virtual void duplicate_open_file(const open_file& file, void* fs_file_info) = 0;
+    virtual void close_open_file(const open_file& file, void* fs_file_info) = 0;
     virtual error unlink_file(const path& file_path) = 0;
     virtual void* get_fs_file_data(const path& file_path) = 0;
     virtual bool compare_fs_file_data(void* fs_file_data_1, void* fs_file_data_2) = 0;
