@@ -79,6 +79,43 @@ influx::threading::task_wait_queue::dequeue_all() {
     return tasks;
 }
 
+void influx::threading::task_wait_queue::remove_task(influx::threading::tcb *task) {
+    lock_guard<spinlock> lk(_queue_lock);
+
+    structures::node<tcb *> *current_node = _queue_head;
+
+    // If the queue is empty
+    if (_queue_head == nullptr) {
+        return;
+    }
+
+    // Find the task's node
+    do {
+        // If it's the task's node, exit loop
+        if (current_node->value() == task) {
+            break;
+        }
+
+        // Move to the next node
+        current_node = current_node->next();
+    } while (current_node != _queue_head);
+
+    // If we found the task's node
+    if (current_node->value() == task) {
+        // If the node is the head, change the head to next node
+        if (_queue_head == current_node && _queue_head->next() != current_node) {
+            _queue_head = _queue_head->next();
+        } else if (_queue_head == current_node) {
+            _queue_head = nullptr;
+        }
+
+        // Delete and free the node
+        current_node->prev()->next() = current_node->next();
+        current_node->next()->prev() = current_node->prev();
+        delete current_node;
+    }
+}
+
 bool influx::threading::task_wait_queue::empty() {
     lock_guard<spinlock> lk(_queue_lock);
 

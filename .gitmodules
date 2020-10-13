@@ -1,3 +1,12 @@
 [submodule "vendor/scalable-font"]
 	path = vendor/scalable-font
 	url = https://gitlab.com/bztsrc/scalable-font
+[submodule "vendor/newlib-influx"]
+	path = vendor/newlib-influx
+	url = https://github.com/almogh52/newlib-influx
+[submodule "vendor/gcc-influx"]
+	path = vendor/gcc-influx
+	url = https://github.com/almogh52/gcc-influx
+[submodule "vendor/binutils-gdb-influx"]
+	path = vendor/binutils-gdb-influx
+	url = https://github.com/almogh52/binutils-gdb-influx

@@ -4,7 +4,7 @@
 #include <kernel/kernel.h>
 #include <kernel/ports.h>
 
-void influx::drivers::pit_irq(influx::interrupts::regs *context, influx::drivers::pit *pit) {
+void influx::drivers::pit_irq(influx::drivers::pit *pit) {
     // Increase the counter
     pit->_count++;
 

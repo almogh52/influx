@@ -21,15 +21,11 @@ class early_console : public console {
 
     virtual bool load();
 
-    virtual void stdout_putchar(char c);
-    virtual void stdout_write(structures::string &str);
-    virtual void stdout_clear();
+    virtual void print(const structures::string &str);
+    virtual void clear();
 
-    inline virtual void stderr_putchar(char c) { stdout_putchar(c); }
-    inline virtual void stderr_write(structures::string &str) { stdout_write(str); }
-    inline virtual void stderr_clear() { stderr_clear(); }
-
-    inline virtual bool save_history() const { return true; }
+    inline virtual uint64_t text_columns() const { return AMOUNT_OF_COLUMNS; }
+    inline virtual uint64_t text_rows() const { return AMOUNT_OF_LINES; }
 
     static vma_region get_vma_region();
 
@@ -43,6 +39,8 @@ class early_console : public console {
 
     void scroll();
     void new_line();
+
+    void putchar(char c);
 
     uint8_t attribute_to_color(console_color color) const;
 };

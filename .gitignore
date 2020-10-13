@@ -21,3 +21,6 @@ include/kernel/console/gfx_u_vga16_font.h
 # Ignore sysroot
 sysroot
 sysroot.mtree
+
+# Ignore utils
+utils

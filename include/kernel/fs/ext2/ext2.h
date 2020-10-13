@@ -49,6 +49,8 @@ class ext2 : public vfs::filesystem {
                                    void** fs_file_info_ptr);
     virtual vfs::error create_dir(const vfs::path& dir_path, vfs::file_permissions permissions,
                                   void** fs_file_info_ptr);
+    inline virtual void duplicate_open_file(const vfs::open_file& file, void* fs_file_info){};
+    inline virtual void close_open_file(const vfs::open_file& file, void* fs_file_info){};
     virtual vfs::error unlink_file(const vfs::path& file_path);
     virtual void* get_fs_file_data(const vfs::path& file_path);
     virtual bool compare_fs_file_data(void* fs_file_data_1, void* fs_file_data_2);

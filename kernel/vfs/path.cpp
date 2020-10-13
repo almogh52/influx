@@ -11,6 +11,10 @@ influx::vfs::path &influx::vfs::path::operator=(influx::structures::string path)
     return *this;
 }
 
+influx::vfs::path influx::vfs::path::operator+(const influx::vfs::path &other) const {
+    return string() + (is_root() ? "" : "/") + other.string();
+}
+
 bool influx::vfs::path::is_parent(const influx::vfs::path &p) const {
     // The parent should less branches then this path
     if (p._branches.size() >= _branches.size()) {

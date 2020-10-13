@@ -24,6 +24,10 @@ void influx::kernel::early_kmain(const boot_info info) {
     // Init global constructors
     _init();
 
+    // Init tty manager
+    _tty_manager = new tty::tty_manager();
+    _tty_manager->init();
+
     // Init early console
     console::set_console(new early_console());
 }
@@ -55,14 +59,26 @@ void influx::kernel::kmain(const boot_info info) {
 
     // Init scheduler
     log("Loading scheduler..\n");
-    _scheduler = new threading::scheduler();
+    _scheduler = new threading::scheduler(info.tss_address);
+    _interrupt_manager->start_irq_notify_thread();
+    _tty_manager->start_input_threads();
     log("Scheduler loaded.\n");
 
+    // Init syscall manager
+    log("Loading syscall manager..\n");
+    _syscall_manager = new syscalls::syscall_manager();
+    log("Syscall manager loaded.\n");
+
     // Init VFS
+    log("Loading VFS and mounting default drive..\n");
     drivers::ata::ata *ata = (drivers::ata::ata *)_driver_manager->get_driver("ATA");
     _vfs = new vfs::vfs();
-    _vfs->mount(vfs::fs_type::ext2, vfs::path("/"),
-                drivers::ata::drive_slice(ata, ata->drives()[0], 0));
+    _tty_manager->create_tty_vnodes();
+    if (!_vfs->mount(vfs::fs_type::ext2, vfs::path("/"),
+                     drivers::ata::drive_slice(ata, ata->drives()[0], 0))) {
+        kpanic("Unable to mount main drive!\n");
+    }
+    log("VFS loaded and default drive mounted on '/'.\n");
 
     // Kill this task since it's no necessary
     log("Kernel initialization complete.\n");

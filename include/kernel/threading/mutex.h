@@ -12,10 +12,11 @@ class mutex {
 
     mutex& operator=(const mutex& other) = delete;
 
-	void lock();
-	bool try_lock();
+    void lock();
+    bool lock_interruptible();
+    bool try_lock();
 
-	void unlock();
+    void unlock();
 
    private:
     uint32_t _value;

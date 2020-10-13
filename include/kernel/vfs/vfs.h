@@ -6,11 +6,15 @@
 #include <kernel/structures/unique_hash_map.h>
 #include <kernel/structures/vector.h>
 #include <kernel/threading/mutex.h>
+#include <kernel/threading/scheduler.h>
+#include <kernel/tty/tty_manager.h>
 #include <kernel/vfs/error.h>
 #include <kernel/vfs/fs_mount.h>
 #include <kernel/vfs/fs_type.h>
 #include <kernel/vfs/open_file.h>
 #include <kernel/vfs/open_flags.h>
+#include <kernel/vfs/pipe_manager.h>
+#include <kernel/vfs/seek_type.h>
 #include <kernel/vfs/vnode.h>
 #include <stddef.h>
 
@@ -26,6 +30,10 @@ class vfs {
                  file_permissions permissions = {.raw = 0});
     int64_t close(size_t fd);
 
+    int64_t stat(size_t fd, file_info& info);
+    int64_t stat(const path& file_path, file_info& info);
+
+    int64_t seek(size_t fd, int64_t offset, seek_type type);
     int64_t read(size_t fd, void* buf, size_t count);
     int64_t write(size_t fd, const void* buf, size_t count);
 
@@ -34,6 +42,13 @@ class vfs {
                             uint64_t dirent_buffer_size);
 
     int64_t unlink(const path& file_path);
+
+    filesystem* get_filesystem(size_t fd);
+    int64_t get_vnode_index(size_t fd);
+
+    void fork_file_descriptors(structures::unique_hash_map<open_file>& file_descriptors);
+
+    inline pipe_manager* pipe_handler() { return &_pipe_manager; };
 
     static uint64_t dirent_size_for_dir_entry(dir_entry& entry);
 
@@ -47,6 +62,8 @@ class vfs {
     structures::hash_map<uint64_t, path> _deleted_vnodes_paths;
     threading::mutex _vnodes_mutex;
 
+    pipe_manager _pipe_manager;
+
     error get_open_file_for_fd(int64_t fd, open_file& file);
 
     error get_vnode_for_file(filesystem* fs, void* fs_file_data,
@@ -56,6 +73,12 @@ class vfs {
         structures::pair<uint64_t, structures::reference_wrapper<vnode>>& vn);
 
     filesystem* get_fs_for_file(const path& file_path);
+
+    void close_open_file(const open_file& file);
+
+    friend class influx::tty::tty_manager;
+    friend class influx::threading::scheduler;
+    friend class influx::vfs::pipe_manager;
 };
 };  // namespace vfs
 };  // namespace influx

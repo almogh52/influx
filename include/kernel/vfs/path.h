@@ -11,6 +11,7 @@ class path {
     inline path(const char* str) : path(structures::string(str)){};
 
     path& operator=(structures::string path);
+    path operator+(const path& other) const;
 
     bool is_parent(const path& p) const;
 

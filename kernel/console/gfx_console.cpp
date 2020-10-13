@@ -70,18 +70,31 @@ bool influx::gfx_console::load() {
     return true;
 }
 
-void influx::gfx_console::stdout_putchar(char c) {
-    threading::unique_lock lk(_mutex, threading::defer_lock);
-
-    // If the scheduler has started, lock the mutex
-    if (kernel::scheduler() != nullptr && kernel::scheduler()->started()) {
-        lk.lock();
-    }
+void influx::gfx_console::putchar(char c) {
+    threading::unique_lock lk(_mutex);
 
     // If the character is for a new line
     if (c == '\n' || c == '\r') {
         new_line();
         return;
+    }
+
+    // If the character is for deleting a character
+    if (c == '\b') {
+        // If not in the start of the line
+        if (ssfn_x > 0) {
+            ssfn_x -= GLYPH_WIDTH;
+
+            // Clear the glyph
+            for (uint64_t x = ssfn_x; x < ssfn_x + GLYPH_WIDTH; x++) {
+                for (uint64_t y = ssfn_y; y < ssfn_y + GLYPH_HEIGHT; y++) {
+                    for (uint64_t i = 0; i < ssfn_dst_pitch / ssfn_dst_w; i++) {
+                        *(ssfn_dst_ptr + y * ssfn_dst_pitch + x * (ssfn_dst_pitch / ssfn_dst_w) +
+                          i) = 0;
+                    }
+                }
+            }
+        }
     }
 
     // Print the character
@@ -93,7 +106,7 @@ void influx::gfx_console::stdout_putchar(char c) {
     }
 }
 
-void influx::gfx_console::stdout_write(influx::structures::string &str) {
+void influx::gfx_console::print(const influx::structures::string &str) {
     console_color color;
     size_t str_len = str.length();
 
@@ -110,15 +123,19 @@ void influx::gfx_console::stdout_write(influx::structures::string &str) {
             // Skip those characters
             i += 2;
         } else {
-            stdout_putchar(str[i]);
+            putchar(str[i]);
         }
     }
 }
 
-void influx::gfx_console::stdout_clear() {
+void influx::gfx_console::clear() {
     // Clear the video memory
     memory::utils::memset(_framebuffer, 0,
                           _framebuffer_height * _framebuffer_width * (_framebuffer_bpp / 8));
+
+    // Reset X and Y
+    ssfn_x = 0;
+    ssfn_y = 0;
 }
 
 void influx::gfx_console::scroll() {

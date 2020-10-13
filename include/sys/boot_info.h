@@ -38,5 +38,6 @@ typedef struct boot_info {
     boot_info_kernel_module kernel_module;
     boot_info_mem memory;
     boot_info_framebuffer framebuffer;
+    uint64_t tss_address;
     char *cmdline;
 } boot_info;

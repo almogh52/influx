@@ -1,15 +1,21 @@
 #pragma once
+#include <stdint.h>
+
+/* File types */
+#define DT_UNKNOWN 0
+#define DT_FIFO 1
+#define DT_CHR 2
+#define DT_DIR 4
+#define DT_BLK 6
+#define DT_REG 8
+#define DT_LNK 10
+#define DT_SOCK 12
+#define DT_WHT 14
 
 typedef struct dirent {
-    unsigned long d_ino;     /* Inode number */
-    unsigned long d_off;     /* Offset to next linux_dirent */
-    unsigned short d_reclen; /* Length of this linux_dirent */
+    uint64_t d_ino;          /* 64-bit inode number */
+    uint64_t d_off;          /* 64-bit offset to next structure */
+    unsigned short d_reclen; /* Size of this dirent */
+    unsigned char d_type;    /* File type */
     char d_name[];           /* Filename (null-terminated) */
-                             /* length is actually (d_reclen - 2 -
-                                offsetof(struct linux_dirent, d_name)) */
-    /*
-    char           pad;       // Zero padding byte
-    char           d_type;    // File type (only since Linux
-                              // 2.6.4); offset is (d_reclen - 1)
-    */
 } dirent;

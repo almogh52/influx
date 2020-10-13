@@ -9,6 +9,11 @@
 #include <kernel/memory/utils.h>
 #include <kernel/memory/virtual_allocator.h>
 #include <kernel/ports.h>
+#include <kernel/threading/interrupts_lock.h>
+#include <kernel/threading/lock_guard.h>
+#include <kernel/threading/scheduler_started.h>
+#include <kernel/threading/unique_lock.h>
+#include <kernel/utils.h>
 
 #define SET_ISR(n, t) set_isr(n, (uint64_t)isr_##n, t)
 
@@ -18,15 +23,31 @@
 uint64_t isrs[AMOUNT_OF_INTERRUPT_DESCRIPTORS];
 
 void influx::interrupts::isr_handler(influx::interrupts::regs *context) {
+    threading::tcb *current_task =
+        threading::scheduler_started ? kernel::scheduler()->get_current_task() : nullptr;
+
+    bool blocked = threading::scheduler_started &&
+                   current_task->value().state != threading::thread_state::running;
+
+    // Unblock the task
+    if (blocked) {
+        kernel::scheduler()->unblock_task(current_task);
+    }
+
     // If the ISR isn't null, call it
     if (isrs[context->isr_number] != 0) {
         ((void (*)(regs *))isrs[context->isr_number])(context);
+    }
+
+    // Re-block task after ISR
+    if (blocked) {
+        kernel::scheduler()->block_current_task();
     }
 }
 
 void influx::interrupts::exception_interrupt_handler(influx::interrupts::regs *context) {
     // Disable interrupts
-    __asm__ __volatile__ ("cli");
+    __asm__ __volatile__("cli");
 
     logger log("Exception Interrupt");
     log("CPU Exception (%x) occurred with code %x in address %p.\n", context->isr_number,
@@ -37,27 +58,46 @@ void influx::interrupts::exception_interrupt_handler(influx::interrupts::regs *c
 }
 
 void influx::interrupts::irq_interrupt_handler(influx::interrupts::regs *context) {
+    interrupts::interrupt_manager *manager = kernel::interrupt_manager();
     uint8_t irq_number = (uint8_t)(context->isr_number - PIC1_INTERRUPTS_OFFSET);
 
-    // If the IRQ is on the slave PIC, send EOI to it
-    if (irq_number >= 8) {
-        influx::ports::out<uint8_t>(PIC_EOI, PIC2_COMMAND);
+    if (irq_number == 0) {
+        // Send EOI to the master PIC
+        influx::ports::out<uint8_t>(PIC_EOI, PIC1_COMMAND);
     }
 
-    // Send EOI to the master PIC
-    influx::ports::out<uint8_t>(PIC_EOI, PIC1_COMMAND);
+    // Call IRQ handler or notify waiters
+    if (manager->_irq_handlers[irq_number].handler_address != 0) {
+        ((void (*)(void *))manager->_irq_handlers[irq_number].handler_address)(
+            manager->_irq_handlers[irq_number].handler_data);
+    } else if (threading::scheduler_started) {
+        threading::interrupts_lock int_lk;
+        manager->_irq_call_count[irq_number]++;
+        manager->_irq_call_count_changed = true;
 
-    // Check if there is a handler for this IRQ
-    if (kernel::interrupt_manager()->_irqs[irq_number].handler_address != 0) {
-        ((void (*)(regs *, void *))kernel::interrupt_manager()->_irqs[irq_number].handler_address)(
-            context, influx::kernel::interrupt_manager()->_irqs[irq_number].handler_data);
+        // Unblock IRQ notify task
+        if (manager->_irq_notify_task != nullptr) {
+            kernel::scheduler()->unblock_task(manager->_irq_notify_task);
+        }
+    }
+
+    if (irq_number != 0) {
+        // If the IRQ is on the slave PIC, send EOI to it
+        if (irq_number >= 8) {
+            influx::ports::out<uint8_t>(PIC_EOI, PIC2_COMMAND);
+        }
+
+        // Send EOI to the master PIC
+        influx::ports::out<uint8_t>(PIC_EOI, PIC1_COMMAND);
     }
 }
 
 influx::interrupts::interrupt_manager::interrupt_manager()
     : _log("Interrupt Manager", console_color::green),
       _idt((interrupt_descriptor_t *)memory::virtual_allocator::allocate(IDT_SIZE,
-                                                                         PROT_READ | PROT_WRITE)) {
+                                                                         PROT_READ | PROT_WRITE)),
+      _irq_notify_task(nullptr),
+      _irq_call_count_changed(false) {
     kassert(_idt != nullptr);
 
     // Init the ISR array
@@ -99,16 +139,44 @@ void influx::interrupts::interrupt_manager::set_interrupt_service_routine(uint8_
     _log("ISR (%p) has been set for interrupt %x.\n", isr, interrupt_index);
 }
 
+void influx::interrupts::interrupt_manager::set_interrupt_privilege_level(uint8_t interrupt_index,
+                                                                          uint8_t privilege_level) {
+    _idt[interrupt_index].privilege_level = privilege_level & 0b11;
+    _log("Privilege level of %d has been set for interrupt %x.\n", privilege_level,
+         interrupt_index);
+}
+
 void influx::interrupts::interrupt_manager::set_irq_handler(uint8_t irq,
                                                             uint64_t irq_handler_address,
                                                             void *irq_handler_data) {
     kassert(irq >= 0 && irq < PIC_INTERRUPT_COUNT);
-    kassert(_irqs[irq].handler_address == 0);
+    threading::lock_guard irq_lk(_irq_mutexes[irq]);
 
     // Set IRQ handler
-    _irqs[irq].handler_address = irq_handler_address;
-    _irqs[irq].handler_data = irq_handler_data;
+    _irq_handlers[irq].handler_address = irq_handler_address;
+    _irq_handlers[irq].handler_data = irq_handler_data;
     _log("IRQ handler (%p) has been set for IRQ %x.\n", irq_handler_address, irq);
+}
+
+bool influx::interrupts::interrupt_manager::wait_for_irq(uint8_t irq, bool interruptible) {
+    threading::unique_lock irq_lk(_irq_mutexes[irq]);
+
+    if (!threading::scheduler_started) {
+        return false;
+    }
+
+    if (interruptible) {
+        return _irq_cvs[irq].wait_interruptible(irq_lk);
+    } else {
+        _irq_cvs[irq].wait(irq_lk);
+        return true;
+    }
+}
+
+void influx::interrupts::interrupt_manager::start_irq_notify_thread() {
+    _irq_notify_task = kernel::scheduler()->create_kernel_thread(
+        utils::method_function_wrapper<interrupt_manager, &interrupt_manager::irq_notify_thread>,
+        this, true);
 }
 
 void influx::interrupts::interrupt_manager::enable_interrupts() const {
@@ -178,6 +246,33 @@ void influx::interrupts::interrupt_manager::register_exception_interrupts() {
     // Set the exception interrupt handler as the interrupt handler for the first 20 interrupts
     for (uint8_t i = 0; i < 20; i++) {
         set_interrupt_service_routine(i, (uint64_t)exception_interrupt_handler);
+    }
+}
+
+void influx::interrupts::interrupt_manager::irq_notify_thread() {
+    uint64_t irq_call_count_copy[PIC_INTERRUPT_COUNT];
+
+    while (true) {
+        // Create a copy of the IRQ call count
+        threading::interrupts_lock int_lk;
+        memory::utils::memcpy(irq_call_count_copy, _irq_call_count, sizeof(_irq_call_count));
+        memory::utils::memset(_irq_call_count, 0, sizeof(_irq_call_count));
+        _irq_call_count_changed = false;
+        int_lk.unlock();
+
+        // For each IRQ
+        for (uint64_t irq = 0; irq < PIC_INTERRUPT_COUNT; irq++) {
+            while (irq_call_count_copy[irq] > 0) {
+                _irq_cvs[irq].notify_one();
+                irq_call_count_copy[irq]--;
+            }
+        }
+
+        // Block this task
+        int_lk.lock();
+        if (_irq_call_count_changed == false) {
+            kernel::scheduler()->block_current_task();
+        }
     }
 }
 

@@ -6,45 +6,13 @@
 #include <kernel/memory/utils.h>
 #include <kernel/ports.h>
 #include <kernel/threading/lock_guard.h>
+#include <kernel/threading/scheduler_started.h>
+#include <kernel/threading/unique_lock.h>
 
-void influx::drivers::ata::primary_irq(influx::interrupts::regs *context,
-                                       influx::drivers::ata::ata *ata) {
-    // If the scheduler is loaded
-    if (kernel::scheduler() != nullptr && kernel::scheduler()->started()) {
-        ata->_primary_irq_notifier.notify();
-    } else {
-        // Notify the ATA driver for primary irq
-        while (!__sync_bool_compare_and_swap(&ata->_primary_irq_called, 0, 1)) {
-            __sync_synchronize();
-        }
-    }
-}
-
-void influx::drivers::ata::secondary_irq(influx::interrupts::regs *context,
-                                         influx::drivers::ata::ata *ata) {
-    // If the scheduler is loaded
-    if (kernel::scheduler() != nullptr && kernel::scheduler()->started()) {
-        ata->_secondary_irq_notifier.notify();
-    } else {
-        // Notify the ATA driver for secondary irq
-        while (!__sync_bool_compare_and_swap(&ata->_secondary_irq_called, 0, 1)) {
-            __sync_synchronize();
-        }
-    }
-}
-
-influx::drivers::ata::ata::ata()
-    : driver("ATA"), _primary_irq_called(0), _secondary_irq_called(0) {}
+influx::drivers::ata::ata::ata() : driver("ATA") {}
 
 bool influx::drivers::ata::ata::load() {
     threading::lock_guard lk(_mutex);
-
-    // Register IRQ handlers
-    _log("Registering IRQs handlers..\n");
-    kernel::interrupt_manager()->set_irq_handler(ATA_PRIMARY_IRQ,
-                                                 (uint64_t)influx::drivers::ata::primary_irq, this);
-    kernel::interrupt_manager()->set_irq_handler(
-        ATA_SECONDARY_IRQ, (uint64_t)influx::drivers::ata::secondary_irq, this);
 
     // Disable IRQs for both ATA controllers
     ports::out<uint8_t>(ATA_DISABLE_INTERRUTPS,
@@ -72,28 +40,12 @@ bool influx::drivers::ata::ata::load() {
     return true;
 }
 
-void influx::drivers::ata::ata::wait_for_primary_irq() {
-    // If the scheduler is loaded
-    if (kernel::scheduler() != nullptr && kernel::scheduler()->started()) {
-        _primary_irq_notifier.wait();
-    } else {
-        // Wait for the IRQ notifiction and reset the variable
-        while (!__sync_bool_compare_and_swap(&_primary_irq_called, 1, 0)) {
-            __sync_synchronize();
-        }
-    }
+bool influx::drivers::ata::ata::wait_for_primary_irq(bool interruptible) {
+    return kernel::interrupt_manager()->wait_for_irq(ATA_PRIMARY_IRQ, interruptible);
 }
 
-void influx::drivers::ata::ata::wait_for_secondary_irq() {
-    // If the scheduler is loaded
-    if (kernel::scheduler() != nullptr && kernel::scheduler()->started()) {
-        _secondary_irq_notifier.wait();
-    } else {
-        // Wait for the IRQ notifiction and reset the variable
-        while (!__sync_bool_compare_and_swap(&_secondary_irq_called, 1, 0)) {
-            __sync_synchronize();
-        }
-    }
+bool influx::drivers::ata::ata::wait_for_secondary_irq(bool interruptible) {
+    return kernel::interrupt_manager()->wait_for_irq(ATA_SECONDARY_IRQ, interruptible);
 }
 
 void influx::drivers::ata::ata::detect_drives() {
@@ -124,18 +76,19 @@ void influx::drivers::ata::ata::detect_drives() {
     }
 }
 
-bool influx::drivers::ata::ata::access_drive_sectors(const influx::drivers::ata::drive &drive,
-                                                     influx::drivers::ata::access_type access_type,
-                                                     uint32_t lba, uint16_t amount_of_sectors,
-                                                     uint16_t *data) {
+uint16_t influx::drivers::ata::ata::access_drive_sectors(
+    const influx::drivers::ata::drive &drive, influx::drivers::ata::access_type access_type,
+    uint32_t lba, uint16_t amount_of_sectors, uint16_t *data, bool interruptible) {
     threading::lock_guard lk(_mutex);
+    bool interrupted = false;
 
     status_register status_reg;
+    uint16_t sectors = 0;
 
     // Select the drive
     if (!select_drive(drive)) {
         _log("Selecting drive falied!\n");
-        return false;
+        return 0;
     }
 
     // Send sector count
@@ -164,7 +117,7 @@ bool influx::drivers::ata::ata::access_drive_sectors(const influx::drivers::ata:
                  read_status_register_with_mask(drive.controller, ATA_STATUS_BSY, 0, 30000))
                 .fetch_failed ||
             status_reg.err) {
-            return false;
+            return 0;
         }
 
         // If this is a write operation
@@ -178,14 +131,14 @@ bool influx::drivers::ata::ata::access_drive_sectors(const influx::drivers::ata:
 
         // Wait for IRQ
         if (drive.controller == ata_primary_bus) {
-            wait_for_primary_irq();
+            interrupted = !wait_for_primary_irq(interruptible);
         } else {
-            wait_for_secondary_irq();
+            interrupted = !wait_for_secondary_irq(interruptible);
         }
 
         // If an error occurred
         if ((status_reg = read_status_register(drive.controller)).err) {
-            return false;
+            return 0;
         }
 
         // If this is a read operation, read data from the data register
@@ -195,6 +148,14 @@ bool influx::drivers::ata::ata::access_drive_sectors(const influx::drivers::ata:
                 data[i] = ports::in<uint16_t>(
                     (uint16_t)(drive.controller.io_base + ATA_IO_DATA_REGISTER));
             }
+        }
+
+        // Increase amount of accessed sectors
+        sectors++;
+
+        // If was interrupted by a signal, stop
+        if (interrupted && interruptible) {
+            break;
         }
     }
 
@@ -207,7 +168,19 @@ bool influx::drivers::ata::ata::access_drive_sectors(const influx::drivers::ata:
         read_status_register_with_mask(drive.controller, ATA_STATUS_BSY, 0, 10000);
     }
 
-    return true;
+    // If we didn't read/write the entire sectors, reset the drive
+    if (sectors != amount_of_sectors) {
+        ports::out<uint8_t>(ATA_RESET_CONTROLLER,
+                            drive.controller.control_base + ATA_CONTROL_DEVICE_REGISTER);
+        delay(drive.controller);
+        delay(drive.controller);
+        delay(drive.controller);
+        delay(drive.controller);
+        delay(drive.controller);
+        ports::out<uint8_t>(0, drive.controller.control_base + ATA_CONTROL_DEVICE_REGISTER);
+    }
+
+    return sectors;
 }
 
 bool influx::drivers::ata::ata::select_drive(const influx::drivers::ata::drive &drive) {

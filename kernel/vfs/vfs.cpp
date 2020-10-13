@@ -103,7 +103,7 @@ int64_t influx::vfs::vfs::open(const influx::vfs::path& file_path, influx::vfs::
     // Verify file type
     if (file.type == file_type::regular && (flags & open_flags::directory)) {
         delete (uint32_t*)fs_file_data;
-        return error::file_not_found;
+        return error::file_is_not_directory;
     } else if (file.type == file_type::directory && (flags & open_flags::write)) {
         delete (uint32_t*)fs_file_data;
         return error::file_is_directory;
@@ -131,12 +131,78 @@ int64_t influx::vfs::vfs::open(const influx::vfs::path& file_path, influx::vfs::
     vn.second->amount_of_open_files++;
 
     // Create the file descriptor and return it
-    return kernel::scheduler()->add_file_descriptor(
-        open_file{.vnode_index = vn.first, .position = 0, .flags = flags});
+    return kernel::scheduler()->add_file_descriptor(open_file{
+        .vnode_index = vn.first, .position = 0, .flags = flags, .amount_of_file_descriptors = 1});
 }
 
 int64_t influx::vfs::vfs::close(size_t fd) {
     open_file file;
+    error err;
+
+    // Try to get the open file object
+    if ((err = get_open_file_for_fd(fd, file)) != error::success) {
+        return err;
+    }
+
+    // Close the file
+    if (file.amount_of_file_descriptors == 1) {
+        close_open_file(file);
+    }
+
+    // Remove the file descriptor
+    kernel::scheduler()->remove_file_descriptor(fd);
+
+    return error::success;
+}
+
+int64_t influx::vfs::vfs::stat(size_t fd, influx::vfs::file_info& info) {
+    open_file file;
+
+    error err;
+
+    threading::unique_lock vnodes_lk(_vnodes_mutex);
+
+    // Try to get the open file object
+    if ((err = get_open_file_for_fd(fd, file)) != error::success) {
+        return err;
+    }
+
+    // Get the file info
+    info = _vnodes[file.vnode_index].file;
+    vnodes_lk.unlock();
+
+    return 0;
+}
+
+int64_t influx::vfs::vfs::stat(const influx::vfs::path& file_path, influx::vfs::file_info& info) {
+    filesystem* fs = get_fs_for_file(file_path);
+    void* fs_file_data = nullptr;
+
+    error err;
+
+    // If no filesystem contains this file path
+    if (fs == nullptr) {
+        return error::file_not_found;
+    }
+
+    // If the file wasn't found in the filesystem
+    if ((fs_file_data = fs->get_fs_file_data(file_path)) == nullptr) {
+        return error::file_not_found;
+    }
+
+    // Read file info from filesystem
+    err = fs->get_file_info(fs_file_data, info);
+
+    // Delete the fs file data
+    delete (uint32_t*)fs_file_data;
+
+    return err;
+}
+
+int64_t influx::vfs::vfs::seek(size_t fd, int64_t offset, influx::vfs::seek_type type) {
+    open_file file;
+    int64_t new_position = 0;
+
     error err;
 
     threading::unique_lock vnodes_lk(_vnodes_mutex);
@@ -149,28 +215,36 @@ int64_t influx::vfs::vfs::close(size_t fd) {
     // Create a ref of the vnode
     vnode& vn = _vnodes[file.vnode_index];
 
-    // Decrease the amount of open files for the file
-    vn.amount_of_open_files--;
+    // If the file is a pipe/FIFO or a socket˝
+    if (vn.file.type == file_type::fifo || vn.file.type == file_type::socket) {
+        return error::is_pipe;
+    }
 
-    // If there are no open files for the file, free it
-    if (vn.amount_of_open_files == 0) {
-        // Check if the file need to be deleted, unlink it
-        if (vn.deleted && _deleted_vnodes_paths.count(file.vnode_index) == 1) {
-            vn.fs->unlink_file(_deleted_vnodes_paths[file.vnode_index]);
-            _deleted_vnodes_paths.erase(file.vnode_index);
-        }
-
-        // Erase the vnode object
-        _vnodes.erase(file.vnode_index);
+    // Offset from beginning of the file
+    if (type == seek_type::set) {
+        new_position = offset;
+    } else if (type == seek_type::current)  // Offset from the current offset
+    {
+        new_position = file.position + offset;
+    } else if (type == seek_type::end) {
+        new_position = vn.file.size + offset;
     }
 
     // Unlock vnodes lock
     vnodes_lk.unlock();
 
-    // Remove the file descriptor
-    kernel::scheduler()->remove_file_descriptor(fd);
+    // Check that the new position is valid
+    if (new_position < 0) {
+        return error::invalid_position;
+    }
 
-    return error::success;
+    // Set the new position
+    file.position = new_position;
+
+    // Save the file
+    kernel::scheduler()->update_file_descriptor(fd, file);
+
+    return new_position;
 }
 
 int64_t influx::vfs::vfs::read(size_t fd, void* buf, size_t count) {
@@ -213,8 +287,10 @@ int64_t influx::vfs::vfs::read(size_t fd, void* buf, size_t count) {
     }
 
     // Update file position
-    file.position += amount_read;
-    kernel::scheduler()->update_file_descriptor(fd, file);
+    if (!(vn.file.type == file_type::fifo || vn.file.type == file_type::socket)) {
+        file.position += amount_read;
+        kernel::scheduler()->update_file_descriptor(fd, file);
+    }
 
     // Update the file object
     if ((err = vn.fs->get_file_info(vn.fs_data, vn.file)) != error::success) {
@@ -267,8 +343,10 @@ int64_t influx::vfs::vfs::write(size_t fd, const void* buf, size_t count) {
     }
 
     // Update file position
-    file.position += amount_written;
-    kernel::scheduler()->update_file_descriptor(fd, file);
+    if (!(vn.file.type == file_type::fifo || vn.file.type == file_type::socket)) {
+        file.position += amount_written;
+        kernel::scheduler()->update_file_descriptor(fd, file);
+    }
 
     // Update the file object
     if ((err = vn.fs->get_file_info(vn.fs_data, vn.file)) != error::success) {
@@ -335,8 +413,10 @@ int64_t influx::vfs::vfs::get_dir_entries(
     }
 
     // Update file position
-    file.position += amount_read;
-    kernel::scheduler()->update_file_descriptor(fd, file);
+    if (!(vn.file.type == file_type::fifo || vn.file.type == file_type::socket)) {
+        file.position += amount_read;
+        kernel::scheduler()->update_file_descriptor(fd, file);
+    }
 
     // Update the file object
     if ((err = vn.fs->get_file_info(vn.fs_data, vn.file)) != error::success) {
@@ -367,6 +447,12 @@ int64_t influx::vfs::vfs::unlink(const influx::vfs::path& file_path) {
 
     // Check if the file is already open
     if (get_vnode_for_file(fs, fs_file_data, vn) == error::success) {
+        // Verify that the file isn't a directory
+        if (vn.second->file.type == file_type::directory) {
+            return error::file_is_directory;
+        }
+
+        // If the file isn't deleted yet
         if (!vn.second->deleted) {
             // Set the vnode as deleted
             vn.second->deleted = true;
@@ -387,6 +473,47 @@ int64_t influx::vfs::vfs::unlink(const influx::vfs::path& file_path) {
     return error::success;
 }
 
+influx::vfs::filesystem* influx::vfs::vfs::get_filesystem(size_t fd) {
+    open_file file;
+
+    error err;
+
+    threading::unique_lock vnodes_lk(_vnodes_mutex);
+
+    // Try to get the open file object
+    if ((err = get_open_file_for_fd(fd, file)) != error::success) {
+        return nullptr;
+    }
+
+    // Create a ref of the vnode
+    vnode& vn = _vnodes[file.vnode_index];
+
+    return vn.fs;
+}
+
+int64_t influx::vfs::vfs::get_vnode_index(size_t fd) {
+    open_file file;
+
+    error err;
+
+    // Try to get the open file object
+    if ((err = get_open_file_for_fd(fd, file)) != error::success) {
+        return -1;
+    }
+
+    return file.vnode_index;
+}
+
+void influx::vfs::vfs::fork_file_descriptors(
+    influx::structures::unique_hash_map<influx::vfs::open_file>& file_descriptors) {
+    threading::lock_guard lk(_vnodes_mutex);
+
+    // For each file descriptor, increase it's vnode open count
+    for (auto& file_descriptor_pair : file_descriptors) {
+        _vnodes[file_descriptor_pair.second.vnode_index].amount_of_open_files++;
+    }
+}
+
 uint64_t influx::vfs::vfs::dirent_size_for_dir_entry(influx::vfs::dir_entry& entry) {
     return sizeof(dirent) + entry.name.size() + 1;
 }
@@ -405,7 +532,8 @@ influx::vfs::error influx::vfs::vfs::get_vnode_for_file(
     // For each vnode pair, check if it
     for (auto& vnode_pair : _vnodes) {
         // If the vnode fs file data matches return it's index
-        if (fs->compare_fs_file_data(fs_file_data, vnode_pair.second.fs_data)) {
+        if (vnode_pair.second.fs == fs &&
+            fs->compare_fs_file_data(fs_file_data, vnode_pair.second.fs_data)) {
             vn = structures::pair<uint64_t, structures::reference_wrapper<vnode>>(
                 vnode_pair.first, _vnodes[vnode_pair.first]);
             return error::success;
@@ -453,4 +581,29 @@ influx::vfs::filesystem* influx::vfs::vfs::get_fs_for_file(const influx::vfs::pa
     }
 
     return best_fs_match.fs;
+}
+
+void influx::vfs::vfs::close_open_file(const influx::vfs::open_file& file) {
+    threading::unique_lock vnodes_lk(_vnodes_mutex);
+
+    // Create a ref of the vnode
+    vnode& vn = _vnodes[file.vnode_index];
+
+    // Call filesystem close function
+    vn.fs->close_open_file(file, vn.fs_data);
+
+    // Decrease the amount of open files for the file
+    vn.amount_of_open_files--;
+
+    // If there are no open files for the file, free it
+    if (vn.amount_of_open_files == 0) {
+        // Check if the file need to be deleted, unlink it
+        if (vn.deleted && _deleted_vnodes_paths.count(file.vnode_index) == 1) {
+            vn.fs->unlink_file(_deleted_vnodes_paths[file.vnode_index]);
+            _deleted_vnodes_paths.erase(file.vnode_index);
+        }
+
+        // Erase the vnode object
+        _vnodes.erase(file.vnode_index);
+    }
 }

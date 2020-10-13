@@ -26,12 +26,12 @@ class pit : public timer_driver {
 
     virtual uint64_t timer_frequency() const { return PIT_FREQUENCY; }
 
-	friend void pit_irq(influx::interrupts::regs *context, pit *pit);
-
    private:
     uint64_t _count;
+
+    friend void pit_irq(pit *pit);
 };
 
-void pit_irq(influx::interrupts::regs *context, pit *pit);
+void pit_irq(pit *pit);
 };  // namespace drivers
 };  // namespace influx

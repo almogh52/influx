@@ -1,7 +1,7 @@
 #include <kernel/console/early_console.h>
 
-#include <kernel/threading/unique_lock.h>
 #include <kernel/kernel.h>
+#include <kernel/threading/unique_lock.h>
 
 influx::early_console::early_console()
     : _video((unsigned char *)EARLY_VIDEO_MEMORY_ADDRESS),
@@ -24,18 +24,13 @@ bool influx::early_console::load() {
         : "dx", "al");
 
     // Clear the video memory
-    stdout_clear();
+    clear();
 
     return true;
 }
 
-void influx::early_console::stdout_putchar(char c) {
-    threading::unique_lock lk(_mutex, threading::defer_lock);
-
-    // If the scheduler has started, lock the mutex
-    if (kernel::scheduler() != nullptr && kernel::scheduler()->started()) {
-        lk.lock();
-    }
+void influx::early_console::putchar(char c) {
+    threading::unique_lock lk(_mutex);
 
     // If the character is for a new line
     if (c == '\n' || c == '\r') {
@@ -54,7 +49,7 @@ void influx::early_console::stdout_putchar(char c) {
     }
 }
 
-void influx::early_console::stdout_write(influx::structures::string &str) {
+void influx::early_console::print(const influx::structures::string &str) {
     console_color color;
     size_t str_len = str.length();
 
@@ -71,7 +66,7 @@ void influx::early_console::stdout_write(influx::structures::string &str) {
             // Skip those characters
             i += 2;
         } else {
-            stdout_putchar(str[i]);
+            putchar(str[i]);
         }
     }
 
@@ -79,7 +74,7 @@ void influx::early_console::stdout_write(influx::structures::string &str) {
     _attribute = DEFAULT_ATTRIBUTE;
 }
 
-void influx::early_console::stdout_clear() {
+void influx::early_console::clear() {
     // For each character and attribute set 0
     for (uint16_t i = 0; i < (AMOUNT_OF_COLUMNS * AMOUNT_OF_LINES * 2) / sizeof(uint64_t); i++) {
         *((uint64_t *)_video + i) = 0;

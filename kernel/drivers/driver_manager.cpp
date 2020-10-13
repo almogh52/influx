@@ -4,6 +4,7 @@
 #include <kernel/drivers/ata/ata.h>
 #include <kernel/drivers/graphics/bga/bga.h>
 #include <kernel/drivers/pci.h>
+#include <kernel/drivers/ps2_keyboard.h>
 #include <kernel/drivers/time/cmos.h>
 #include <kernel/drivers/time/pit.h>
 
@@ -13,6 +14,7 @@ influx::drivers::driver_manager::driver_manager() : _log("Driver Manager", conso
     _drivers.push_back(new ata::ata());
     _drivers.push_back(new graphics::bga());
     _drivers.push_back(new cmos());
+    _drivers.push_back(new ps2_keyboard());
 }
 
 void influx::drivers::driver_manager::load_drivers() {

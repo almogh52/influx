@@ -7,7 +7,8 @@
 #include "multiboot_info_parser.h"
 #include "screen.h"
 
-extern uint64_t main_paging[], main_paging_end[], gdt64[], gdt64_end[], stack_bottom[], stack_top[];
+extern uint64_t main_paging[], main_paging_end[], gdt64[], gdt64_end[], tss64[], tss64_end[],
+    stack_bottom[], stack_top[];
 
 void boot_main(uint32_t multiboot_magic, uint32_t multiboot_info_old_addr) {
     uint64_t multiboot_info_addr = multiboot_info_old_addr + HIGHER_HALF_OFFSET;
@@ -43,13 +44,18 @@ void boot_main(uint32_t multiboot_magic, uint32_t multiboot_info_old_addr) {
     // Load the kernel into the memory
     kernel_entry_ptr = load_kernel(&info);
 
-    // Add the paging structures, the GDT and the stack as part of the kernel memory
+    // Add the paging structures, the GDT, the TSS and the stack as part of the kernel memory
     add_kernel_memory_entry(&info.memory, (uint64_t)((uint64_t)main_paging - HIGHER_HALF_OFFSET),
                             (uint64_t)((uint64_t)main_paging_end - (uint64_t)main_paging));
     add_kernel_memory_entry(&info.memory, (uint64_t)((uint64_t)gdt64 - HIGHER_HALF_OFFSET),
                             (uint64_t)((uint64_t)gdt64_end - (uint64_t)gdt64));
+    add_kernel_memory_entry(&info.memory, (uint64_t)((uint64_t)tss64 - HIGHER_HALF_OFFSET),
+                            (uint64_t)((uint64_t)tss64_end - (uint64_t)tss64));
     add_kernel_memory_entry(&info.memory, (uint64_t)((uint64_t)stack_bottom - HIGHER_HALF_OFFSET),
                             (uint64_t)((uint64_t)stack_top - (uint64_t)stack_bottom));
+
+    // Set the TSS address
+    info.tss_address = (uint64_t)tss64;
 
     // Call the kernel entry point
     printf("Calling kernel's entry point..\n");
