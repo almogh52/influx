@@ -2,6 +2,8 @@
 
 Influx is a x86_64 operation system based on a monolithic kernel.
 
+![Kernel - ttys1](https://i.imgur.com/0D6ycaW.png)
+
 ## Features
 
 * 32-bit bootstrap bootable using any multiboot-compliant bootloader (GRUB used)
@@ -35,7 +37,7 @@ Influx is a x86_64 operation system based on a monolithic kernel.
 brew install almogh52/x86_64-elf-toolchain/x86_64-elf-gcc gcc qemu nasm
 ```
 
-Compiling grub for macOS is available [here](https://wiki.osdev.org/GRUB#Installing_GRUB_2_on_OS_X).
+Compiling grub for macOS is available [here](https://wiki.osdev.org/GRUB#Installing_GRUB_2_on_OS_X). (Compile for target x86_64-elf)
 
 ### Building newlib, binutils and gcc for influx
 
